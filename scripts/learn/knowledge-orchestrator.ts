@@ -103,12 +103,26 @@ import {
 } from "./lib/schema";
 
 import {
-  writeKnowledgeLinks,
+  buildKnowledgeRecall,
+  writeRecallProvenance,
   canonicalizeNode,
   canonicalizeEdge,
 } from "./write-knowledge-links";
 import { durableGuildDir } from "../lib/state/storage";
 import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
+import { GRAPH_ARTIFACT, RECALL_ARTIFACT, publishLearnArtifacts, readLearnBase, type LearnBase } from "./lib/publish";
+import { STRUCTURAL_EXTRACTOR, structuralSubset } from "./lib/structural";
+import { computeLearnSourceBasis } from "./lib/paths";
+
+/** A refused publication (K03). `destination_moved` means: rebuild and retry. */
+export class KnowledgePublicationRefused extends Error {
+  constructor(
+    readonly reason: string,
+    detail: string,
+  ) {
+    super(`[knowledge] publication refused (${reason}): ${detail}`);
+  }
+}
 
 // NOTE: k-stage-staleness is NOT imported here. Staleness is the SKILL's coarse
 // gate — the skill decides run-or-skip the whole tier. The orchestrator always
@@ -169,6 +183,13 @@ export interface RunKnowledgeOptions {
    * file nodes, layer map, and dependency-BFS tour that onboarding consumes.
    */
   structuralGraph?: Pick<KnowledgeGraph, "nodes" | "edges" | "layers" | "tour">;
+  /**
+   * K03: the generation `structuralGraph` was read from. Publication refuses if
+   * the destination moved since. Absent: the current generation at write time.
+   */
+  base?: LearnBase;
+  /** K03: source basis taken before `base` and the inputs were read. Required with `base`. */
+  basis?: ReturnType<typeof computeLearnSourceBasis>;
   // NOTE: no `staleness` field. Staleness is the SKILL's decision; the
   // orchestrator always runs all stages (FIX 1 — pure finalize).
 }
@@ -991,6 +1012,12 @@ export async function runKnowledgeStages(
   seams: KnowledgeLLMSeams,
   opts: RunKnowledgeOptions = {}
 ): Promise<RunKnowledgeResult> {
+  // K03: the basis precedes every input read; a stage run without one takes it here.
+  // K03: basis, then destination, then inputs; publication refuses if the destination moved.
+  if (opts.base && !opts.basis) throw new Error("runKnowledgeStages: opts.base needs opts.basis taken before it was read");
+  const basis = opts.basis ?? computeLearnSourceBasis(repoRoot);
+  const startBase =
+    opts.base ?? readLearnBase({ indexesDir: path.join(durableGuildDir(repoRoot), "indexes"), repoRoot, sourceRoot: repoRoot });
   // FIX 1 (codex G-lane): no staleness, no implicit previous graph. The
   // structural snapshot is an explicit input from the preceding deep-graph run.
   // ── K1→K4: assemble all nodes + edges (deterministic order) ───────────────
@@ -1081,11 +1108,17 @@ export async function runKnowledgeStages(
   //
   // SC-8 byte-set member 2 (knowledge-recall.json): handled by writeKnowledgeLinks
   // which also calls canonicalizeNode/canonicalizeEdge internally.
+  // K03: structural items pass through whole; the recall canonicalizer would drop
+  // `extractor`/`sp`/labels and erase the structural layer from the graph.
+  const isStructuralItem = (x: unknown) => {
+    const r = x as Record<string, unknown>;
+    return r.extractor === STRUCTURAL_EXTRACTOR || r.structural === true;
+  };
   const canonNodes = validated.nodes.map(
-    (n) => canonicalizeNode(n) as unknown as GraphNode
+    (n) => (isStructuralItem(n) ? n : (canonicalizeNode(n) as unknown as GraphNode))
   );
   const canonEdges = validated.edges.map(
-    (e) => canonicalizeEdge(e) as unknown as GraphEdge
+    (e) => (isStructuralItem(e) ? e : (canonicalizeEdge(e) as unknown as GraphEdge))
   );
   const graph: KnowledgeGraph = { ...validated, nodes: canonNodes, edges: canonEdges };
 
@@ -1128,21 +1161,37 @@ export async function runKnowledgeStages(
   const suppressedPath = path.join(indexesDir, "knowledge-suppressed.json");
   fs.writeFileSync(suppressedPath, JSON.stringify(suppressedDoc, null, 2) + "\n", "utf8");
 
-  // ── Write knowledge-graph.json (v2, H1-canonicalized) ─────────────────────
-  const graphPath = path.join(indexesDir, "knowledge-graph.json");
-  fs.writeFileSync(graphPath, JSON.stringify(graph, null, 2) + "\n", "utf8");
-
-  // ── K6: write-knowledge-links (nonce-free, SC-8 member 2) ─────────────────
-  // Pass canonicalized nodes/edges — writeKnowledgeLinks re-canonicalizes
-  // internally (idempotent), so no double-canonicalize risk.
+  // ── K03: publish knowledge-graph.json (v2) + knowledge-recall.json as ONE
+  // generation (semantic_graph + recall layers). The structural layer is
+  // carried in through `opts.structuralGraph`; a destination that moved since
+  // the caller read it is refused (the CLI rebuilds and retries).
   // FIX 5: knowledge-recall-provenance.json carries run_id/generated_at and is
   // INTENTIONALLY excluded from the 2-file SC-8 byte-set (sidecar only).
-  const linksResult = writeKnowledgeLinks({
-    graph: { nodes: graph.nodes, edges: graph.edges },
-    repoRoot,
+  const recall = buildKnowledgeRecall({ nodes: graph.nodes, edges: graph.edges });
+  const target = { indexesDir, repoRoot, sourceRoot: repoRoot };
+  const published = publishLearnArtifacts(target, {
+    channels: ["semantic_graph", "recall"],
+    // The semantic inputs (.guild/wiki pages, diagrams) are outside the learn
+    // source basis, so these layers cannot be proven current for it.
+    provenance: { semantic_graph: "ingested", recall: "ingested" },
+    provenanceReason: {
+      semantic_graph: "semantic inputs (.guild/wiki, diagrams) are not bound into the source basis",
+      recall: "derived from a semantic layer whose inputs are not bound into the source basis",
+    },
+    base: startBase,
+    basis,
+    build: () => ({ [GRAPH_ARTIFACT]: graph, [RECALL_ARTIFACT]: recall.bytes }),
+    rebase: false,
+  });
+  if (published.status !== "published") throw new KnowledgePublicationRefused(published.reason, published.detail);
+  const graphPath = path.join(indexesDir, GRAPH_ARTIFACT);
+  const provenancePath = writeRecallProvenance(repoRoot, {
     runId: opts.runId,
     generatedAt: opts.generatedAt,
+    nodeCount: graph.nodes.length,
+    edgeCount: recall.edgeCount,
   });
+  const linksResult = { linksPath: path.join(indexesDir, RECALL_ARTIFACT), provenancePath };
 
   return {
     graph,
@@ -1214,39 +1263,46 @@ if (require.main === module) {
       );
     } else if (phase === "finalize") {
       const seams = buildFileBackedSeams(judgmentDir);
-      const structuralGraphPath = path.join(durableGuildDir(repoRoot), "indexes", "knowledge-graph.json");
-      let structuralGraph: RunKnowledgeOptions["structuralGraph"];
-      try {
-        const prior = JSON.parse(fs.readFileSync(structuralGraphPath, "utf8")) as Partial<KnowledgeGraph>;
-        if (
-          prior.version === "guild.knowledge_graph.v1" &&
-          Array.isArray(prior.nodes) &&
-          Array.isArray(prior.edges) &&
-          Array.isArray(prior.layers) &&
-          Array.isArray(prior.tour)
-        ) {
-          structuralGraph = {
-            nodes: prior.nodes,
-            edges: prior.edges,
-            layers: prior.layers,
-            tour: prior.tour,
-          };
+      // K03: read the structural input from the pinned generation and publish
+      // against it; if another writer published first, rebuild and retry.
+      const target = { indexesDir: path.join(durableGuildDir(repoRoot), "indexes"), repoRoot, sourceRoot: repoRoot };
+      let result: RunKnowledgeResult | null = null;
+      for (let attempt = 0; attempt < 3 && !result; attempt++) {
+        const basis = computeLearnSourceBasis(repoRoot);
+        const base = readLearnBase(target);
+        let structuralGraph: RunKnowledgeOptions["structuralGraph"];
+        const prior = base.graph as Partial<KnowledgeGraph> | null;
+        if (prior && Array.isArray(prior.nodes) && Array.isArray(prior.edges) && Array.isArray(prior.layers) && Array.isArray(prior.tour)) {
+          if (prior.version === "guild.knowledge_graph.v1") {
+            structuralGraph = { nodes: prior.nodes, edges: prior.edges, layers: prior.layers, tour: prior.tour };
+          } else if (prior.version === "guild.knowledge_graph.v2") {
+            // A v2 graph already carries the knowledge tier; only its structural
+            // layer is input, so a re-finalize never drops structural nodes.
+            const sub = structuralSubset({ nodes: prior.nodes, edges: prior.edges });
+            structuralGraph = { nodes: sub.nodes, edges: sub.edges, layers: prior.layers, tour: prior.tour };
+          }
         }
-      } catch {
-        // No structural snapshot is valid for a clean or already-v2 run.
+        // No structural snapshot is valid for a clean run.
+        // SC-12 provenance: derive generated_from_commit from HEAD at the CLI
+        // boundary (keeps runKnowledgeStages a pure function of inputs — FIX 1).
+        // headSha() returns a deterministic "unknown" when repoRoot is not a git
+        // repo / git errors, so SC-8 byte-identity holds: within one commit every
+        // run derives the same value, and a non-git fixture repo yields the same
+        // constant "unknown" across all triggers.
+        try {
+          result = await runKnowledgeStages(repoRoot, filePaths, seams, {
+            runId,
+            generatedAt,
+            generatedFromCommit: headSha(repoRoot),
+            structuralGraph,
+            base,
+            basis,
+          });
+        } catch (err) {
+          if (!(err instanceof KnowledgePublicationRefused) || err.reason !== "destination_moved" || attempt === 2) throw err;
+        }
       }
-      // SC-12 provenance: derive generated_from_commit from HEAD at the CLI
-      // boundary (keeps runKnowledgeStages a pure function of inputs — FIX 1).
-      // headSha() returns a deterministic "unknown" when repoRoot is not a git
-      // repo / git errors, so SC-8 byte-identity holds: within one commit every
-      // run derives the same value, and a non-git fixture repo yields the same
-      // constant "unknown" across all triggers.
-      const result = await runKnowledgeStages(repoRoot, filePaths, seams, {
-        runId,
-        generatedAt,
-        generatedFromCommit: headSha(repoRoot),
-        structuralGraph,
-      });
+      if (!result) throw new Error("[knowledge] finalize did not publish");
       process.stdout.write(
         JSON.stringify(
           {

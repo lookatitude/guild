@@ -3202,31 +3202,35 @@ if (isProcessEntry()) {
   }
 }
 
-// scripts/learn/lib/paths.ts
-function parseCwd(argv) {
-  return parseFlag(argv, "cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
-}
-function parseFlag(argv, name) {
-  const eq = `--${name}=`;
-  for (let i = 0; i < argv.length; i++) {
-    const v = argv[i] === `--${name}` ? argv[i + 1] : argv[i].startsWith(eq) ? argv[i].slice(eq.length) : void 0;
-    if (v === void 0 && argv[i] !== `--${name}`) continue;
-    if (!v || v.startsWith("--")) throw new Error(`--${name} needs a value (--${name} <v> or --${name}=<v>)`);
-    return v;
+// src/domains/knowledge/source-basis.ts
+var fs3 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
+function readWorktreeEntry(root, rel2) {
+  if (path3.isAbsolute(rel2) || rel2.includes("\\")) return { kind: "refused" };
+  const segs = rel2.split("/");
+  if (segs.some((seg) => seg === "" || seg === "." || seg === "..")) return { kind: "refused" };
+  let cur = root;
+  for (let i = 0; i < segs.length; i++) {
+    cur = path3.join(cur, segs[i]);
+    let st;
+    try {
+      st = fs3.lstatSync(cur);
+    } catch {
+      return { kind: "absent" };
+    }
+    const last = i === segs.length - 1;
+    if (st.isSymbolicLink()) return last ? { kind: "symlink", target: fs3.readlinkSync(cur) } : { kind: "refused" };
+    if (!last && !st.isDirectory()) return { kind: "absent" };
+    if (last) return st.isFile() ? { kind: "file", bytes: fs3.readFileSync(cur) } : { kind: "refused" };
   }
-  return void 0;
+  return { kind: "refused" };
 }
-function hasFlag(argv, name) {
-  return argv.includes(`--${name}`);
+function readContainedFile(root, rel2) {
+  const e = readWorktreeEntry(root, rel2);
+  return e.kind === "file" ? e.bytes : null;
 }
-
-// scripts/learn/lib/walk.ts
-var fs4 = __toESM(require("fs"));
-var path4 = __toESM(require("path"));
 
 // scripts/learn/lib/ignore.ts
-var fs3 = __toESM(require("fs"));
-var path3 = __toESM(require("path"));
 var DEFAULT_IGNORE_PATTERNS = Object.freeze([
   "node_modules/",
   ".git/",
@@ -3350,9 +3354,9 @@ function compile(patterns) {
 }
 function createIgnoreFilter(projectRoot) {
   const patterns = [...DEFAULT_IGNORE_PATTERNS];
-  const rootIgnore = path3.join(projectRoot, ".guildignore");
-  if (fs3.existsSync(rootIgnore)) {
-    patterns.push(...fs3.readFileSync(rootIgnore, "utf-8").split("\n"));
+  const rootIgnore = readContainedFile(projectRoot, ".guildignore");
+  if (rootIgnore) {
+    patterns.push(...rootIgnore.toString("utf-8").split("\n"));
   }
   const rules = compile(patterns);
   return {
@@ -3368,6 +3372,8 @@ function createIgnoreFilter(projectRoot) {
 }
 
 // scripts/learn/lib/walk.ts
+var fs4 = __toESM(require("fs"));
+var path4 = __toESM(require("path"));
 function registeredSubGuildPaths(repoRoot) {
   const out = /* @__PURE__ */ new Set();
   let manifest;
@@ -3387,17 +3393,25 @@ function walkRepo(repoRoot, maxFiles = 2e4) {
   const filter = createIgnoreFilter(repoRoot);
   const subGuilds = registeredSubGuildPaths(repoRoot);
   const out = [];
+  let truncated = false;
+  const unreadable = [];
+  const unsupported = [];
   const visit = (absDir) => {
-    if (out.length >= maxFiles) return;
+    if (truncated) return;
     let entries;
     try {
       entries = fs4.readdirSync(absDir, { withFileTypes: true });
     } catch {
+      unreadable.push(path4.relative(repoRoot, absDir).replace(/\\/g, "/"));
       return;
     }
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const e of entries) {
       const abs = path4.join(absDir, e.name);
+      if (path4.sep === "/" && e.name.includes("\\") || e.name.includes("\uFFFD")) {
+        unsupported.push(path4.relative(repoRoot, abs));
+        continue;
+      }
       const rel2 = path4.relative(repoRoot, abs).replace(/\\/g, "/");
       if (e.isDirectory()) {
         if (subGuilds.has(rel2)) continue;
@@ -3405,14 +3419,35 @@ function walkRepo(repoRoot, maxFiles = 2e4) {
         visit(abs);
       } else if (e.isFile()) {
         if (filter.isIgnored(rel2)) continue;
+        if (out.length >= maxFiles) {
+          truncated = true;
+          return;
+        }
         out.push(rel2);
-        if (out.length >= maxFiles) return;
       }
     }
   };
   visit(repoRoot);
   out.sort();
-  return { files: out, filter };
+  return { files: out, filter, truncated, unreadable: unreadable.sort(), unsupported: unsupported.sort() };
+}
+
+// scripts/learn/lib/paths.ts
+function parseCwd(argv) {
+  return parseFlag(argv, "cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
+}
+function parseFlag(argv, name) {
+  const eq = `--${name}=`;
+  for (let i = 0; i < argv.length; i++) {
+    const v = argv[i] === `--${name}` ? argv[i + 1] : argv[i].startsWith(eq) ? argv[i].slice(eq.length) : void 0;
+    if (v === void 0 && argv[i] !== `--${name}`) continue;
+    if (!v || v.startsWith("--")) throw new Error(`--${name} needs a value (--${name} <v> or --${name}=<v>)`);
+    return v;
+  }
+  return void 0;
+}
+function hasFlag(argv, name) {
+  return argv.includes(`--${name}`);
 }
 
 // src/domains/kernel/module-manifest.ts

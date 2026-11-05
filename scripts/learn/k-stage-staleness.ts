@@ -51,6 +51,7 @@ import * as path from "path";
 import { createHash } from "crypto";
 import * as ts from "typescript";
 import { parseCwd, hasFlag, guildPaths } from "./lib/paths";
+import { sourceWorktreeId } from "../../src/domains/knowledge/source-basis";
 import { walkRepo } from "./lib/walk";
 import { durableGuildDir } from "../lib/state/storage";
 import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
@@ -539,9 +540,13 @@ export function readKStageTree(repoRoot: string): Record<string, string> {
   return out;
 }
 
-export function writeKStageBaseline(repoRoot: string): void {
-  const tree = readKStageTree(repoRoot);
-  const store = buildKStageStore(tree);
+/**
+ * K01: the baseline lives under the owner (`repoRoot`) but is taken from, and
+ * names, the scanned worktree (`sourceRoot`).
+ */
+export function writeKStageBaseline(repoRoot: string, sourceRoot: string = repoRoot): void {
+  const tree = readKStageTree(sourceRoot);
+  const store = { ...buildKStageStore(tree), source_worktree_id: sourceWorktreeId(sourceRoot) };
   const storePath = kStoreFile(repoRoot);
   fs.mkdirSync(path.dirname(storePath), { recursive: true });
   fs.writeFileSync(storePath, JSON.stringify(store, null, 2) + "\n", "utf8");
@@ -549,10 +554,14 @@ export function writeKStageBaseline(repoRoot: string): void {
 
 export function runKStageStaleness(cwd: string): KStageStaleness {
   let repoRoot: string;
+  let sourceRoot: string;
   try {
-    repoRoot = guildPaths(cwd).repoRoot;
+    const gp = guildPaths(cwd);
+    repoRoot = gp.repoRoot;
+    sourceRoot = gp.sourceRoot;
   } catch {
     repoRoot = cwd;
+    sourceRoot = cwd;
   }
 
   const storePath = kStoreFile(repoRoot);
@@ -577,7 +586,18 @@ export function runKStageStaleness(cwd: string): KStageStaleness {
     };
   }
 
-  const current = readKStageTree(repoRoot);
+  // K01: a baseline from another worktree (or one that names none) says nothing
+  // about these bytes.
+  if ((stored as KStageStore & { source_worktree_id?: string }).source_worktree_id !== sourceWorktreeId(sourceRoot)) {
+    return {
+      k1: true, k2: true, k3: true, k4: true, k5: true, k6: true,
+      structuralSkip: false,
+      knowledgeTierClobbered: knowledgeTierClobbered(repoRoot),
+      reason: "K-stage baseline names no source worktree or another one — treat all stages as stale",
+    };
+  }
+
+  const current = readKStageTree(sourceRoot);
   const delta = analyzeHashDelta(stored, current);
   const result = classifyKStages(delta, stored, current);
   return withKnowledgeTierClobber(result, repoRoot);
@@ -594,12 +614,16 @@ function main(): void {
 
   if (hasFlag(argv, "baseline")) {
     let repoRoot: string;
+    let sourceRoot: string;
     try {
-      repoRoot = guildPaths(cwd).repoRoot;
+      const gp = guildPaths(cwd);
+      repoRoot = gp.repoRoot;
+      sourceRoot = gp.sourceRoot;
     } catch {
       repoRoot = cwd;
+      sourceRoot = cwd;
     }
-    writeKStageBaseline(repoRoot);
+    writeKStageBaseline(repoRoot, sourceRoot);
     process.stderr.write(
       `[k-stage-staleness] baseline written → ${path.join(durableGuildDir(repoRoot), "indexes", "kstage-fingerprint.json")}\n`,
     );
