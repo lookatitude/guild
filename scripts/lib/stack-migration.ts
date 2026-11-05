@@ -23,7 +23,7 @@ import * as yaml from "js-yaml";
 export const FROZEN_V2_BUNDLE_SHA256 =
   "sha256:05833d374acb729cad021bb7a54141d67f1429fcaaca112b6fa29a10d3ec7d94";
 export const MIGRATION_HOME = "migrations/guild-stack-v2";
-export const REQUIRED_ACTIVATION_GATES = ["V01", "D01", "Z01"] as const;
+export const REQUIRED_ACTIVATION_GATES = Object.freeze(["V01", "D01", "Z01"] as const);
 
 export type SourceKind = "v1_run" | "legacy_v1_analysis" | "legacy_knowledge_export";
 export type RunState = "open" | "closed" | "archived" | "other";
