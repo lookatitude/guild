@@ -1924,10 +1924,6 @@ const KTD29_DEEP_IMPORTS: ReadonlyMap<string, readonly string[]> = new Map<strin
   // T01: the AT19/AT20 test drives the R01 records (lifecycle-internal) into the
   // trace capture, which stays off the telemetry index until activation.
   ["src/domains/lifecycle/trace-capture.test.ts", ["telemetry/trace-capture-v3"]],
-  // K05 (CW-26): recall telemetry reuses the T01 capture scrubber, which stays off
-  // the telemetry index until activation.
-  ["src/domains/knowledge/recall.ts", ["telemetry/trace-capture-v3"]],
-  ["src/domains/knowledge/retrieval-ledger.ts", ["telemetry/trace-capture-v3"]],
 ]);
 
 const CHECKS: Check[] = [

@@ -84,7 +84,7 @@ import { emitTraceEvent } from "../telemetry";
 import { makeAnalysisTraceEvent, makeRecallEvent, makeRecallDecisionEvent } from "../telemetry";
 import { durableGuildDir } from "../state";
 import { phaseStartRecall } from "./phase-start";
-import { scrubTraceText } from "../telemetry/trace-capture-v3";
+import { scrubTraceText } from "../telemetry";
 import {
   instrumentRetrieval,
   recordKnowledgeUse,

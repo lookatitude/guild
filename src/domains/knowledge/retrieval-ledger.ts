@@ -28,7 +28,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { isRefused, prepareContainedWrite } from "../kernel";
-import { scrubTraceText, traceStringIsUnsafe } from "../telemetry/trace-capture-v3";
+import { scrubTraceText, traceStringIsUnsafe } from "../telemetry";
 import { readPublicationRecord } from "./publication";
 import type { ChannelState } from "./source-basis";
 

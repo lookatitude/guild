@@ -97,6 +97,10 @@ export type {
   RunComparison,
 } from "./run-analysis";
 
+// K05: knowledge recall reuses the T01 capture scrubber; the rest of trace-capture-v3
+// stays off this index until activation.
+export { scrubTraceText, traceStringIsUnsafe } from "./trace-capture-v3";
+
 // MHRC-MOD-004: this domain binds host-facing contracts (the lifecycle public
 // index), so it states the public-API contract version it was built against.
 export const MODULE_PUBLIC_API_VERSION = "guild.module.public-api.v1" as const;
