@@ -548,6 +548,8 @@ export interface RunController {
   attemptClaims(grant_id: string): AttemptGrantClaims | undefined;
   /** HMAC of `message` under the attempt's worker secret; the secret itself never leaves the controller. */
   attemptMac(grant_id: string, message: string): string;
+  /** HMAC under the controller key, domain-separated by `purpose`; only the controller can mint or check it. */
+  controllerMac(purpose: string, message: string): string;
   /** Effective admission of an attempt grant's execution (explicit state, else epoch-derived). */
   attemptAdmission(grant_id: string): AdmissionState | undefined;
 }
@@ -942,6 +944,10 @@ export function openRunController(opts: OpenControllerOptions): RunController {
       if (!g) return undefined;
       const { claims_hash: _h, ...claims } = g;
       return claims;
+    },
+
+    controllerMac(purpose, message) {
+      return hmac(k, `guild.ext\0${requireId(purpose, "purpose")}\0${message}`);
     },
 
     attemptAdmission(grant_id) {

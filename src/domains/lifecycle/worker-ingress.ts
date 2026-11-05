@@ -18,12 +18,15 @@
  *
  * Attempt ownership: one live attempt per task. A new attempt is dispatched
  * only after the previous one is fenced and released, and release requires
- * every effect it was permitted to run to be settled. Effects use a permit
- * protocol: the worker submits `effect_intent`, the controller journals it and
- * returns a MACed permit, and only then does a cooperative worker act. An
- * effect key that is permitted, applied or uncertain never gets a second
- * permit; a worker-reported failure is untrusted and stays uncertain until a
- * trusted `not_applied` verdict. Uncertain effects are surfaced, never replayed.
+ * every effect it started to be settled. External effects run only through
+ * the trusted executor (`runEffect`), which holds the credentials the worker
+ * never gets: the worker submits `effect_intent`, collection journals it and
+ * returns a controller-keyed permit, and the executor consumes the permit
+ * (journal `effect_start`), acts, then journals `effect_done`. A crash in
+ * between leaves the effect uncertain. A key that is permitted, started or
+ * done never gets a second permit; worker outcome claims are recorded but
+ * never settle anything. Uncertain effects are surfaced and wait for a trusted
+ * verdict; they are never replayed.
  *
  * State lives only in the controller's keyed journal (extension records), so
  * it survives restarts and is fenced with the controller epoch.
@@ -64,6 +67,8 @@ export type IngressRefusalCode =
   | "attempt_released"
   | "effects_unreconciled"
   | "reconcile_refused"
+  | "permit_invalid"
+  | "effect_refused"
   | "request_invalid";
 
 export class IngressRefusal extends Error {
@@ -138,6 +143,8 @@ export interface EffectPermit {
   attempt_id: string;
   grant_id: string;
   effect_key: string;
+  controller_epoch: number;
+  /** Controller-keyed; the worker relays the permit but cannot mint or alter one. */
   mac: string;
 }
 
@@ -149,12 +156,13 @@ export interface IngressReport {
   truncated: boolean;
 }
 
-export type EffectState = "in_flight" | "uncertain" | "applied" | "not_applied";
+export type EffectState = "permitted" | "unstarted" | "in_flight" | "uncertain" | "applied" | "not_applied";
 export interface TaskState {
   task_id: string;
   live_attempt: string | null;
   attempts: Array<{ attempt_id: string; fenced: boolean; released: boolean }>;
-  effects: Array<{ effect_key: string; state: EffectState; attempt_id: string }>;
+  /** `worker_claim` is the worker's untrusted report; it never settles an effect. */
+  effects: Array<{ effect_key: string; state: EffectState; attempt_id: string; worker_claim: "applied" | "failed" | null }>;
   uncertain_effects: string[];
   receipt_loss_reconciled: boolean;
 }
@@ -176,6 +184,8 @@ export interface WorkerIngress {
   fenceAttempt(grant: WriterGrant, attempt_id: string): void;
   reconcileEffect(grant: WriterGrant, r: { task_id: string; effect_key: string; verdict: "applied" | "not_applied"; evidence_ref: string }): void;
   releaseAttempt(grant: WriterGrant, attempt_id: string): void;
+  /** Trusted effect executor: consumes a controller permit, journals start, runs `effect`, journals done. */
+  runEffect<T>(grant: WriterGrant, permit: EffectPermit, effect: () => T): T;
   taskState(task_id: string): TaskState;
   verifyRecordCopy(attempt_id: string, record_id: string): { ok: true } | { ok: false; code: "record_unbound" | "record_copy_missing" | "record_copy_mismatch" };
   close(): void;
@@ -218,8 +228,9 @@ function requireId(v: unknown, what: string): string {
   return v;
 }
 const recordMessage = (signed: Record<string, unknown>) => `guild.r03.record\0${canonical(signed)}`;
-const permitMessage = (p: { run_id: string; attempt_id: string; grant_id: string; effect_key: string }) =>
-  `guild.r03.permit\0${canonical({ run_id: p.run_id, attempt_id: p.attempt_id, grant_id: p.grant_id, effect_key: p.effect_key })}`;
+const PERMIT_PURPOSE = "r03.effect-permit";
+const permitMessage = (p: { run_id: string; attempt_id: string; grant_id: string; effect_key: string; controller_epoch: number }) =>
+  canonical({ run_id: p.run_id, attempt_id: p.attempt_id, grant_id: p.grant_id, effect_key: p.effect_key, controller_epoch: p.controller_epoch });
 
 type Read = { kind: "ok"; text: string; bytes: number } | { kind: "oversized" } | { kind: "invalid" };
 /** Read a hostile file: no symlink follow, no FIFO block, size checked before any read. */
@@ -316,11 +327,16 @@ interface Bind {
   task_id: string; attempt_id: string; execution_id: string; effects: boolean; expires_at_ms: number;
   capability_hash: string; workspace: string; grant_id: string | null; fenced: boolean; released: boolean;
 }
-interface Effect { attempt_id: string; state: "permitted" | "reported_applied" | "reported_failed" | "applied" | "not_applied" }
+interface Effect {
+  attempt_id: string;
+  state: "permitted" | "started" | "done" | "applied" | "not_applied";
+  permit_epoch: number;
+  claim: "applied" | "failed" | null;
+}
 interface Fold {
   binds: Map<string, Bind>;
   liveByTask: Map<string, string>;
-  ingested: Map<string, { digest: string; kind: RecordKind; effect_key: string | null }>;
+  ingested: Map<string, { digest: string; kind: RecordKind; effect_key: string | null; copy: string }>;
   perAttempt: Map<string, number>;
   /** key `${task_id}\0${effect_key}` */
   effects: Map<string, Effect>;
@@ -329,7 +345,7 @@ interface Fold {
 
 function fold(records: readonly ExtensionRecord[]): Fold {
   const f: Fold = { binds: new Map(), liveByTask: new Map(), ingested: new Map(), perAttempt: new Map(), effects: new Map(), reconciledTasks: new Set() };
-  for (const { body: b } of records) {
+  for (const { body: b, epoch } of records) {
     if (b.ns !== NS) continue;
     const attempt_id = String(b.attempt_id);
     switch (b.type) {
@@ -351,14 +367,21 @@ function fold(records: readonly ExtensionRecord[]): Fold {
       case "ingest": {
         const kind = b.kind as RecordKind;
         const effect_key = typeof b.effect_key === "string" ? b.effect_key : null;
-        f.ingested.set(`${attempt_id}/${String(b.record_id)}`, { digest: String(b.digest), kind, effect_key });
+        f.ingested.set(`${attempt_id}/${String(b.record_id)}`, { digest: String(b.digest), kind, effect_key, copy: String(b.copy) });
         f.perAttempt.set(attempt_id, (f.perAttempt.get(attempt_id) ?? 0) + 1);
         const task = f.binds.get(attempt_id)?.task_id;
         if (task && effect_key) {
           const k = `${task}\0${effect_key}`;
-          if (kind === "effect_intent") f.effects.set(k, { attempt_id, state: "permitted" });
-          else if (kind === "effect_result") f.effects.set(k, { attempt_id, state: b.outcome === "applied" ? "reported_applied" : "reported_failed" });
+          const cur = f.effects.get(k);
+          if (kind === "effect_intent" && b.replay_permit !== true) f.effects.set(k, { attempt_id, state: "permitted", permit_epoch: epoch, claim: null });
+          else if (kind === "effect_result" && cur && cur.attempt_id === attempt_id) cur.claim = b.outcome === "applied" ? "applied" : "failed";
         }
+        break;
+      }
+      case "effect_start":
+      case "effect_done": {
+        const e = f.effects.get(`${String(b.task_id)}\0${String(b.effect_key)}`);
+        if (e && e.attempt_id === attempt_id) e.state = b.type === "effect_start" ? "started" : "done";
         break;
       }
       case "reconcile": {
@@ -375,10 +398,15 @@ function fold(records: readonly ExtensionRecord[]): Fold {
   return f;
 }
 
-/** An effect is unsettled when permitted or reported failed and not yet reconciled. */
-const unsettled = (e: Effect) => e.state === "permitted" || e.state === "reported_failed";
-/** May a new intent for this key be permitted? Only when never permitted, or reconciled not_applied. */
-const permittable = (e: Effect | undefined) => !e || e.state === "not_applied";
+/**
+ * Unsettled: the trusted executor started the effect and never journaled done.
+ * Worker claims never settle anything. A permit the executor never consumed
+ * cannot have produced an executor effect, so it settles once fenced.
+ */
+const unsettled = (e: Effect) => e.state === "started";
+/** May a new intent for this key be permitted? Never permitted, reconciled not_applied, or an unconsumed permit of a fenced attempt. */
+const permittable = (e: Effect | undefined, f: Fold) =>
+  !e || e.state === "not_applied" || (e.state === "permitted" && f.binds.get(e.attempt_id)?.fenced === true);
 
 // ── ingress ──────────────────────────────────────────────────────────────────
 
@@ -496,9 +524,12 @@ export function openWorkerIngress(opts: WorkerIngressOptions): WorkerIngress {
         // Bounded listing: a flooded inbox only stalls its own attempt.
         const names: string[] = [];
         let dir: fs.Dir | null = null;
+        let scanned = 0;
         try {
           dir = fs.opendirSync(inbox.realPath);
-          for (let d = dir.readSync(); d && names.length < limits.max_entries_scanned; d = dir.readSync()) {
+          for (let d = dir.readSync(); d; d = dir.readSync()) {
+            // Every entry counts against the scan budget, whatever its name.
+            if (++scanned > limits.max_entries_scanned) { report.truncated = true; break; }
             if (d.name.endsWith(".json") && !d.name.startsWith(".")) names.push(d.name);
           }
         } catch {
@@ -517,7 +548,14 @@ export function openWorkerIngress(opts: WorkerIngressOptions): WorkerIngress {
         for (const name of order) {
           const record_id = name.slice(0, -5);
           if (!ID_RE.test(record_id)) continue;
-          if (f.ingested.has(`${b.attempt_id}/${record_id}`)) { report.replayed.push(`${b.attempt_id}/${record_id}`); continue; }
+          const done = f.ingested.get(`${b.attempt_id}/${record_id}`);
+          if (done) {
+            // Repair a durable copy lost to a crash between journal and publication.
+            const c = checkContained(durableRoot, copyRel(b.attempt_id, record_id), { policy: "physical" });
+            if (!isRefused(c) && !fs.existsSync(c.realPath)) writeOnce(durableRoot, copyRel(b.attempt_id, record_id), Buffer.from(done.copy, "utf8"));
+            report.replayed.push(`${b.attempt_id}/${record_id}`);
+            continue;
+          }
           if (examined >= limits.max_records_per_collect || bytes >= limits.max_bytes_per_collect) { report.truncated = true; break; }
           examined++;
           last = name;
@@ -560,12 +598,12 @@ export function openWorkerIngress(opts: WorkerIngressOptions): WorkerIngress {
             const e = f.effects.get(`${b.task_id}\0${effect_key}`);
             if (kind === "effect_intent") {
               if (rec.outcome !== null) { reject("record_invalid"); continue; }
-              const ownReplay = e?.attempt_id === b.attempt_id && e.state === "permitted";
-              // New permits only under active admission; reconcile_only collects, never authorizes.
-              if (!ownReplay && (!permittable(e) || admission !== "active")) { reject("effect_replay_refused"); continue; }
+              const ownReplay = e?.attempt_id === b.attempt_id && e.state === "permitted" && e.permit_epoch === controller.epoch;
+              // Every permit needs active, current-epoch admission; reconcile_only collects, never authorizes.
+              if (admission !== "active" || (!ownReplay && !permittable(e, f))) { reject("effect_replay_refused"); continue; }
             } else {
               if (rec.outcome !== "applied" && rec.outcome !== "failed") { reject("record_invalid"); continue; }
-              if (!e || e.attempt_id !== b.attempt_id || e.state !== "permitted") { reject("effect_result_unmatched"); continue; }
+              if (!e || e.attempt_id !== b.attempt_id) { reject("effect_result_unmatched"); continue; }
               outcome = rec.outcome;
             }
           }
@@ -573,14 +611,15 @@ export function openWorkerIngress(opts: WorkerIngressOptions): WorkerIngress {
           const copy = Buffer.from(`${JSON.stringify({ schema_version: INGRESS_RECORD_COPY_SCHEMA, record: copyBody })}\n`, "utf8");
           const digest = sha256(copy);
           // Journal first; the durable copy is controller-written and repairable from the same bytes.
-          const ownReplay = kind === "effect_intent" && f.effects.get(`${b.task_id}\0${effect_key}`)?.attempt_id === b.attempt_id;
-          extend(internal, { type: "ingest", attempt_id: b.attempt_id, record_id, kind, effect_key, outcome, digest, replay_permit: ownReplay });
+          const prev = f.effects.get(`${b.task_id}\0${effect_key}`);
+          const ownReplay = kind === "effect_intent" && prev?.attempt_id === b.attempt_id && prev.state === "permitted";
+          extend(internal, { type: "ingest", attempt_id: b.attempt_id, record_id, kind, effect_key, outcome, digest, replay_permit: ownReplay, copy: copy.toString("utf8") });
           f = state();
           writeOnce(durableRoot, copyRel(b.attempt_id, record_id), copy);
           report.accepted.push({ attempt_id: b.attempt_id, record_id, kind });
           if (kind === "effect_intent" && effect_key) {
-            const p = { run_id, attempt_id: b.attempt_id, grant_id, effect_key };
-            report.permits.push({ schema_version: EFFECT_PERMIT_SCHEMA, ...p, mac: controller.attemptMac(grant_id, permitMessage(p)) });
+            const p = { run_id, attempt_id: b.attempt_id, grant_id, effect_key, controller_epoch: controller.epoch };
+            report.permits.push({ schema_version: EFFECT_PERMIT_SCHEMA, ...p, mac: controller.controllerMac(PERMIT_PURPOSE, permitMessage(p)) });
           }
         }
         cursors.set(b.attempt_id, report.truncated ? last : "");
@@ -606,6 +645,7 @@ export function openWorkerIngress(opts: WorkerIngressOptions): WorkerIngress {
       const e = f.effects.get(`${task_id}\0${effect_key}`);
       const owner = e ? f.binds.get(e.attempt_id) : undefined;
       if (!e || !owner || !unsettled(e)) throw new IngressRefusal("reconcile_refused", `effect ${effect_key} is not uncertain`);
+      // Fenced and still `started`: the executor can no longer finish it, so a verdict cannot race the effect.
       if (!owner.fenced) throw new IngressRefusal("reconcile_refused", `attempt ${e.attempt_id} is still live; fence it first`);
       extend(grant, { type: "reconcile", attempt_id: e.attempt_id, task_id, effect_key, verdict: r.verdict, evidence_ref });
     },
@@ -633,9 +673,11 @@ export function openWorkerIngress(opts: WorkerIngressOptions): WorkerIngress {
         const [t, key] = k.split("\0") as [string, string];
         if (t !== task_id) continue;
         const fenced = f.binds.get(e.attempt_id)?.fenced === true;
-        const s: EffectState = e.state === "applied" || e.state === "reported_applied" ? "applied"
-          : e.state === "not_applied" ? "not_applied" : fenced ? "uncertain" : "in_flight";
-        effects.push({ effect_key: key, state: s, attempt_id: e.attempt_id });
+        const s: EffectState = e.state === "applied" || e.state === "done" ? "applied"
+          : e.state === "not_applied" ? "not_applied"
+          : e.state === "permitted" ? (fenced ? "unstarted" : "permitted")
+          : fenced ? "uncertain" : "in_flight";
+        effects.push({ effect_key: key, state: s, attempt_id: e.attempt_id, worker_claim: e.claim });
       }
       effects.sort((x, y) => (x.effect_key < y.effect_key ? -1 : 1));
       return {
@@ -643,6 +685,36 @@ export function openWorkerIngress(opts: WorkerIngressOptions): WorkerIngress {
         uncertain_effects: effects.filter((e) => e.state === "uncertain").map((e) => e.effect_key),
         receipt_loss_reconciled: f.reconciledTasks.has(task_id),
       };
+    },
+
+    runEffect(grant, permit, effect) {
+      controller.assertWritable(grant);
+      const p = permit;
+      if (!isObj(p) || Object.keys(p).sort().join(",") !== "attempt_id,controller_epoch,effect_key,grant_id,mac,run_id,schema_version"
+        || p.schema_version !== EFFECT_PERMIT_SCHEMA || typeof p.mac !== "string" || !Number.isSafeInteger(p.controller_epoch)) {
+        throw new IngressRefusal("permit_invalid", "permit is malformed");
+      }
+      requireId(p.attempt_id, "attempt_id"); requireId(p.grant_id, "grant_id"); requireId(p.effect_key, "effect_key");
+      if (p.run_id !== run_id || !macEqual(p.mac, controller.controllerMac(PERMIT_PURPOSE, permitMessage(p)))) {
+        throw new IngressRefusal("permit_invalid", "permit was not issued by this controller");
+      }
+      if (p.controller_epoch !== controller.epoch) throw new IngressRefusal("permit_invalid", "permit belongs to an older controller epoch");
+      const f = state();
+      const b = f.binds.get(p.attempt_id);
+      if (!b || b.grant_id !== p.grant_id || b.fenced || b.released) throw new IngressRefusal("effect_refused", `attempt ${p.attempt_id} is not live`);
+      const claims = controller.attemptClaims(p.grant_id);
+      if (!claims || now() > claims.expires_at_ms || controller.attemptAdmission(p.grant_id) !== "active") {
+        throw new IngressRefusal("effect_refused", `attempt ${p.attempt_id} has no active, unexpired grant`);
+      }
+      const e = f.effects.get(`${b.task_id}\0${p.effect_key}`);
+      if (!e || e.attempt_id !== p.attempt_id || e.state !== "permitted" || e.permit_epoch !== p.controller_epoch) {
+        throw new IngressRefusal("effect_refused", `effect ${p.effect_key} is not awaiting this permit`);
+      }
+      // Consume before acting: a crash from here on leaves the effect `started`, i.e. uncertain.
+      extend(grant, { type: "effect_start", attempt_id: p.attempt_id, task_id: b.task_id, effect_key: p.effect_key });
+      const out = effect();
+      extend(grant, { type: "effect_done", attempt_id: p.attempt_id, task_id: b.task_id, effect_key: p.effect_key });
+      return out;
     },
 
     verifyRecordCopy(attempt_id, record_id) {
@@ -684,17 +756,6 @@ export function submitWorkerRecord(
   if (bytes.length > bundle.limits.max_record_bytes) throw new IngressRefusal("request_invalid", "record exceeds the size bound");
   const file = path.join(bundle.ingress_dir, `${record_id}.json`);
   fs.writeFileSync(file, bytes, { flag: "wx", mode: 0o600 });
-}
-
-/** Worker-side: a permit authorizes exactly one effect key for exactly this attempt grant. */
-export function verifyEffectPermit(bundle: WorkerBundle, p: EffectPermit): boolean {
-  if (!isObj(p) || p.schema_version !== EFFECT_PERMIT_SCHEMA || typeof p.mac !== "string") return false;
-  if (p.run_id !== bundle.run_id || p.attempt_id !== bundle.attempt_id || p.grant_id !== bundle.grant.grant_id) return false;
-  try {
-    return macEqual(p.mac, hmac(bundle.grant.secret, permitMessage(p)));
-  } catch {
-    return false;
-  }
 }
 
 /** The only bundle form allowed in shareable files: no secret, no environment values. */

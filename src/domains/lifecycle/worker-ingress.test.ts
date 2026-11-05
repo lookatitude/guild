@@ -30,7 +30,6 @@ import {
   openWorkerIngress,
   shareableBundleRef,
   submitWorkerRecord,
-  verifyEffectPermit,
   type AdapterCapabilityProof,
   type EffectPermit,
   type WorkerBundle,
@@ -244,12 +243,12 @@ describe("AT12 · remote isolation", () => {
 });
 
 describe("AT13 · attempt ownership", () => {
-  /** Cooperative worker: intent, wait for permit, effect, result. */
+  const CRASH = new Error("worker process lost");
+  /** Trusted executor step: true when the effect ran to a journaled completion. */
   function effectStep(b: WorkerBundle, key: string, permits: EffectPermit[], effect: () => void): boolean {
     const p = permits.find((x) => x.attempt_id === b.attempt_id && x.effect_key === key);
-    if (!p || !verifyEffectPermit(b, p)) return false;
-    effect();
-    return true;
+    if (!p) return false;
+    try { ing.runEffect(w, p, effect); return true; } catch (e) { if (e instanceof IngressRefusal) return false; throw e; }
   }
 
   it("blocks a second live attempt until fencing and effect reconciliation; never replays an uncertain effect", () => {
@@ -258,8 +257,10 @@ describe("AT13 · attempt ownership", () => {
     expect(code(() => dispatch("task-1", "att-2"))).toBe("attempt_live");
     submitWorkerRecord(a1, { record_id: "i-1", kind: "effect_intent", effect_key: "push-main", body: {} });
     const r = ing.collect();
-    expect(effectStep(a1, "push-main", r.permits, () => effects++)).toBe(true);
-    // Crash after the effect, before the result receipt. Retry requested:
+    // Crash after the external effect, before its completion receipt is journaled.
+    expect(() => ing.runEffect(w, r.permits[0]!, () => { effects++; throw CRASH; })).toThrow(CRASH);
+    expect(ing.taskState("task-1").effects).toContainEqual({ effect_key: "push-main", state: "in_flight", attempt_id: "att-1", worker_claim: null });
+    expect(code(() => ing.runEffect(w, r.permits[0]!, () => effects++))).toBe("effect_refused");
     expect(code(() => dispatch("task-1", "att-2"))).toBe("attempt_live");
     expect(code(() => ing.releaseAttempt(w, "att-1"))).toBe("attempt_not_fenced");
     expect(code(() => ing.reconcileEffect(w, { task_id: "task-1", effect_key: "push-main", verdict: "applied", evidence_ref: "ev-1" }))).toBe("reconcile_refused");
@@ -267,12 +268,11 @@ describe("AT13 · attempt ownership", () => {
     expect(code(() => dispatch("task-1", "att-2"))).toBe("attempt_live");
     const st = ing.taskState("task-1");
     expect(st.uncertain_effects).toEqual(["push-main"]);
-    expect(st.effects).toContainEqual({ effect_key: "push-main", state: "uncertain", attempt_id: "att-1" });
     let err: unknown;
     try { ing.releaseAttempt(w, "att-1"); } catch (e) { err = e; }
     expect((err as IngressRefusal).code).toBe("effects_unreconciled");
     expect((err as IngressRefusal).uncertain).toEqual(["push-main"]);
-    // A lost-but-alive worker writing after the fence is ignored, gets no permit.
+    // A lost-but-alive worker writing after the fence is ignored and gets no permit.
     submitWorkerRecord(a1, { record_id: "r-1", kind: "effect_result", effect_key: "push-main", outcome: "applied", body: {} });
     submitWorkerRecord(a1, { record_id: "i-2", kind: "effect_intent", effect_key: "push-other", body: {} });
     const late = ing.collect();
@@ -287,8 +287,9 @@ describe("AT13 · attempt ownership", () => {
     const r2 = ing.collect();
     expect(r2.rejected).toContainEqual({ attempt_id: "att-2", record_id: "i-1", code: "effect_replay_refused" });
     expect(effectStep(a2, "push-main", r2.permits, () => effects++)).toBe(false);
-    // A permit from the first attempt does not authorize the second.
-    expect(effectStep(a2, "push-main", r.permits.map((p) => ({ ...p, attempt_id: "att-2" })), () => effects++)).toBe(false);
+    // The first attempt's permit, or one re-labelled for the second attempt, does not authorize.
+    expect(code(() => ing.runEffect(w, r.permits[0]!, () => effects++))).toBe("effect_refused");
+    expect(code(() => ing.runEffect(w, { ...r.permits[0]!, attempt_id: "att-2", grant_id: a2.grant.grant_id }, () => effects++))).toBe("permit_invalid");
     expect(effects).toBe(1);
   });
 
@@ -296,31 +297,40 @@ describe("AT13 · attempt ownership", () => {
     let effects = 0;
     const a1 = dispatch("task-1", "att-1");
     submitWorkerRecord(a1, { record_id: "i-1", kind: "effect_intent", effect_key: "deploy", body: {} });
-    expect(effectStep(a1, "deploy", ing.collect().permits, () => effects++)).toBe(true);
-    // Controller restarts (new epoch); the old ingress is fenced.
+    submitWorkerRecord(a1, { record_id: "i-k", kind: "effect_intent", effect_key: "notify", body: {} });
+    const r1 = ing.collect();
+    expect(() => ing.runEffect(w, r1.permits.find((p) => p.effect_key === "deploy")!, () => { effects++; throw CRASH; })).toThrow(CRASH);
+    // Controller restarts (new epoch); the old ingress is fenced and old permits are dead.
     const old = ing;
     ing = open();
     expect(code(() => old.collect())).toBe("controller_fenced");
     w = ing.controller.issueWriterGrant("lifecycle");
+    expect(code(() => ing.runEffect(w, r1.permits.find((p) => p.effect_key === "notify")!, () => effects++))).toBe("permit_invalid");
+    // The old worker (now reconcile_only) re-requests with fresh record ids: no permit.
+    submitWorkerRecord(a1, { record_id: "i-1-again", kind: "effect_intent", effect_key: "deploy", body: {} });
+    submitWorkerRecord(a1, { record_id: "i-k-again", kind: "effect_intent", effect_key: "notify", body: {} });
+    const r2 = ing.collect();
+    expect(r2.permits).toEqual([]);
+    expect(r2.rejected.map((x) => x.code)).toEqual(["effect_replay_refused", "effect_replay_refused"]);
     expect(code(() => dispatch("task-1", "att-2"))).toBe("attempt_live");
     ing.fenceAttempt(w, "att-1");
     expect(ing.taskState("task-1").uncertain_effects).toEqual(["deploy"]);
     expect(code(() => ing.releaseAttempt(w, "att-1"))).toBe("effects_unreconciled");
     expect(code(() => dispatch("task-1", "att-2"))).toBe("attempt_live");
-    // Re-submitting the old intent (replay) cannot re-mint a permit.
-    expect(ing.collect().permits).toEqual([]);
     expect(effects).toBe(1);
   });
 
-  it("a worker-reported failure is untrusted: it stays uncertain until a trusted not_applied verdict frees one replay", () => {
+  it("worker outcome claims never settle an effect; only the executor or a trusted verdict does", () => {
     let effects = 0;
     const a1 = dispatch("task-1", "att-1");
     submitWorkerRecord(a1, { record_id: "i-1", kind: "effect_intent", effect_key: "tag", body: {} });
-    ing.collect();
-    submitWorkerRecord(a1, { record_id: "r-1", kind: "effect_result", effect_key: "tag", outcome: "failed", body: {} });
+    const p1 = ing.collect().permits[0]!;
+    expect(() => ing.runEffect(w, p1, () => { throw CRASH; })).toThrow(CRASH);
+    submitWorkerRecord(a1, { record_id: "r-1", kind: "effect_result", effect_key: "tag", outcome: "applied", body: {} });
     ing.collect();
     ing.fenceAttempt(w, "att-1");
-    expect(ing.taskState("task-1").uncertain_effects).toEqual(["tag"]);
+    // The worker claims applied; the effect is still uncertain and release still blocks.
+    expect(ing.taskState("task-1").effects).toContainEqual({ effect_key: "tag", state: "uncertain", attempt_id: "att-1", worker_claim: "applied" });
     expect(code(() => ing.releaseAttempt(w, "att-1"))).toBe("effects_unreconciled");
     ing.reconcileEffect(w, { task_id: "task-1", effect_key: "tag", verdict: "not_applied", evidence_ref: "ev-2" });
     expect(code(() => ing.reconcileEffect(w, { task_id: "task-1", effect_key: "tag", verdict: "applied", evidence_ref: "ev-3" }))).toBe("reconcile_refused");
@@ -328,19 +338,32 @@ describe("AT13 · attempt ownership", () => {
     const a2 = dispatch("task-1", "att-2");
     submitWorkerRecord(a2, { record_id: "i-1", kind: "effect_intent", effect_key: "tag", body: {} });
     expect(effectStep(a2, "tag", ing.collect().permits, () => effects++)).toBe(true);
-    submitWorkerRecord(a2, { record_id: "r-1", kind: "effect_result", effect_key: "tag", outcome: "applied", body: {} });
-    ing.collect();
     ing.fenceAttempt(w, "att-2");
     ing.releaseAttempt(w, "att-2");
     expect(ing.taskState("task-1")).toMatchObject({ live_attempt: null, uncertain_effects: [] });
-    // Applied is terminal for the task: a third attempt cannot get the permit.
+    // Executor-completed is terminal for the task: a third attempt cannot get the permit.
     const a3 = dispatch("task-1", "att-3");
     submitWorkerRecord(a3, { record_id: "i-1", kind: "effect_intent", effect_key: "tag", body: {} });
     expect(ing.collect().permits).toEqual([]);
     expect(effects).toBe(1);
   });
 
-  it("a worker cannot forge a result or intent for an effect another attempt owns, and re-dispatch is idempotent", () => {
+  it("an unconsumed permit settles on fence and may be re-permitted once to the next attempt", () => {
+    let effects = 0;
+    const a1 = dispatch("task-1", "att-1");
+    submitWorkerRecord(a1, { record_id: "i-1", kind: "effect_intent", effect_key: "k", body: {} });
+    const p1 = ing.collect().permits[0]!;
+    ing.fenceAttempt(w, "att-1");
+    expect(ing.taskState("task-1").effects[0]!.state).toBe("unstarted");
+    expect(code(() => ing.runEffect(w, p1, () => effects++))).toBe("effect_refused");
+    ing.releaseAttempt(w, "att-1");
+    const a2 = dispatch("task-1", "att-2");
+    submitWorkerRecord(a2, { record_id: "i-1", kind: "effect_intent", effect_key: "k", body: {} });
+    expect(effectStep(a2, "k", ing.collect().permits, () => effects++)).toBe(true);
+    expect(effects).toBe(1);
+  });
+
+  it("a worker cannot mint permits or forge results, and re-dispatch is idempotent", () => {
     const a1 = dispatch("task-1", "att-1");
     const again = dispatch("task-1", "att-1");
     expect(again.grant.grant_id).toBe(a1.grant.grant_id);
@@ -353,6 +376,37 @@ describe("AT13 · attempt ownership", () => {
     // A second intent for the same key from the owner re-delivers the same permit.
     expect(r.permits).toHaveLength(2);
     expect(r.permits[0]!.mac).toBe(r.permits[1]!.mac);
-    expect(verifyEffectPermit(a1, { ...r.permits[0]!, mac: "0".repeat(64) })).toBe(false);
+    // A permit MACed with the worker's own grant secret, or for another key, is refused.
+    const crypto = require("node:crypto") as typeof import("node:crypto");
+    const minted = { ...r.permits[0]!, effect_key: "other" };
+    minted.mac = crypto.createHmac("sha256", a1.grant.secret).update(JSON.stringify(minted)).digest("hex");
+    expect(code(() => ing.runEffect(w, minted, () => 0))).toBe("permit_invalid");
+    expect(code(() => ing.runEffect(w, { ...r.permits[0]!, effect_key: "other" }, () => 0))).toBe("permit_invalid");
+    expect(code(() => ing.runEffect(a1.grant as unknown as WriterGrant, r.permits[0]!, () => 0))).toBe("worker_grant_not_writer");
+  });
+});
+
+describe("ingress robustness", () => {
+  it("bounds directory scans by every entry, not only matching names", () => {
+    ing.close();
+    ing = open({ limits: { max_entries_scanned: 10 } });
+    w = ing.controller.issueWriterGrant("lifecycle");
+    const b = dispatch("task-1", "att-1");
+    for (let i = 0; i < 50; i++) fs.writeFileSync(path.join(b.ingress_dir, `.junk-${i}`), "");
+    const r = ing.collect();
+    expect(r.truncated).toBe(true);
+  });
+
+  it("repairs a durable copy lost between journal commit and publication", () => {
+    const b = dispatch("task-1", "att-1");
+    submitWorkerRecord(b, { record_id: "obs-1", kind: "observation", body: { ok: 1 } });
+    ing.collect();
+    const copy = path.join(durableRoot, ".guild", "runs", RUN, "attempts", "att-1", "records", "obs-1.json");
+    fs.rmSync(copy);
+    fs.rmSync(path.join(b.ingress_dir, "obs-1.json"));
+    submitWorkerRecord(b, { record_id: "obs-1", kind: "observation", body: { ok: 999 } });
+    expect(ing.collect().replayed).toContain("att-1/obs-1");
+    expect(ing.verifyRecordCopy("att-1", "obs-1")).toEqual({ ok: true });
+    expect(fs.readFileSync(copy, "utf8").includes('"ok":1')).toBe(true);
   });
 });
