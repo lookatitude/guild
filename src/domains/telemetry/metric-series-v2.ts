@@ -493,8 +493,11 @@ function computeCalcInner(metric: AtomicMetric, s: Scope, facts: FactSet, grain:
     case "M13.unallocated_tokens": return sumCalc(s, (l) => (l.covered && !l.allocated && l.total !== null ? l.total : l.covered && l.allocated ? 0 : null), "not_applicable");
     case "M13.allocated_usd":
     case "M13.unallocated_usd": {
-      if (!facts.pricing) return unavailableCalc("no pricing table pinned; allocated cost unavailable", true);
+      // Known cost keeps its basis: measured spend when the scope has any, else the pinned derived estimate.
       const want = id === "M13.allocated_usd";
+      const anyMeasured = s.runs.some(({ leaves }) => leaves.some((l) => l.measured_usd !== null));
+      if (anyMeasured) return sumCalc(s, (l) => (l.measured_usd === null ? null : l.allocated === want ? l.measured_usd : 0), "measured", "some requests have no measured spend");
+      if (!facts.pricing) return unavailableCalc("no measured spend and no pricing table pinned; allocated cost unavailable", true);
       return sumCalc(s, (l) => (l.derived_usd === null ? null : l.allocated === want ? l.derived_usd : 0), "derived_estimate");
     }
     case "M14.outcome_count": {
@@ -549,6 +552,8 @@ function groupKeys(s: Scope, by: GroupBy): Map<string, Scope> {
   if (by === "all") { out.set("all", s); return out; }
   const owner = new Map<string, string>();
   const own = by === "source" || by === "run";
+  // Runs whose records are not all known could hold any task, model or cohort key: every such point is unknown there.
+  const opaque = own ? [] : s.runs.filter(({ run }) => run.usage_state !== "available" || !run.trace_complete || run.extra_missing !== 0).map(({ run }) => ({ source_id: run.source_id, run_id: run.run_id }));
   const group = (k: string | null, identity: string | null, src: string, runId: string | null = null): Scope => {
     const key = k === null ? "unattributed" : k;
     if (!KEY_RE.test(key)) throw new SeriesRefusal("invalid_request", `group key ${JSON.stringify(key)} is not a contract id`);
@@ -560,7 +565,7 @@ function groupKeys(s: Scope, by: GroupBy): Map<string, Scope> {
       // A source or run key names known facts; an unavailable source cannot hold them. Other keys may recur there.
       g = { ...s, runs: [], tasks: [], leafFiltered: s.leafFiltered || !own,
         unknownSources: own ? [] : s.unknownSources,
-        unknownRuns: by === "source" ? s.unknownRuns.filter((x) => x.source_id === src) : by === "run" ? s.unknownRuns.filter((x) => x.source_id === src && x.run_id === runId) : s.unknownRuns,
+        unknownRuns: by === "source" ? s.unknownRuns.filter((x) => x.source_id === src) : by === "run" ? s.unknownRuns.filter((x) => x.source_id === src && x.run_id === runId) : [...s.unknownRuns, ...opaque],
         unenumerated: by === "source" ? s.unenumerated.filter((x) => x.source_id === src) : by === "run" ? [] : s.unenumerated,
         noOutcomeSources: own ? s.noOutcomeSources.filter((x) => x === src) : s.noOutcomeSources };
       out.set(key, g);

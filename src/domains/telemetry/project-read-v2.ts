@@ -163,10 +163,20 @@ function readSource(s: ProjectSource, asOf: string, pricing: PriceTable | null):
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") return unavailableSource(s, ".guild/runs is unreadable");
     names = [];
   }
-  const dirs = names.filter((n) => { try { return fs.lstatSync(path.join(runsDir, n)).isDirectory(); } catch { return false; } });
-  // A ':' cannot appear in a contract evidence path, so such a directory is a run the service cannot name.
-  const unsupported = dirs.filter((n) => n.includes(":"));
-  const runDirs = dirs.filter((n) => !n.includes(":"));
+  // Entries the service cannot inspect, symlinked run dirs and ids with ':' (not a contract path segment)
+  // are runs it cannot name: they keep the enumeration unknown instead of disappearing.
+  const dirs: string[] = [];
+  const unsupportedReasons = new Map<string, string>();
+  for (const n of names) {
+    let l: fs.Stats;
+    try { l = fs.lstatSync(path.join(runsDir, n)); } catch { unsupportedReasons.set(n, "run entry cannot be inspected"); continue; }
+    if (l.isSymbolicLink()) unsupportedReasons.set(n, "run directory is a symlink");
+    else if (!l.isDirectory()) continue;
+    else if (n.includes(":")) unsupportedReasons.set(n, "run directory name is not a contract path segment");
+    else dirs.push(n);
+  }
+  const unsupported = [...unsupportedReasons.keys()];
+  const runDirs = dirs;
   if (runDirs.length > PROJECT_READ_LIMITS.runs_per_source) return unavailableSource(s, `more than ${PROJECT_READ_LIMITS.runs_per_source} runs; enumeration bound exceeded`);
   const runs: RunFacts[] = [];
   const gens: { run_id: string; generation: string }[] = [];
@@ -191,7 +201,7 @@ function readSource(s: ProjectSource, asOf: string, pricing: PriceTable | null):
     diag.duplicates += r.duplicates;
     diag.pending_requests = diag.pending_requests === null || r.pending === null ? (r.run.usage_state === "available" ? null : diag.pending_requests) : diag.pending_requests + r.pending;
   }
-  for (const n of unsupported) diag.run_errors.push({ run_id: n, reason: "run directory name is not a contract path segment" });
+  for (const [n, reason] of unsupportedReasons) diag.run_errors.push({ run_id: n, reason });
   const generation = sha256(canonicalJson({ source_id: s.source_id, runs: gens, unsupported }));
   return { facts: { source_id: s.source_id, generation, state: "available", reason: null, runs, unenumerated_runs: unsupported.length, outcomes: "not_collected", tasks: [] }, diag };
 }

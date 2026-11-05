@@ -486,6 +486,38 @@ describe("AT29 · query snapshot", () => {
     expect(pt(series(clean, "M01.run_count", { filters: [{ dimension: "task", values: ["task-b"] }] }))).toMatchObject({ value: 1, exact_total: 1 });
   });
 
+  it("task and model points stay partial beside a run whose records are unknown", () => {
+    put("source-a", "runs/run-1/trace.jsonl", jsonl([ev("source-a", "run-1", 1, use("req-1", 1, 5), { task: "task-1" })]));
+    put("source-a", "runs/run-old/logs/v1.4-events.jsonl", `{"event":"llm_call"}\n`);
+    put("source-b", "runs/run-1/trace.jsonl", jsonl([ev("source-b", "run-1", 1, use("req-1", 1, 0))]));
+    const snap = open();
+    const q = projectQuery(snap, { metric_id: "M07.output_tokens" });
+    for (const by of ["observed_model", "task"] as const) {
+      const r = readMetricSeries(snap, readRequest(q, "metric_series", { request_id: "q-15", session_id: "s-1" }), { group_by: by }) as MetricSeriesV2;
+      expect(validateMetricSeriesV2(r)).toEqual({ ok: true });
+      for (const p of r.points) expect(`${by}:${p.key}:${p.exact_total}:${p.coverage.state}`).toBe(`${by}:${p.key}:null:${p.value === null ? "unavailable" : "partial"}`);
+    }
+  });
+
+  it("an uninspectable or symlinked run entry keeps the enumeration unknown", () => {
+    at28Sources();
+    fs.mkdirSync(path.join(base, "elsewhere"));
+    fs.symlinkSync(path.join(base, "elsewhere"), path.join(rootOf("source-b"), ".guild/runs/run-sym"));
+    const snap = open();
+    expect(pt(series(snap, "M01.run_count"))).toMatchObject({ value: 2, exact_total: null, coverage: { state: "partial" } });
+    expect(snap.diagnostics.find((d) => d.source_id === "source-b")!.run_errors).toEqual([{ run_id: "run-sym", reason: "run directory is a symlink" }]);
+  });
+
+  it("allocated cost keeps measured spend without a pricing table", () => {
+    const measured = { ...use("req-1", 1, 1), cost_usd: 0.1, cost_basis: "measured" as const };
+    put("source-a", "runs/run-1/trace.jsonl", jsonl([ev("source-a", "run-1", 1, measured, { task: "task-1" })]));
+    put("source-b", "runs/run-1/trace.jsonl", jsonl([ev("source-b", "run-1", 1, { ...measured, cost_usd: 0.2 })]));
+    const snap = open(SOURCES(), null);
+    expect(pt(series(snap, "M10.measured_spend_usd"))).toMatchObject({ value: 0.30000000000000004, cost_basis: "measured" });
+    expect(pt(series(snap, "M13.allocated_usd"))).toMatchObject({ value: 0.1, cost_basis: "measured", exact_total: 0.1 });
+    expect(pt(series(snap, "M13.unallocated_usd"))).toMatchObject({ value: 0.2, cost_basis: "measured" });
+  });
+
   it("ids containing ':' never merge two runs into one point", () => {
     put("a", "runs/c/trace.jsonl", jsonl([ev("a", "c", 1, use("req-1", 1, 1))]));
     put("a:b", "runs/c/trace.jsonl", jsonl([ev("a:b", "c", 1, use("req-1", 1, 1))]));
