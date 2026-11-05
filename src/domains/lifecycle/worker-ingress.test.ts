@@ -397,6 +397,8 @@ describe("ingress robustness", () => {
     ing.fenceAttempt(w, "att-1");
     expect(code(() => ing.releaseAttempt(w, "att-1"))).toBe("effects_unreconciled");
     expect(code(() => dispatch("task-1", "att-2"))).toBe("attempt_live");
+    // No verdict while the executor is still running the effect: not_applied could race it.
+    expect(code(() => ing.reconcileEffect(w, { task_id: "task-1", effect_key: "slow", verdict: "not_applied", evidence_ref: "ev-x" }))).toBe("reconcile_refused");
     resolve();
     await expect(pending).rejects.toBeInstanceOf(IngressRefusal);
     expect(ing.taskState("task-1").uncertain_effects).toEqual(["slow"]);
@@ -423,6 +425,22 @@ describe("ingress robustness", () => {
     } finally {
       fs.chmodSync(hidden, 0o700);
     }
+  });
+
+  it("caps record size so an escaped copy cannot overflow a journal entry", () => {
+    expect(code(() => open({ limits: { max_record_bytes: 512 * 1024 } }))).toBe("request_invalid");
+    ing.close();
+    ing = open({ limits: { max_record_bytes: 128 * 1024 } });
+    w = ing.controller.issueWriterGrant("lifecycle");
+    const b = dispatch("task-1", "att-1");
+    // Worst case at the cap: backslashes double on every JSON encoding.
+    const body = "\\".repeat(b.limits.max_record_bytes / 2 - 400);
+    submitWorkerRecord(b, { record_id: "esc-1", kind: "observation", body });
+    const r = ing.collect();
+    expect(r.accepted.map((x) => x.record_id)).toEqual(["esc-1"]);
+    ing.close();
+    ing = open();
+    expect(ing.controller.epoch).toBeGreaterThan(0);
   });
 
   it("bounds directory scans by every entry, not only matching names", () => {

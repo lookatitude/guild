@@ -96,6 +96,9 @@ export interface IngressLimits {
   max_records_per_attempt: number;
   max_entries_scanned: number;
 }
+const MAX_RECORD_BYTES_CAP = 128 * 1024;
+/** Serialized ingest body bound, well under the controller's 1 MiB journal entry read limit. */
+const MAX_INGEST_ENTRY_BYTES = 512 * 1024;
 const DEFAULT_LIMITS: IngressLimits = {
   max_record_bytes: 64 * 1024,
   max_records_per_collect: 256,
@@ -419,6 +422,8 @@ const permittable = (e: Effect | undefined, f: Fold) =>
 export function openWorkerIngress(opts: WorkerIngressOptions): WorkerIngress {
   const limits: IngressLimits = { ...DEFAULT_LIMITS, ...(opts.limits ?? {}) };
   for (const v of Object.values(limits)) if (!Number.isSafeInteger(v) || v <= 0) throw new IngressRefusal("request_invalid", "limits must be positive integers");
+  // A record is embedded in one journal entry (1 MiB read bound); JSON escaping can roughly double it.
+  if (limits.max_record_bytes > MAX_RECORD_BYTES_CAP) throw new IngressRefusal("request_invalid", `max_record_bytes is capped at ${MAX_RECORD_BYTES_CAP}`);
   const now = opts.now ?? Date.now;
   const qualified = new Set(opts.qualifiedRemoteHosts ?? []);
   const env = opts.env ?? process.env;
@@ -443,6 +448,8 @@ export function openWorkerIngress(opts: WorkerIngressOptions): WorkerIngress {
     throw e;
   }
   const cursors = new Map<string, string>();
+  /** Effects this process's executor is still running (`task\0key`); a verdict must wait for them. */
+  const running = new Set<string>();
 
   const state = (): Fold => fold(controller.extensionRecords());
   const extend = (grant: WriterGrant, body: Record<string, unknown>) => controller.extend(grant, { ns: NS, ...body });
@@ -626,7 +633,10 @@ export function openWorkerIngress(opts: WorkerIngressOptions): WorkerIngress {
           // Journal first; the durable copy is controller-written and repairable from the same bytes.
           const prev = f.effects.get(`${b.task_id}\0${effect_key}`);
           const ownReplay = kind === "effect_intent" && prev?.attempt_id === b.attempt_id && prev.state === "permitted";
-          extend(internal, { type: "ingest", attempt_id: b.attempt_id, record_id, kind, effect_key, outcome, digest, replay_permit: ownReplay, copy: copy.toString("utf8") });
+          const ingestBody = { type: "ingest", attempt_id: b.attempt_id, record_id, kind, effect_key, outcome, digest, replay_permit: ownReplay, copy: copy.toString("utf8") };
+          // Escaping can expand the copy; a journal entry over the read bound would wedge the run.
+          if (Buffer.byteLength(JSON.stringify({ ext: { ns: NS, ...ingestBody } }), "utf8") > MAX_INGEST_ENTRY_BYTES) { reject("payload_oversized"); continue; }
+          extend(internal, ingestBody);
           f = state();
           writeOnce(durableRoot, copyRel(b.attempt_id, record_id), copy);
           report.accepted.push({ attempt_id: b.attempt_id, record_id, kind });
@@ -660,6 +670,7 @@ export function openWorkerIngress(opts: WorkerIngressOptions): WorkerIngress {
       if (!e || !owner || !unsettled(e)) throw new IngressRefusal("reconcile_refused", `effect ${effect_key} is not uncertain`);
       // Fenced and still `started`: the executor can no longer finish it, so a verdict cannot race the effect.
       if (!owner.fenced) throw new IngressRefusal("reconcile_refused", `attempt ${e.attempt_id} is still live; fence it first`);
+      if (running.has(`${task_id}\0${effect_key}`)) throw new IngressRefusal("reconcile_refused", `effect ${effect_key} is still running in the executor`);
       extend(grant, { type: "reconcile", attempt_id: e.attempt_id, task_id, effect_key, verdict: r.verdict, evidence_ref });
     },
 
@@ -735,10 +746,19 @@ export function openWorkerIngress(opts: WorkerIngressOptions): WorkerIngress {
         }
         extend(grant, { type: "effect_done", attempt_id: p.attempt_id, task_id: b.task_id, effect_key: p.effect_key });
       };
-      const out = effect();
-      if (out !== null && (typeof out === "object" || typeof out === "function") && typeof (out as { then?: unknown }).then === "function") {
-        return Promise.resolve(out).then((v) => { finish(); return v; }) as unknown as typeof out;
+      const rk = `${b.task_id}\0${p.effect_key}`;
+      running.add(rk);
+      let out: ReturnType<typeof effect>;
+      try {
+        out = effect();
+      } catch (err) {
+        running.delete(rk);
+        throw err;
       }
+      if (out !== null && (typeof out === "object" || typeof out === "function") && typeof (out as { then?: unknown }).then === "function") {
+        return Promise.resolve(out).finally(() => running.delete(rk)).then((v) => { finish(); return v; }) as unknown as typeof out;
+      }
+      running.delete(rk);
       finish();
       return out;
     },
