@@ -212,6 +212,36 @@ describe("AT26 · cache compatibility", () => {
     expect(r.reason).toBe("input_changed");
   });
 
+  it("a later as_of on unchanged inputs hits the content-addressed cache; an as_of before the evidence is refused", () => {
+    richRun("run-1");
+    const first = run("run-1");
+    const later = analyzeRunV2(root, { source_id: SOURCE, run_id: "run-1", pricing: P1, as_of: "2026-10-27T00:00:00Z" });
+    expect(later.cache).toBe("hit");
+    expect(later.analysis).toEqual(first.analysis);
+    expect(later.analysis.query.snapshot.as_of).toBe(AS_OF);
+    expect(() => analyzeRunV2(root, { source_id: SOURCE, run_id: "run-1", pricing: P1, as_of: "2026-10-26T00:00:10.5Z" })).toThrow(/precedes retained trace event/);
+  });
+
+  it("payload sidecars are keyed inputs: losing one misses the cache and lowers coverage", () => {
+    put("runs/run-p/run.yaml", "run_id: run-p\n");
+    const sidecar = "runs/run-p/trace-sidecars/ev-" + "c".repeat(32) + ".json";
+    const bytes = JSON.stringify({ content: "scrubbed" });
+    put(sidecar, bytes);
+    const e = ev("run-p", "ev-1", "2026-10-26T00:00:10Z", use("request-1", 10, 0, 5), "task-1", "attempt-1");
+    e.payload_ref = { source_id: SOURCE, path: sidecar, sha256: `sha256:${crypto.createHash("sha256").update(bytes).digest("hex")}`, schema_version: "guild.trace.sidecar.v1", observed_at: "2026-10-26T00:00:10Z", availability: "available", reason: null };
+    put("runs/run-p/trace.jsonl", jsonl([e]));
+    const first = run("run-p");
+    expect(first.analysis.state.observability).toBe("complete");
+    expect(first.analysis.input_evidence.find((x) => x.path === sidecar)!.availability).toBe("available");
+    expect(run("run-p").cache).toBe("hit");
+    fs.rmSync(g(sidecar));
+    const r = run("run-p");
+    expect(r.cache).toBe("recomputed");
+    expect(r.reason).toBe("input_changed");
+    expect(r.analysis.state.observability).not.toBe("complete");
+    expect(r.analysis.input_evidence.find((x) => x.path === sidecar)!.availability).toBe("missing");
+  });
+
   it("partial or corrupt caches are rejected, never served", () => {
     richRun("run-1");
     const first = run("run-1");

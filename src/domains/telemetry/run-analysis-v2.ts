@@ -169,6 +169,26 @@ function retainedEvidence(root: string, sourceId: string, runId: string, asOf: s
   return { evidence, traceUsable };
 }
 
+/** Payload sidecars and tombstones readTrace resolved: their presence and bytes decide coverage, so they are inputs too. */
+function payloadEvidence(root: string, sourceId: string, events: readonly { payload_ref: TraceEvidence | null }[], asOf: string): TraceEvidence[] {
+  const out = new Map<string, TraceEvidence>();
+  for (const e of events) {
+    const ref = e.payload_ref;
+    if (!ref || out.has(ref.path)) continue;
+    const tomb = ref.path.replace(/\.json$/, ".expired.json");
+    for (const [rel, schema] of [[ref.path, "guild.trace.sidecar.v1"], [tomb, "guild.trace.sidecar_tombstone.v1"]] as const) {
+      if (rel === ref.path || !out.has(rel)) {
+        const r = readRetained(root, rel);
+        if (r.state === "absent" && rel === tomb) continue;
+        out.set(rel, { source_id: sourceId, path: rel, schema_version: schema, observed_at: asOf,
+          sha256: r.state === "present" ? sha(r.bytes) : EMPTY_HASH, availability: r.state === "present" ? "available" : "missing",
+          reason: r.state === "present" ? null : r.state === "refused" ? "input refused: not a contained regular file" : "sidecar not retained" });
+      }
+    }
+  }
+  return [...out.values()];
+}
+
 // ── Build ────────────────────────────────────────────────────────────────────
 
 export interface BuildRunAnalysisV2Input {
@@ -183,7 +203,7 @@ export interface BuildRunAnalysisV2Input {
 
 /** A snapshot read covers all retained history up to as_of: [epoch, as_of). */
 const SNAPSHOT_FROM = "1970-01-01T00:00:00Z";
-const LIMITS = { usage: 1000, unallocated: 1000, losses: 100 } as const;
+const LIMITS = { usage: 1000, unallocated: 1000, losses: 100, evidence: 1000 } as const;
 
 /** Pure projection of a T02 ledger into `guild.run_analysis.v2`. */
 export function buildRunAnalysisV2(i: BuildRunAnalysisV2Input): RunAnalysisV2 {
@@ -204,8 +224,8 @@ export function buildRunAnalysisV2(i: BuildRunAnalysisV2Input): RunAnalysisV2 {
   const natives = i.trace_usable ? i.native_sessions ?? 0 : 0;
   if (natives > 0) head.push({ code: "native_session_not_projected", count: natives, reason: "native session spend is kept only as the ledger native estimate; its session records are not projected" });
   const unallocated = (i.trace_usable ? i.ledger.allocation.unallocated_request_ids : []).filter((x) => TRACE_ID_RE.test(x));
-  const omitted = Math.max(0, usage.length - LIMITS.usage) + Math.max(0, unallocated.length - LIMITS.unallocated);
-  if (omitted > 0) head.push({ code: "projection_truncated", count: omitted, reason: `usage or unallocated ids exceed the contract bound; ${omitted} omitted` });
+  const omitted = Math.max(0, usage.length - LIMITS.usage) + Math.max(0, unallocated.length - LIMITS.unallocated) + Math.max(0, i.input_evidence.length - LIMITS.evidence);
+  if (omitted > 0) head.push({ code: "projection_truncated", count: omitted, reason: `usage, unallocated ids or input evidence exceed the contract bound; ${omitted} omitted (the manifest digest still covers all inputs)` });
   const tail = [...i.ledger.losses, ...i.ledger.time.losses].map((l) => ({ code: l.code, count: l.count, reason: l.reason }));
   const room = LIMITS.losses - head.length;
   const losses = tail.length > room ? [...head, ...tail.slice(0, room - 1), { code: "losses_truncated", count: tail.length - room + 1, reason: "more ledger losses than the contract bound" }] : [...head, ...tail];
@@ -222,7 +242,7 @@ export function buildRunAnalysisV2(i: BuildRunAnalysisV2Input): RunAnalysisV2 {
       window: { from: SNAPSHOT_FROM, to: i.as_of, basis: "as_of_snapshot", timezone: "UTC" },
       cohort_hash: sha(canonical({ source_id: i.source_id, run_id: i.run_id })), underlying_scalar: null,
     },
-    input_evidence: i.input_evidence,
+    input_evidence: i.input_evidence.slice(0, LIMITS.evidence),
     usage: usage.slice(0, LIMITS.usage),
     state: { lifecycle: "unknown", outcome: "unknown", acceptance: "unknown", observability },
     metrics: [],
@@ -435,11 +455,25 @@ export function analyzeRunV2(root: string, opts: AnalyzeRunV2Options): AnalyzeRu
   if (!TRACE_ID_RE.test(opts.source_id)) throw new Error(`unsafe source id: ${opts.source_id}`);
   if (!isRfc3339(opts.as_of)) throw new Error("as_of must be an RFC 3339 instant");
   const pricing = opts.pricing ?? null;
-  const { evidence, traceUsable } = retainedEvidence(root, opts.source_id, opts.run_id, opts.as_of);
-  const trace = traceUsable ? readTrace(root, opts.run_id) : null;
+  // Hash, read, hash again: the projection is bound to the digest only when nothing changed in between.
+  let snapshot: { evidence: TraceEvidence[]; traceUsable: boolean; trace: ReturnType<typeof readTrace> | null } | null = null;
+  for (let attempt = 0; attempt < 3 && snapshot === null; attempt++) {
+    const before = retainedEvidence(root, opts.source_id, opts.run_id, opts.as_of);
+    const read = before.traceUsable ? readTrace(root, opts.run_id) : null;
+    const evidence = [...before.evidence, ...payloadEvidence(root, opts.source_id, read?.events ?? [], opts.as_of)];
+    const after = retainedEvidence(root, opts.source_id, opts.run_id, opts.as_of);
+    const again = [...after.evidence, ...payloadEvidence(root, opts.source_id, read?.events ?? [], opts.as_of)];
+    if (inputManifestDigest(evidence) === inputManifestDigest(again)) snapshot = { evidence, traceUsable: before.traceUsable, trace: read };
+  }
+  if (snapshot === null) throw new Error(`run ${opts.run_id} inputs kept changing during analysis; retry later`);
+  const { evidence, traceUsable, trace } = snapshot;
+  const late = trace?.events.find((e) => compareTraceInstants(e.at, opts.as_of) > 0);
+  if (late) throw new Error(`as_of ${opts.as_of} precedes retained trace event ${late.event_id}; the snapshot cannot include later evidence`);
+  // as_of is left out of normalization so the projection depends only on keyed inputs; a cache hit
+  // therefore returns the same body, stamped with the as_of it was first taken at.
   const ledger = normalizeRunLedger({
     source_id: opts.source_id, run_id: opts.run_id, events: trace?.events ?? [], capture: trace?.coverage ?? null,
-    spans: [], pricing, budget: null, as_of: opts.as_of,
+    spans: [], pricing, budget: null, as_of: null,
   });
   const billed = (trace?.events ?? []).filter((e) => e.event_class === "request_completed" && e.usage && e.usage.inclusion !== "parent_inclusive");
   const observed = billed.map((e) => e.usage!.usage_semantics);
