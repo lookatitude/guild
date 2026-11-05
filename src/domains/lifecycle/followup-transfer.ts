@@ -120,7 +120,6 @@ const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const SEG_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/;
 const HASH_RE = /^sha256:[a-f0-9]{64}$/;
 const REL_RE = /^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*[\\%\x00-\x1f])[^:]+$/;
-const TIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/i;
 const KINDS = new Set(["initiative", "run", "execution", "host_session", "goal", "logical_task", "task_attempt", "agent_instance", "request", "operation", "decision", "workflow", "component", "invocation", "obligation", "memory", "knowledge", "candidate", "agent", "skill", "tool", "team", "loop", "config", "evaluation", "report", "benchmark_case", "transfer", "query"]);
 const STATES = new Set<TransferState>(["reserved", "target_prepared", "source_committed", "target_activated", "acknowledged", "recovery_needed", "aborted"]);
 const RECORD_KEYS = ["schema_version", "operation_id", "source_work", "expected_disposition_revision", "reserved_disposition_revision", "destination_work", "destination_policy_hash", "payload_hash", "state", "source_commit", "target_activation", "target_ack", "prepared_target_executable", "recorded_at"];
@@ -129,7 +128,24 @@ const ENTITY_KEYS = ["source_id", "kind", "id", "revision"];
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const exactKeys = (o: Record<string, unknown>, keys: string[]) => Object.keys(o).length === keys.length && keys.every((k) => Object.prototype.hasOwnProperty.call(o, k));
-const isTime = (v: unknown) => typeof v === "string" && TIME_RE.test(v) && !Number.isNaN(Date.parse(v));
+const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:[Zz]|([+-])(\d{2}):(\d{2}))$/;
+/** RFC 3339 date-time with calendar checks, matching ajv-formats `date-time` (leap second only at 23:59 UTC). */
+function isTime(v: unknown): boolean {
+  if (typeof v !== "string") return false;
+  const m = RFC3339.exec(v);
+  if (!m) return false;
+  const [y, mo, d, h, mi, se] = [1, 2, 3, 4, 5, 6].map((i) => Number(m[i]));
+  const leap = y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (mo < 1 || mo > 12 || d < 1 || d > days[mo - 1]!) return false;
+  const oh = m[8] ? Number(m[8]) : 0;
+  const om = m[9] ? Number(m[9]) : 0;
+  if (h > 23 || mi > 59 || se > 60 || oh > 23 || om > 59) return false;
+  if (se <= 59) return true;
+  const sign = m[7] === "-" ? -1 : 1;
+  const utcMin = (((h * 60 + mi - sign * (oh * 60 + om)) % 1440) + 1440) % 1440;
+  return utcMin === 23 * 60 + 59;
+}
 const isText = (v: unknown) => typeof v === "string" && v.length >= 1 && v.length <= 4096;
 function entityOk(v: unknown): boolean {
   return isObj(v) && exactKeys(v, ENTITY_KEYS) && typeof v.source_id === "string" && ID_RE.test(v.source_id)
@@ -752,7 +768,7 @@ export interface TransferView {
 }
 
 /** Read-only reconciliation of one transfer across the source and target roots. */
-export function reconcileTransfer(opts: { sourceRoot: string; targetRoot: string; source_id: string; run_id: string; operation_id: string }): TransferView | null {
+export function reconcileTransfer(opts: { sourceRoot: string; targetRoot: string; source_id: string; run_id: string; operation_id: string; controllerPrivateDir: string }): TransferView | null {
   const op = seg(opts.operation_id, "operation_id");
   const run_id = seg(opts.run_id, "run_id");
   const root = path.resolve(opts.sourceRoot);
@@ -760,12 +776,14 @@ export function reconcileTransfer(opts: { sourceRoot: string; targetRoot: string
   const found = readIntent(root, run_id, op);
   if (!found) return null;
   if (found.intent.source_id !== opts.source_id) corrupt(`${op} intent names another source`);
+  if (targetRootDigest(targetRoot) !== found.intent.target_root_digest) throw new TransferRefusal("request_invalid", `${op} was not reserved for this target root`);
   const ctx: Ctx = { root, targetRoot, intent: found.intent, intentHash: found.hash, ports: undefined as unknown as TransferPorts, now: Date.now };
   const aborted = readStage(root, found.intent, "aborted");
   let reachable = rootReachable(targetRoot);
   if (aborted) return { journal_state: "aborted", target_reachable: reachable, record: aborted };
 
   const view = readWorkDisposition(root, run_id, found.intent.source_work);
+  verifyChainAuthority(view, run_id, found.intent.source_id, opts.controllerPrivateDir);
   const ri = view.entries.findIndex((e) => e.state === "transfer_reserved" && e.operation_id === op);
   if (ri >= 0 && view.entries[ri]!.intent_hash !== found.hash) corrupt(`disposition names ${op} with another intent`);
   const committed = view.entries.some((e) => e.state === "transferred" && e.operation_id === op);
@@ -887,7 +905,7 @@ export function closeWorkDisposition(sourceRoot: string, run_id: string, work: E
  * source committed to this very root with the same prepared bytes. Anything
  * unreadable, foreign or replayed is not executable.
  */
-export function isFollowupExecutable(opts: { sourceRoot: string; targetRoot: string; source_id: string; run_id: string; operation_id: string }): boolean {
+export function isFollowupExecutable(opts: { sourceRoot: string; targetRoot: string; source_id: string; run_id: string; operation_id: string; controllerPrivateDir: string }): boolean {
   try {
     const op = seg(opts.operation_id, "operation_id");
     const run_id = seg(opts.run_id, "run_id");
@@ -907,6 +925,7 @@ export function isFollowupExecutable(opts: { sourceRoot: string; targetRoot: str
     if (found.intent.target_root_digest !== targetRootDigest(targetRoot)) return false;
     if (readStage(root, found.intent, "aborted")) return false;
     const view = readWorkDisposition(root, run_id, found.intent.source_work);
+    verifyChainAuthority(view, run_id, source_id, opts.controllerPrivateDir);
     const ti = view.entries.findIndex((e) => e.state === "transferred" && e.operation_id === op);
     if (ti < 0) return false;
     const e = view.entries[ti]!;

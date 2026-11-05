@@ -95,7 +95,7 @@ function listFiles(root: string): string[] {
   if (fs.existsSync(root)) walk(root);
   return out.sort();
 }
-const exec = (targetRoot: string, op: string) => isFollowupExecutable({ sourceRoot, targetRoot, source_id: SRC, run_id: RUN, operation_id: op });
+const exec = (targetRoot: string, op: string) => isFollowupExecutable({ sourceRoot, targetRoot, source_id: SRC, run_id: RUN, operation_id: op, controllerPrivateDir: path.join(tmp, "state") });
 
 // ajv over the frozen schemas + the A02 semantic rule for this schema.
 let ajvValidate: ((v: unknown) => boolean) | null = null;
@@ -235,7 +235,7 @@ describe("AT15 · transfer races", () => {
     rec.destination_work.id = "follow-z";
     fs.chmodSync(stage, 0o644);
     fs.writeFileSync(stage, JSON.stringify(rec));
-    expect(code(() => reconcileTransfer({ sourceRoot, targetRoot: targetA, source_id: SRC, run_id: RUN, operation_id: "xfer-a" }))).toBe("journal_corrupt");
+    expect(code(() => reconcileTransfer({ sourceRoot, targetRoot: targetA, source_id: SRC, run_id: RUN, operation_id: "xfer-a", controllerPrivateDir: path.join(tmp, "state") }))).toBe("journal_corrupt");
   });
 });
 
@@ -257,7 +257,7 @@ describe("AT16 · transfer crash matrix", () => {
 
       const activated = ["activate", "activated_record", "target_ack", "ack_receipt", "ack"].includes(point);
       expect(exec(targetA, "xfer-a")).toBe(activated);
-      const view = reconcileTransfer({ sourceRoot, targetRoot: targetA, source_id: SRC, run_id: RUN, operation_id: "xfer-a" });
+      const view = reconcileTransfer({ sourceRoot, targetRoot: targetA, source_id: SRC, run_id: RUN, operation_id: "xfer-a", controllerPrivateDir: path.join(tmp, "state") });
       expect(view === null ? "none" : view.journal_state).toBe(STAGE_AFTER[point]);
       if (view?.record) expectFrozenValid(view.record);
       const reservedYet = !["intent", "reserve_receipt", "reserve_link"].includes(point);
@@ -335,7 +335,7 @@ describe("AT16 · transfer crash matrix", () => {
     expect(r.record.target_activation).toBeNull();
     expect(r.record.target_ack).toBeNull();
     expectFrozenValid(r.record);
-    const v = reconcileTransfer({ sourceRoot, targetRoot: targetA, source_id: SRC, run_id: RUN, operation_id: "xfer-a" });
+    const v = reconcileTransfer({ sourceRoot, targetRoot: targetA, source_id: SRC, run_id: RUN, operation_id: "xfer-a", controllerPrivateDir: path.join(tmp, "state") });
     expect(v?.record.state).toBe("recovery_needed");
     expect(transferCloseBlocker(sourceRoot, RUN, WORK, path.join(tmp, "state"))).not.toBeNull();
   });
@@ -394,7 +394,7 @@ describe("AT16 · transfer crash matrix", () => {
     const rev = openWorkDisposition(sourceRoot, RUN, WORK);
     expect(code(() => runTransfer(req("xfer-a", rev), ports(targetA, (p) => { if (p === "source_commit") throw new Error("crash"); })))).toBe("other:crash");
     fs.writeFileSync(path.join(targetA, ".guild", "transfers", "inbound", SRC, "xfer-a", "activated.json"), "not JSON");
-    expect(reconcileTransfer({ sourceRoot, targetRoot: targetA, source_id: SRC, run_id: RUN, operation_id: "xfer-a" })?.journal_state).toBe("source_committed");
+    expect(reconcileTransfer({ sourceRoot, targetRoot: targetA, source_id: SRC, run_id: RUN, operation_id: "xfer-a", controllerPrivateDir: path.join(tmp, "state") })?.journal_state).toBe("source_committed");
     expect(exec(targetA, "xfer-a")).toBe(false);
     // Resume refuses to adopt the foreign activation: the target is in conflict, never committed.
     expect(runTransfer(req("xfer-a", rev), ports(targetA)).state).toBe("recovery_needed");
@@ -428,12 +428,49 @@ describe("AT16 · transfer crash matrix", () => {
     const inbound = path.join(targetA, ".guild", "transfers", "inbound", SRC, "xfer-a");
     fs.chmodSync(inbound, 0o000);
     try {
-      const v = reconcileTransfer({ sourceRoot, targetRoot: targetA, source_id: SRC, run_id: RUN, operation_id: "xfer-a" });
+      const v = reconcileTransfer({ sourceRoot, targetRoot: targetA, source_id: SRC, run_id: RUN, operation_id: "xfer-a", controllerPrivateDir: path.join(tmp, "state") });
       expect(v?.target_reachable).toBe(false);
       expect(v?.record?.state).toBe("recovery_needed");
     } finally {
       fs.chmodSync(inbound, 0o755);
     }
+  });
+
+  it("codex r4 F1: a forged commit without its controller receipt is not executable", () => {
+    const rev = openWorkDisposition(sourceRoot, RUN, WORK);
+    expect(code(() => runTransfer(req("xfer-a", rev), ports(targetA, (p) => { if (p === "prepared_record") throw new Error("crash"); })))).toBe("other:crash");
+    const dir = path.join(sourceRoot, ".guild", "runs", RUN, "work", "logical_task", "task-1", "disposition");
+    const raw = fs.readFileSync(path.join(dir, "000001.json"), "utf8");
+    const inbound = path.join(targetA, ".guild", "transfers", "inbound", SRC, "xfer-a");
+    const prepared = fs.readFileSync(path.join(inbound, "prepared.json"), "utf8");
+    const forged = { ...JSON.parse(raw), seq: 2, prev_revision: hashOf(raw), state: "transferred", prepared_sha256: hashOf(prepared) };
+    const fbytes = `${canonicalJson(forged)}\n`;
+    fs.writeFileSync(path.join(dir, "000002.json"), fbytes);
+    const act = { schema_version: "guild.followup_inbound.v1", stage: "activated", operation_id: "xfer-a", source_id: SRC, prepared_sha256: hashOf(prepared), source_commit_sha256: hashOf(fbytes), executable: true };
+    fs.writeFileSync(path.join(inbound, "activated.json"), `${canonicalJson(act)}\n`);
+    expect(exec(targetA, "xfer-a")).toBe(false);
+    expect(code(() => reconcileTransfer({ sourceRoot, targetRoot: targetA, source_id: SRC, run_id: RUN, operation_id: "xfer-a", controllerPrivateDir: path.join(tmp, "state") }))).toBe("journal_corrupt");
+  });
+
+  it("codex r4 F2: reconciliation refuses a root the transfer was not reserved for", () => {
+    const rev = openWorkDisposition(sourceRoot, RUN, WORK);
+    expect(code(() => runTransfer(req("xfer-a", rev), ports(targetA, (p) => { if (p === "activate") throw new Error("crash"); })))).toBe("other:crash");
+    const inbound = path.join(".guild", "transfers", "inbound", SRC, "xfer-a");
+    fs.cpSync(path.join(targetA, inbound), path.join(targetB, inbound), { recursive: true });
+    expect(code(() => reconcileTransfer({ sourceRoot, targetRoot: targetB, source_id: SRC, run_id: RUN, operation_id: "xfer-a", controllerPrivateDir: path.join(tmp, "state") }))).toBe("request_invalid");
+  });
+
+  it("codex r4 F3: recorded_at follows the frozen RFC 3339 date-time rule", () => {
+    const base = VENDORED.cases.find((c) => c.valid)!.instance;
+    const times = ["2026-02-30T00:00:00Z", "2026-11-05T24:00:00Z", "2026-13-01T00:00:00Z", "2024-02-29T12:00:00Z", "2026-11-05T10:00:00.123+05:30",
+      "2026-12-31T23:59:60Z", "2026-12-31T23:58:60Z", "2026-12-31T18:59:60-05:00", "2026-11-05t10:00:00z", "2026-11-05T10:00:00+24:00", "2026-11-05 10:00:00Z"];
+    for (const t of times) {
+      const v = { ...base, recorded_at: t };
+      const ours = validateFollowupTransfer(v).ok;
+      if (ajvValidate) expect({ t, ours }).toEqual({ t, ours: ajvValidate(v) });
+    }
+    expect(validateFollowupTransfer({ ...base, recorded_at: "2026-02-30T00:00:00Z" }).ok).toBe(false);
+    expect(validateFollowupTransfer({ ...base, recorded_at: "2024-02-29T12:00:00Z" }).ok).toBe(true);
   });
 
   it("codex r2 F3: a reshaped activation is not executable", () => {
