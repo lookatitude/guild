@@ -2074,6 +2074,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/stack-contract-reader-validator",
+      "source_path": "scripts/lib/stack-contract-reader-validator.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/stack-contract-validator",
       "source_path": "scripts/lib/stack-contract-validator.ts",
       "kind": "lib"

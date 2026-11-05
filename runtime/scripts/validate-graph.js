@@ -39,7 +39,7 @@ __export(validate_graph_exports, {
 });
 module.exports = __toCommonJS(validate_graph_exports);
 var fs6 = __toESM(require("fs"));
-var path7 = __toESM(require("path"));
+var path8 = __toESM(require("path"));
 
 // scripts/learn/lib/paths.ts
 var fs4 = __toESM(require("fs"));
@@ -467,8 +467,78 @@ var TIER_BUS_CONTRACT = deepFreeze({
   tier_source: "the attempt record on disk, or the run's minted binding_ref \u2014 never the payload"
 });
 
+// src/domains/kernel/reserved-identity-fields.ts
+var path6 = __toESM(require("node:path"));
+var RESERVED_IDENTITY_FIELDS = Object.freeze([
+  // logical-run
+  "source_id",
+  "run_id",
+  "initiative_id",
+  "parent_run",
+  "created_at",
+  "phase",
+  "initial_command",
+  "initial_prompt_ref",
+  "controller",
+  "workflow_hash",
+  "settings_hash",
+  "execution_refs",
+  "goal_refs",
+  "state",
+  // execution-segment
+  "lineage",
+  "original_host_id",
+  "host_session_id",
+  "issued_controller_epoch",
+  "adapter_capability_hash",
+  "pins",
+  "admission",
+  "interval",
+  "observation_manifest",
+  "seal_evidence",
+  // task-assignment v3
+  "assignment_hash",
+  "result_scope_hash",
+  "grant_id",
+  "goal_contributions",
+  "input_refs",
+  // stack task-attempt
+  "assignment_ref",
+  "ordinal",
+  "result_refs",
+  "acceptance_subject_hash",
+  "accepted_by_controller_epoch",
+  "receipt_loss_reconciled",
+  "uncertain_effects",
+  // run-binding v2
+  "controller_source_id",
+  "controller_host_id",
+  "controller_epoch",
+  "writer_grant_id",
+  "writer_scope_hash",
+  "logical_run_manifest_hash",
+  // execution-lineage receipt
+  "run_schema",
+  "requested_host",
+  "observed_host",
+  "requested_model",
+  "observed_identity",
+  "authority",
+  "attempt_grant_ref",
+  "handoffs",
+  "evidence",
+  // lineage keys
+  "execution_id",
+  "goal_id",
+  "logical_task_id",
+  "attempt_id",
+  "agent_instance_id",
+  "request_id"
+]);
+var RUN_KIND_V2_MANIFEST_RELPATH = path6.join("lineage", "logical-run.json");
+
 // scripts/learn/lib/schema.ts
-var path6 = __toESM(require("path"));
+var path7 = __toESM(require("path"));
 var NODE_TYPES = sealSet([
   "file",
   "function",
@@ -950,7 +1020,7 @@ function resolveAnchor(repoRoot, anchor) {
   if (!anchor || typeof anchor !== "string") return false;
   const relPath = anchorToPath(anchor);
   if (!relPath) return false;
-  const absPath = path6.resolve(repoRoot, relPath);
+  const absPath = path7.resolve(repoRoot, relPath);
   try {
     if (!fs5.existsSync(absPath)) return false;
   } catch {
@@ -1416,7 +1486,7 @@ function main() {
     input = JSON.parse(fs6.readFileSync(0, "utf8"));
   } else {
     const inPath = parseFlag(argv, "in");
-    const resolved = inPath ? path7.resolve(cwd, inPath) : gp.partialGraph;
+    const resolved = inPath ? path8.resolve(cwd, inPath) : gp.partialGraph;
     input = readJson(resolved);
     if (input === null) {
       process.stderr.write(`[validate] ERROR: cannot read input graph ${resolved}
@@ -1467,14 +1537,14 @@ function main() {
   }
   if (!dry) {
     writeJson(gp.knowledgeGraph, result.data);
-    process.stderr.write(`[validate] \u2192 ${path7.relative(gp.repoRoot, gp.knowledgeGraph)}
+    process.stderr.write(`[validate] \u2192 ${path8.relative(gp.repoRoot, gp.knowledgeGraph)}
 `);
   }
   if (hasFlag(argv, "print")) {
     process.stdout.write(JSON.stringify({ data: result.data, issues: result.issues }, null, 2) + "\n");
   } else {
     process.stdout.write(
-      dry ? "validated (dry-run)\n" : path7.relative(gp.repoRoot, gp.knowledgeGraph) + "\n"
+      dry ? "validated (dry-run)\n" : path8.relative(gp.repoRoot, gp.knowledgeGraph) + "\n"
     );
   }
 }

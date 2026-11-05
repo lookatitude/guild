@@ -10,7 +10,7 @@
  * caught and never counted as an expected refusal: refusal assertions go
  * through expectRefusal(), which requires the exact declared reason code.
  */
-import { spawnSync, type ChildProcess } from "child_process";
+import { execFileSync, spawnSync, type ChildProcess } from "child_process";
 import { createHash } from "crypto";
 import * as fs from "fs";
 import * as os from "os";
@@ -82,6 +82,21 @@ const ownedTmux: OwnedTmux[] = [];
 export function ownRoot(dir: string): string {
   ownedRoots.add(dir);
   return dir;
+}
+
+/** The host boot session the controller records (Linux boot_id, macOS kern.bootsessionuuid). */
+export function hostBootSession(): string {
+  if (process.platform === "linux") return fs.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+  return execFileSync("sysctl", ["-n", "kern.bootsessionuuid"], { encoding: "utf8" }).trim();
+}
+
+/** The owner start the controller records (CD5): /proc starttime ticks on Linux, normalized ps lstart elsewhere. */
+export function controllerProcessStart(pid: number): string {
+  if (process.platform === "linux") {
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+    return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19]!;
+  }
+  return execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8" }).trim().replace(/\s+/g, " ");
 }
 
 /** Start time of a live pid, or null when no such process exists. */
@@ -174,7 +189,8 @@ export function readTmuxLedger(ledger: string): TmuxLedger {
   for (const s of serverLines) {
     const at = starts.get(s.seq);
     const began = startEpoch(s.start);
-    if (at === undefined || !Number.isFinite(began) || began < at) continue;
+    // Linux procps derives lstart from boot time + jiffies and can read one second early.
+    if (at === undefined || !Number.isFinite(began) || began < at - 1) continue;
     owned.set(`${s.pid}|${s.start}`, { pid: s.pid, start: s.start });
     covered.add(s.seq);
   }

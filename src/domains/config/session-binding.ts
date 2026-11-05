@@ -18,6 +18,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { assertRunKindAllows, claimRunKind, readRunKind, reservedIdentityFieldsIn } from "../kernel";
 
 /** The binding file inside a run record. */
 export const SESSION_BINDING_FILE = "session-binding.json";
@@ -142,10 +143,20 @@ export function sessionBindingPath(runDir: string): string {
   return path.join(runDir, SESSION_BINDING_FILE);
 }
 
+/** Fields `guild.session_binding.v1` owns; every other R01 reserved identity field is refused. */
+export const SESSION_BINDING_V1_FIELDS = Object.freeze([
+  "schema_version", "run_id", "host_family", "surface", "detected_at", "models", "model_family", "prompt_compose", "evidence",
+] as const);
+
 export function readSessionBinding(runDir: string): SessionBinding | null {
   try {
     const parsed = JSON.parse(fs.readFileSync(sessionBindingPath(runDir), "utf8")) as SessionBinding;
-    return parsed?.schema_version === "guild.session_binding.v1" ? parsed : null;
+    if (parsed?.schema_version !== "guild.session_binding.v1") return null;
+    // R01: a v1 session binding inside a run claimed as v2 is a mixed layout.
+    const kind = readRunKind(runDir);
+    if (kind !== null && kind !== "v1") return null;
+    // R01: v1 stays host-bound; a v1 record carrying an execution identity field is refused, not trimmed.
+    return reservedIdentityFieldsIn(parsed, SESSION_BINDING_V1_FIELDS).length > 0 ? null : parsed;
   } catch {
     return null;
   }
@@ -213,6 +224,9 @@ export function bindSession(opts: BindSessionOptions): BindResult {
   };
 
   fs.mkdirSync(opts.runDir, { recursive: true });
+  // R01: a v1 session binding claims the run as v1 first; a v2 logical run
+  // that claimed first makes this throw (RunKindConflictError) before any write.
+  claimRunKind(opts.runDir, "v1");
   const created = createExclusive(sessionBindingPath(opts.runDir), binding);
   if (created) return { ok: true, binding, created: true };
 
@@ -314,6 +328,9 @@ export function bindSessionForRun(opts: BindForRunOptions): BindResult {
   }
 
   const file = sessionBindingPath(opts.runDir);
+  // R01: the seam cannot claim exclusively; refuse a run recorded as v2 before
+  // reading, resuming or writing anything.
+  assertRunKindAllows(opts.runDir, "v1", { readFile: (f) => seam.readFile?.(f) ?? null, exists: (f) => seam.exists(f) });
   if (seam.exists(file)) {
     // Already bound in the caller's fs: same host resumes, a different host is
     // refused with the continuation offer — never a silent rebind.
@@ -321,7 +338,8 @@ export function bindSessionForRun(opts: BindForRunOptions): BindResult {
     let existing: SessionBinding | null = null;
     try {
       const parsed = raw === null ? null : (JSON.parse(raw) as SessionBinding);
-      existing = parsed?.schema_version === "guild.session_binding.v1" ? parsed : null;
+      existing = parsed?.schema_version === "guild.session_binding.v1"
+        && reservedIdentityFieldsIn(parsed, SESSION_BINDING_V1_FIELDS).length === 0 ? parsed : null;
     } catch {
       existing = null;
     }
@@ -329,6 +347,16 @@ export function bindSessionForRun(opts: BindForRunOptions): BindResult {
       return { ok: false, reason: "host_changed_mid_run", existing, message: refusal(existing, detected.host_family) };
     }
     if (existing) return { ok: true, binding: existing, created: false };
+    // Present but unreadable (including a seam with no readFile), malformed, or
+    // carrying reserved identity fields: refuse and keep its bytes, as bindSession does.
+    {
+      return {
+        ok: false,
+        reason: "host_changed_mid_run",
+        existing: { schema_version: "guild.session_binding.v1", run_id: opts.runId, host_family: UNKNOWN_HOST_FAMILY, surface: "", detected_at: "", models: {}, model_family: UNKNOWN_MODEL_FAMILY, prompt_compose: promptCompose, evidence: { cheap: "unknown", mid: "unknown", powerful: "unknown" } },
+        message: `run ${opts.runId} already has a session binding that cannot be read. Guild will not overwrite it. Inspect ${file}, or continue as a NEW run on this host: guild resume --new-run`,
+      };
+    }
   }
 
   const binding: SessionBinding = {

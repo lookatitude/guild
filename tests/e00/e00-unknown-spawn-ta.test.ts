@@ -466,7 +466,7 @@ function tmuxPort(root: string, opts: { mangle?: boolean; resolve?: (root: strin
     receiptPath: (inst) => path.join(root, ".guild", "runs", LANE_RUN, "handoffs", `${inst.worker_role}-${inst.logical_task_id}.md`),
     ackArgv: ["node", path.join(root, "task-cell-ack.js")],
     run,
-    env: { PATH: `${bin}:${process.env["PATH"] ?? "/usr/bin:/bin"}`, HOME: process.env["HOME"] ?? root, SHELL: "/bin/zsh", LANG: "en_US.UTF-8" },
+    env: { PATH: `${bin}:${process.env["PATH"] ?? "/usr/bin:/bin"}`, HOME: process.env["HOME"] ?? root, SHELL: fs.existsSync("/bin/zsh") ? "/bin/zsh" : "/bin/sh", LANG: "en_US.UTF-8" },
     activate: () => ({ args: ["--plugin-dir", stubPlugin], pluginRoot: stubPlugin }),
   });
   const calls = () => (fs.existsSync(shim.callsLog) ? fs.readFileSync(shim.callsLog, "utf8").split("\n").filter(Boolean) : []);

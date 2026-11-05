@@ -5,9 +5,9 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { createRunLifecycle, createRealEnv, claimManagedAttempt, managedLaunchHash, readManagedAttempt, runManagedWorker, type ManagedLaunchSpec } from "../domains/lifecycle";
-import { StackScope } from "../domains/state";
-import { ManagedNodeProcessPort, ManagedLocalControlPort, requestManagedControl } from "./managed-node-process";
+import { createRunLifecycle, createRealEnv, claimManagedAttempt, managedLaunchHash, readManagedAttempt, runManagedWorker, type ManagedLaunchSpec } from "../../src/domains/lifecycle";
+import { StackScope } from "../../src/domains/state";
+import { ManagedNodeProcessPort, ManagedLocalControlPort, requestManagedControl } from "../../src/adapters/managed-node-process";
 function fixture(script:string,duration=3000) {
   const home=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),"guild-managed-real-"))),root=path.join(home,"project"),runtime=path.join(home,"runtime");
   fs.mkdirSync(root,{recursive:true});execFileSync("git",["init","--quiet",root]);fs.mkdirSync(path.join(root,".guild/runs"),{recursive:true});fs.writeFileSync(path.join(root,".guild/guild.yaml"),"schema_version: guild.root.v1\nkind: project\n");fs.writeFileSync(path.join(root,".guild/runs/current-run-id"),"parent-sentinel\n");
@@ -39,7 +39,7 @@ it("managed authenticated cancel refuses foreign nonce and stops only the admitt
 
 it("compiled detached supervisor survives facade release and reconciles from a fresh control connection",async()=>{
  const f=fixture("setTimeout(()=>process.stdout.write('done'),500)",3000);try{
- const api=await import("../domains/lifecycle");const adapter=await import("./managed-node-process");
+ const api=await import("../../src/domains/lifecycle");const adapter=await import("../../src/adapters/managed-node-process");
  const entry=path.join(f.home,"worker.js");const compiler=await import("../../scripts/compile");compiler.buildOne(compiler.targets().find(target=>target.id==="scripts/stack-run-worker")!,entry);
  execFileSync(f.launch.binary,["-e","require("+JSON.stringify(entry)+")"],{stdio:"pipe"});
  const worker={node_binary:f.launch.binary,node_sha256:f.launch.binary_sha256,entry,entry_sha256:"sha256:"+createHash("sha256").update(fs.readFileSync(entry)).digest("hex")};
