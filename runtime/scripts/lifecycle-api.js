@@ -60749,20 +60749,6 @@ async function runManagedWorker(input) {
     await closeControl();
   }
 }
-function recoverManagedSegmentSeal(runtimeDir, sourceRoot, identity, executionId) {
-  const claim = readManagedAttempt(runtimeDir, identity.attempt_id);
-  if (canonical2(claim.identity) !== canonical2(identity)) throw new StackError("invalid_state", "Managed source/attempt mismatch");
-  let outcome = claim.outcome;
-  if (!outcome) {
-    const file = stackContained(createGuildStorage(sourceRoot).root.durable, "runs/" + identity.run_id + "/attempts/" + stackId(identity.attempt_id) + "/outcome.json", true);
-    if (!fs87.existsSync(file)) return false;
-    if (fs87.lstatSync(file).isSymbolicLink() || fs87.statSync(file).size > 1048576) throw new StackError("invalid_state", "Managed outcome refused");
-    const value = JSON.parse(fs87.readFileSync(file, "utf8"));
-    if (value?.schema_version !== "guild.stack.managed_run_outcome.v1" || value.source_id !== identity.source_id || value.run_id !== identity.run_id || value.attempt_id !== identity.attempt_id || !["exited", "cancelled", "timed_out", "recovery_needed"].includes(value.state) || typeof value.ended_at !== "string" || !Number.isFinite(Date.parse(value.ended_at))) throw new StackError("invalid_state", "Managed outcome identity invalid");
-    outcome = value;
-  }
-  return finalizeManagedSegmentSeal(sourceRoot, identity, executionId, outcome);
-}
 function prepareManagedWorker(runtime, input) {
   const claim = readManagedAttempt(runtime, input.identity.attempt_id);
   if (canonical2(claim.identity) !== canonical2(input.identity) || claim.state !== "claimed" || managedLaunchHash(input.launch) !== input.identity.launch_hash || new StackScope(input.sourceRoot).discover().root.source_id !== input.identity.source_id) throw new StackError("invalid_intent", "Managed worker request does not own this claim");
@@ -64322,7 +64308,6 @@ __export(index_exports, {
   readWorkspaceKnowledgeConfig: () => readWorkspaceKnowledgeConfig,
   reconcileManagedAttempt: () => reconcileManagedAttempt,
   recordManagedWorkerAcceptance: () => recordManagedWorkerAcceptance,
-  recoverManagedSegmentSeal: () => recoverManagedSegmentSeal,
   renderDocumentHtml: () => renderDocumentHtml,
   renderValidatedRecordHtml: () => renderValidatedRecordHtml,
   reopenRunBinding: () => reopenRunBinding,
@@ -64900,7 +64885,6 @@ init_index();
   readWorkspaceKnowledgeConfig,
   reconcileManagedAttempt,
   recordManagedWorkerAcceptance,
-  recoverManagedSegmentSeal,
   renderDocumentHtml,
   renderValidatedRecordHtml,
   reopenRunBinding,
