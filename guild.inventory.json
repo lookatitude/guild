@@ -1224,6 +1224,11 @@
       "kind": "cli"
     },
     {
+      "id": "learn/lib/publish",
+      "source_path": "scripts/learn/lib/publish.ts",
+      "kind": "cli"
+    },
+    {
       "id": "learn/lib/resolve-calls-py",
       "source_path": "scripts/learn/lib/resolve-calls-py.ts",
       "kind": "cli"

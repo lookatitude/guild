@@ -7,6 +7,7 @@
  * AT32: the source basis moves exactly with the declared scan policy across
  * tracked/staged/unstaged/untracked/ignored/rename/delete/branch/rebase edits.
  */
+import { publishLearnArtifacts } from "./publish";
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { execFileSync, spawnSync } from "child_process";
 import * as fs from "fs";
@@ -370,7 +371,12 @@ describe("K01 review r2 regressions", () => {
     const kg = path.join(main, ".guild", "indexes", "knowledge-graph.json");
     const g = JSON.parse(fs.readFileSync(kg, "utf8"));
     g.nodes.push({ id: "concept:keep-me", type: "concept", name: "keep-me", source_refs: [], confidence: "high" });
-    fs.writeFileSync(kg, JSON.stringify(g));
+    // K03: enrichment arrives through the publisher; a direct export write is never adopted.
+    const planted = publishLearnArtifacts(
+      { indexesDir: path.dirname(kg), repoRoot: main, sourceRoot: main },
+      { channels: ["semantic_graph"], build: () => ({ "knowledge-graph.json": g }) },
+    );
+    expect(planted.status).toBe("published");
     expect(tsx("resolve-calls.ts", "--cwd", main).status).toBe(0);
     expect(fs.readFileSync(kg, "utf8")).toContain("concept:keep-me");
   }, 120000);
