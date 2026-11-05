@@ -101,7 +101,7 @@ describe("packaged Stack operation authority", () => {
         collection: "config",
       }) as any;
       expect(x.items[0].data.local.advisorRounds).toBe(2);
-      expect(x.items[0].ref.revision).toMatch(/^sha256:/);
+      expect(x.items[0].ref.revision).toStartWith("sha256:");
     } finally {
       f.close();
     }

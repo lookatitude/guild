@@ -9310,6 +9310,25 @@ function isWithin(child, parent) {
   const rel2 = path4.relative(parent, child);
   return rel2 === "" || !escapes(rel2);
 }
+function canonicalizeRealPath(p) {
+  const abs = path4.resolve(p);
+  let existing = abs;
+  const tail = [];
+  for (; ; ) {
+    const st = lstatOrNull(existing);
+    if (st !== null) {
+      try {
+        const real = fs3.realpathSync(existing);
+        return tail.length ? path4.join(real, ...tail) : real;
+      } catch {
+      }
+    }
+    tail.unshift(path4.basename(existing));
+    const parent = path4.dirname(existing);
+    if (parent === existing) return abs;
+    existing = parent;
+  }
+}
 function checkContained(root, target, options = {}) {
   const policy = options.policy ?? "resolve";
   let realRoot2;
@@ -16018,12 +16037,12 @@ function stackId(value) {
     throw new StackError("invalid_id", "Invalid source or entity identity");
   return value;
 }
-function stackContained(root, relative21, missing = false) {
-  if (!relative21 || path22.isAbsolute(relative21) || /[\\%\x00-\x1f]/.test(relative21) || relative21.split("/").some((x) => !x || x === "." || x === ".."))
+function stackContained(root, relative20, missing = false) {
+  if (!relative20 || path22.isAbsolute(relative20) || /[\\%\x00-\x1f]/.test(relative20) || relative20.split("/").some((x) => !x || x === "." || x === ".."))
     throw new StackError("path_refused", "Invalid relative record path", 403);
-  const target = path22.join(root, ...relative21.split("/"));
+  const target = path22.join(root, ...relative20.split("/"));
   let current = root;
-  for (const part of relative21.split("/")) {
+  for (const part of relative20.split("/")) {
     current = path22.join(current, part);
     try {
       const st = fs19.lstatSync(current);
@@ -16038,19 +16057,13 @@ function stackContained(root, relative21, missing = false) {
       throw error;
     }
   }
-  const ancestor = (() => {
-    let p = target;
-    while (!fs19.existsSync(p)) p = path22.dirname(p);
-    return fs19.realpathSync(p);
-  })();
-  const rel2 = path22.relative(fs19.realpathSync(root), ancestor);
-  if (rel2.startsWith("..") || path22.isAbsolute(rel2))
+  if (isRefused(checkContained(root, target)))
     throw new StackError("path_refused", "Record escaped owning root", 403);
   return target;
 }
-function stackRead(root, relative21, optional = false) {
+function stackRead(root, relative20, optional = false) {
   try {
-    const p = stackContained(root, relative21);
+    const p = stackContained(root, relative20);
     const st = fs19.statSync(p);
     if (!st.isFile() || st.size > 1024 * 1024)
       throw new StackError(
@@ -16070,6 +16083,7 @@ var init_stack_scope = __esm({
     fs19 = __toESM(require("node:fs"));
     path22 = __toESM(require("node:path"));
     import_node_crypto3 = require("node:crypto");
+    init_kernel();
     init_frontmatter();
     init_storage_roots();
     StackError = class extends Error {
@@ -33395,7 +33409,7 @@ var init_result_contracts = __esm({
         source_path: "plugin/scripts/verify-gate-pass.ts",
         // correction #2.
         purpose: "Advisory/adversarial review result (gate-pass binding).",
-        live_caller: { path: "scripts/verify-gate-pass.ts", call: "parseReviewResult" }
+        live_caller: { path: "src/domains/distribution/review-gate-pass.ts", call: "parseReviewResult" }
       },
       {
         wire_schema_version: "guild.phase_result.v1",
@@ -35374,8 +35388,18 @@ var init_review_gate_pass = __esm({
 });
 
 // src/domains/distribution/review-invocation.ts
+var INVOCATION_ADAPTER_JOIN_FIELDS;
 var init_review_invocation = __esm({
   "src/domains/distribution/review-invocation.ts"() {
+    INVOCATION_ADAPTER_JOIN_FIELDS = Object.freeze([
+      "exit",
+      "reviewer_family",
+      "author_family",
+      "independence",
+      "served_model",
+      "started_at",
+      "finished_at"
+    ]);
   }
 });
 
@@ -41121,9 +41145,9 @@ function createRunLifecycle(env) {
     materializeRunStart(plan) {
       const rootHint = env.__rootHint;
       if (!path73.isAbsolute(plan.root) || rootHint !== void 0 && plan.root !== rootHint) throw new Error("staged start belongs to another source");
-      const safeRelative = (relative21) => {
-        if (typeof relative21 !== "string" || !relative21 || path73.isAbsolute(relative21) || /[\\%\x00-\x1f]/.test(relative21) || relative21.split("/").some((v) => !v || v === "." || v === "..")) throw new Error("staged start path escaped source");
-        const abs = path73.join(plan.root, relative21);
+      const safeRelative = (relative20) => {
+        if (typeof relative20 !== "string" || !relative20 || path73.isAbsolute(relative20) || /[\\%\x00-\x1f]/.test(relative20) || relative20.split("/").some((v) => !v || v === "." || v === "..")) throw new Error("staged start path escaped source");
+        const abs = path73.join(plan.root, relative20);
         if (fsNode.existsSync(plan.root) && isRefused(checkContained(plan.root, abs, { policy: "physical" }))) throw new Error("staged start physical path refused");
         return abs;
       };
@@ -41145,7 +41169,7 @@ function createRunLifecycle(env) {
         const abs = path73.join(plan.root, file.path);
         if (env.fs.exists(abs)) throw new Error("staged target is occupied");
         if (env.fs.writeFileExclusive) {
-          if (!env.fs.writeFileExclusive(abs, file.bytes, abs === runBindingPath(plan.root, plan.run_id) ? PRIVATE_BINDING_MODE : void 0)) throw new Error("staged target is occupied");
+          if (!env.fs.writeFileExclusive(abs, file.bytes, abs === runBindingPath(plan.root, plan.run_id) ? 384 : void 0)) throw new Error("staged target is occupied");
         } else env.fs.writeFile(abs, file.bytes);
       }
       env.initializeRunBindingExclusion?.(plan.root, plan.run_id);
@@ -51203,7 +51227,7 @@ function p05Redact(v) {
     }));
   return v;
 }
-function p05ArtifactText(bytes, relative21) {
+function p05ArtifactText(bytes, relative20) {
   const structured = (value) => {
     const seen = /* @__PURE__ */ new Set();
     let nodes = 0;
@@ -51224,9 +51248,9 @@ function p05ArtifactText(bytes, relative21) {
     return value;
   };
   try {
-    if (/\.json$/i.test(relative21)) return structured(JSON.parse(bytes));
-    if (/\.jsonl$/i.test(relative21)) return bytes.split(/\r?\n/).map((line) => line.trim() ? structured(JSON.parse(line)) : line).join("\n");
-    if (/\.ya?ml$/i.test(relative21)) return structured(yaml5(bytes));
+    if (/\.json$/i.test(relative20)) return structured(JSON.parse(bytes));
+    if (/\.jsonl$/i.test(relative20)) return bytes.split(/\r?\n/).map((line) => line.trim() ? structured(JSON.parse(line)) : line).join("\n");
+    if (/\.ya?ml$/i.test(relative20)) return structured(yaml5(bytes));
     try {
       return structured(JSON.parse(bytes));
     } catch {
@@ -51252,12 +51276,13 @@ var init_stack_p05 = __esm({
     import_node_crypto4 = require("node:crypto");
     init_state();
     init_security();
+    init_kernel();
     init_initiative();
     init_initiative_workitems();
     init_run_lifecycle();
     init_initiative_evidence();
-    P05_READS = /* @__PURE__ */ new Set(["initiative.list", "initiative.inspect", "initiative.close_check", "decision.list", "decision.inspect", "run.list", "run.inspect", "run.trace", "run.artifacts"]);
-    P05_WRITES = /* @__PURE__ */ new Set(["initiative.create", "initiative.revise", "initiative.link", "initiative.unlink", "initiative.pause", "initiative.close", "initiative.archive", "initiative.restore", "decision.propose", "decision.approve", "decision.reject", "decision.supersede"]);
+    P05_READS = sealSet(["initiative.list", "initiative.inspect", "initiative.close_check", "decision.list", "decision.inspect", "run.list", "run.inspect", "run.trace", "run.artifacts"], "P05_READS");
+    P05_WRITES = sealSet(["initiative.create", "initiative.revise", "initiative.link", "initiative.unlink", "initiative.pause", "initiative.close", "initiative.archive", "initiative.restore", "decision.propose", "decision.approve", "decision.reject", "decision.supersede"], "P05_WRITES");
     EMPTY2 = /* @__PURE__ */ stackHash("");
     json = (v) => JSON.stringify(v, null, 2) + "\n";
     issue2 = (code, message) => ({ code, message, evidence: [] });
@@ -51549,7 +51574,7 @@ var init_stack_p05 = __esm({
         const lines = bytes.split(/\r?\n/).filter((l) => l.trim() !== "");
         if (lines[0] !== "# Verify \u2014 " + id || lines[1] !== "Overall status: pass" || bytes.includes("\u2717") || /^Overall status: (?!pass$)/m.test(bytes))
           return false;
-        return [1, 2, 3, 4, 5, 6].every((n) => lines.some((l) => new RegExp("^" + n + "\\. ").test(l) && (/\bpass\b/.test(l) || l.includes("\u2713"))));
+        return [1, 2, 3, 4, 5, 6].every((n) => lines.some((l) => l.startsWith(n + ". ") && (/\bpass\b/.test(l) || l.includes("\u2713"))));
       }
       dependencies(works) {
         const ids = new Set(works.map((w) => w.id));
@@ -52058,7 +52083,7 @@ function runtimeRoot(root) {
   fs66.mkdirSync(root, { recursive: true, mode: 448 });
   if (fs66.lstatSync(root).isSymbolicLink()) throw new StackError("unsafe_runtime", "Linked managed runtime refused");
   fs66.chmodSync(root, 448);
-  return fs66.realpathSync(root);
+  return canonicalizeRealPath(root);
 }
 function claimPath(root, id) {
   return stackContained(runtimeRoot(root), stackId(id) + ".json", true);
@@ -52181,6 +52206,7 @@ var init_managed_run = __esm({
     path79 = __toESM(require("node:path"));
     import_node_crypto5 = require("node:crypto");
     init_state();
+    init_kernel();
     init_run_lifecycle();
     init_run_binding();
   }
@@ -52235,6 +52261,7 @@ var init_stack_operations = __esm({
     import_node_crypto6 = require("node:crypto");
     init_state();
     init_config2();
+    init_kernel();
     init_security();
     init_workflow_graph_overlay();
     init_stack_contracts_generated();
@@ -52308,18 +52335,18 @@ var init_stack_operations = __esm({
           profile: s.kind === "workspace" ? "hybrid" : "standalone"
         });
       }
-      runtime(relative21, source) {
+      runtime(relative20, source) {
         const storage = this.storage(source);
         fs67.mkdirSync(storage.root.state, { recursive: true });
-        const base = fs67.realpathSync(storage.root.state);
+        const base = canonicalizeRealPath(storage.root.state);
         return stackContained(
           base,
-          "roots/" + storage.rootId + "/stack/" + relative21,
+          "roots/" + storage.rootId + "/stack/" + relative20,
           true
         );
       }
-      saveRuntime(relative21, value, source) {
-        const target = this.runtime(relative21, source);
+      saveRuntime(relative20, value, source) {
+        const target = this.runtime(relative20, source);
         fs67.mkdirSync(path80.dirname(target), { recursive: true, mode: 448 });
         const temp = target + ".tmp-" + (0, import_node_crypto6.randomUUID)();
         const fd = fs67.openSync(temp, "wx", 384);
@@ -52341,8 +52368,8 @@ var init_stack_operations = __esm({
           fs67.rmSync(temp, { force: true });
         }
       }
-      loadRuntime(relative21, source) {
-        const p = this.runtime(relative21, source);
+      loadRuntime(relative20, source) {
+        const p = this.runtime(relative20, source);
         try {
           return JSON.parse(fs67.readFileSync(p, "utf8"));
         } catch (e) {
@@ -52420,7 +52447,7 @@ var init_stack_operations = __esm({
         const manifests = [
           ".claude-plugin/plugin.json",
           ".codex-plugin/plugin.json"
-        ].map((relative21) => stackRead(this.packageRoot, relative21, true)).filter((x) => x !== null).map((x) => JSON.parse(x));
+        ].map((relative20) => stackRead(this.packageRoot, relative20, true)).filter((x) => x !== null).map((x) => JSON.parse(x));
         if (!manifests.length || manifests.some(
           (x) => x.name !== manifests[0].name || x.version !== manifests[0].version
         ))
@@ -52589,7 +52616,7 @@ var init_stack_operations = __esm({
           );
         const out = [];
         let seen = 0;
-        const walk = (relative21, depth) => {
+        const walk = (relative20, depth) => {
           if (depth > 8 || seen > 1e4)
             throw new StackError(
               "collection_limit",
@@ -52598,7 +52625,7 @@ var init_stack_operations = __esm({
             );
           let names;
           try {
-            const p = stackContained(source.realpath, relative21);
+            const p = stackContained(source.realpath, relative20);
             names = fs67.readdirSync(p).sort();
           } catch (e) {
             if (e.code === "ENOENT") return;
@@ -52606,7 +52633,7 @@ var init_stack_operations = __esm({
           }
           for (const name of names) {
             seen++;
-            const rel2 = relative21 + "/" + name;
+            const rel2 = relative20 + "/" + name;
             const p = stackContained(source.realpath, rel2);
             const st = fs67.statSync(p);
             if (st.isDirectory()) {
@@ -52821,11 +52848,11 @@ var init_stack_operations = __esm({
           fs67.rmSync(p, { recursive: true, force: true });
         }
       }
-      evidence(source, relative21) {
-        const bytes = stackRead(source.realpath, relative21);
+      evidence(source, relative20) {
+        const bytes = stackRead(source.realpath, relative20);
         return {
           source_id: source.source_id,
-          path: relative21.slice(7),
+          path: relative20.slice(7),
           sha256: stackHash(bytes),
           schema_version: "guild.policy.v1",
           observed_at: this.now().toISOString(),
@@ -53143,8 +53170,8 @@ var init_stack_operations = __esm({
               "A rejection or return requires rationale",
               422
             );
-          const relative21 = this.artifactPath(input.operation_id, "approval");
-          const existing = stackRead(source.realpath, relative21, true);
+          const relative20 = this.artifactPath(input.operation_id, "approval");
+          const existing = stackRead(source.realpath, relative20, true);
           const approval = {
             schema_version: "guild.stack.approval-record.v1",
             approval_id: input.operation_id,
@@ -53170,7 +53197,7 @@ var init_stack_operations = __esm({
           }
           this.screenedWrite(
             source,
-            relative21,
+            relative20,
             JSON.stringify(approval, null, 2) + "\n",
             input.operation_id,
             true
@@ -53569,15 +53596,15 @@ var init_stack_operations = __esm({
             }
           const id = "op-" + (0, import_node_crypto6.randomUUID)(), allocated = (request.operation === "initiative.create" ? "initiative-" : request.operation === "decision.propose" ? "decision-" : "event-") + (0, import_node_crypto6.randomUUID)(), at = this.now().toISOString();
           const domain = this.domain(source), snapshot = this.snapshotP05(source, domain), plan = domain.plan(request.operation, request.arguments, request.targets, id, allocated, at);
-          const addEvidence = (relative21, expectedHash) => {
-            stackContained(source.realpath, relative21);
-            const bytes = domain.read(relative21, false), sha2567 = stackHash(bytes);
+          const addEvidence = (relative20, expectedHash) => {
+            stackContained(source.realpath, relative20);
+            const bytes = domain.read(relative20, false), sha2567 = stackHash(bytes);
             if (expectedHash !== void 0 && expectedHash !== sha2567)
               throw new StackError("invalid_evidence", "Evidence changed before preview", 409);
-            const existing = snapshot.find((s) => s.path === relative21);
+            const existing = snapshot.find((s) => s.path === relative20);
             if (existing && existing.sha256 !== sha2567)
               throw new StackError("stale_preview", "Evidence changed while planning", 409);
-            if (!existing) snapshot.push({ path: relative21, bytes, sha256: sha2567 });
+            if (!existing) snapshot.push({ path: relative20, bytes, sha256: sha2567 });
           };
           for (const w of plan.writes) {
             if (!w.after_bytes || !/\.(json|yaml)$/.test(w.path)) continue;
@@ -55270,6 +55297,7 @@ var init_managed_run_schemas = __esm({
 });
 
 // src/domains/lifecycle/index.ts
+var stackContractBundle, stackP05Schemas, stackManagedSchemas;
 var init_lifecycle = __esm({
   "src/domains/lifecycle/index.ts"() {
     init_neutral_runtime_contracts();
@@ -55323,10 +55351,14 @@ var init_lifecycle = __esm({
     init_trace_v2();
     init_stack_operations();
     init_stack_contracts_generated();
-    init_initiative_evidence();
     init_stack_p05_schemas();
-    init_managed_run();
     init_managed_run_schemas();
+    init_kernel();
+    init_initiative_evidence();
+    init_managed_run();
+    stackContractBundle = deepFreeze(stack_contracts_generated_default);
+    stackP05Schemas = deepFreeze(stack_p05_schemas_default);
+    stackManagedSchemas = deepFreeze(managed_run_schemas_default);
   }
 });
 
@@ -59208,50 +59240,50 @@ var require_fast_uri = __commonJS({
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
-    function resolveComponent(base, relative21, options, skipNormalization) {
+    function resolveComponent(base, relative20, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
         base = parse3(serialize(base, options), options);
-        relative21 = parse3(serialize(relative21, options), options);
+        relative20 = parse3(serialize(relative20, options), options);
       }
       options = options || {};
-      if (!options.tolerant && relative21.scheme) {
-        target.scheme = relative21.scheme;
-        target.userinfo = relative21.userinfo;
-        target.host = relative21.host;
-        target.port = relative21.port;
-        target.path = removeDotSegments(relative21.path || "");
-        target.query = relative21.query;
+      if (!options.tolerant && relative20.scheme) {
+        target.scheme = relative20.scheme;
+        target.userinfo = relative20.userinfo;
+        target.host = relative20.host;
+        target.port = relative20.port;
+        target.path = removeDotSegments(relative20.path || "");
+        target.query = relative20.query;
       } else {
-        if (relative21.userinfo !== void 0 || relative21.host !== void 0 || relative21.port !== void 0) {
-          target.userinfo = relative21.userinfo;
-          target.host = relative21.host;
-          target.port = relative21.port;
-          target.path = removeDotSegments(relative21.path || "");
-          target.query = relative21.query;
+        if (relative20.userinfo !== void 0 || relative20.host !== void 0 || relative20.port !== void 0) {
+          target.userinfo = relative20.userinfo;
+          target.host = relative20.host;
+          target.port = relative20.port;
+          target.path = removeDotSegments(relative20.path || "");
+          target.query = relative20.query;
         } else {
-          if (!relative21.path) {
+          if (!relative20.path) {
             target.path = base.path;
-            if (relative21.query !== void 0) {
-              target.query = relative21.query;
+            if (relative20.query !== void 0) {
+              target.query = relative20.query;
             } else {
               target.query = base.query;
             }
           } else {
-            if (relative21.path[0] === "/") {
-              target.path = removeDotSegments(relative21.path);
+            if (relative20.path[0] === "/") {
+              target.path = removeDotSegments(relative20.path);
             } else {
               const baseHasAuthority = base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0;
               if (baseHasAuthority && !base.path) {
-                target.path = "/" + relative21.path;
+                target.path = "/" + relative20.path;
               } else if (!base.path) {
-                target.path = relative21.path;
+                target.path = relative20.path;
               } else {
-                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative21.path;
+                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative20.path;
               }
               target.path = base.scheme === void 0 && !baseHasAuthority && target.path[0] !== "/" ? removeDotSegmentsRelative(target.path) : removeDotSegments(target.path);
             }
-            target.query = relative21.query;
+            target.query = relative20.query;
           }
           target.userinfo = base.userinfo;
           target.host = base.host;
@@ -59259,7 +59291,7 @@ var require_fast_uri = __commonJS({
         }
         target.scheme = base.scheme;
       }
-      target.fragment = relative21.fragment;
+      target.fragment = relative20.fragment;
       return target;
     }
     function equal(uriA, uriB, options) {
@@ -65367,8 +65399,8 @@ var MANAGED_CLAUDE_PROFILE = Object.freeze({
   policy_sha256: "sha256:1ae6dd4080ff39044ddaf59b2b8674e306d657f867e63fa16ba57b8a695e92ef",
   profile: "single_response_no_tools"
 });
-function buildManagedClaudeLaunch(input) {
-  const p = MANAGED_CLAUDE_PROFILE;
+function buildManagedClaudeLaunch(input, profile = MANAGED_CLAUDE_PROFILE) {
+  const p = profile;
   if (input.host_id !== p.host_id || input.model !== p.model || !path81.isAbsolute(input.sourceRoot) || fs68.realpathSync(input.sourceRoot) !== input.sourceRoot || typeof input.brief !== "string" || Buffer.byteLength(input.brief) > 4096 || !Number.isFinite(input.max_usd) || input.max_usd <= 0 || input.qualification === "probe" && input.max_usd > 0.01 || !Number.isSafeInteger(input.max_duration_ms) || input.max_duration_ms < 1 || input.qualification === "probe" && input.max_duration_ms > 3e4 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.native_session_id) || !["run.start", "run.rerun", "run.resume"].includes(input.operation)) throw new Error("Managed native profile refused");
   if (fs68.realpathSync(p.binary) !== p.binary || "sha256:" + (0, import_node_crypto8.createHash)("sha256").update(fs68.readFileSync(p.binary)).digest("hex") !== p.binary_sha256) throw new Error("Managed native binary pin changed");
   const env = {};
@@ -65384,7 +65416,7 @@ function createManagedClaudeRuntime(input) {
   const authorization = JSON.parse(fs68.readFileSync(file, "utf8"));
   const candidate = authorization.schema_version === "guild.stack.managed_candidate_authorization.v1";
   if (!candidate && authorization.schema_version !== "guild.stack.managed_host_qualification.v1") throw new Error("Managed qualification schema invalid");
-  const p = MANAGED_CLAUDE_PROFILE, facade = stackContained(packageRoot, "runtime/scripts/stack-operations.js"), entry = stackContained(packageRoot, "runtime/scripts/stack-run-worker.js"), operator = stackContained(packageRoot, "runtime/scripts/stack-qualify-host.js");
+  const p = input.profile ?? MANAGED_CLAUDE_PROFILE, facade = stackContained(packageRoot, "runtime/scripts/stack-operations.js"), entry = stackContained(packageRoot, "runtime/scripts/stack-run-worker.js"), operator = stackContained(packageRoot, "runtime/scripts/stack-qualify-host.js");
   const node = fs68.realpathSync(process.execPath);
   const worker = { node_binary: node, node_sha256: stackHash(fs68.readFileSync(node)), entry, entry_sha256: stackHash(fs68.readFileSync(entry)) };
   const authorize = () => {
@@ -65398,11 +65430,11 @@ function createManagedClaudeRuntime(input) {
     const storage = createGuildStorage(sourceRoot), privateBase = fs68.realpathSync(storage.root.state), stackRelative = "roots/" + storage.rootId + "/stack/";
     const same = (left, right) => stackCanonical(left) === stackCanonical(right);
     const hash = (value) => typeof value === "string" && /^sha256:[a-f0-9]{64}$/.test(value);
-    const read = (root, relative21, expected) => {
-      const file2 = stackContained(root, relative21), stat = fs68.statSync(file2);
+    const read = (root, relative20, expected) => {
+      const file2 = stackContained(root, relative20), stat = fs68.statSync(file2);
       if (!stat.isFile() || stat.size > 1048576 || expected !== void 0 && (!hash(expected) || stackHash(fs68.readFileSync(file2)) !== expected)) throw new Error("Qualified evidence bytes changed or are unbounded");
       const bytes = fs68.readFileSync(file2, "utf8");
-      return /\.ya?ml$/.test(relative21) ? parseYaml(bytes) : JSON.parse(bytes);
+      return /\.ya?ml$/.test(relative20) ? parseYaml(bytes) : JSON.parse(bytes);
     };
     for (const proof of proofs) {
       if (!["run.start", "run.rerun"].includes(proof.operation) || !/^run-[0-9]{8}-[0-9]{6}-[a-z0-9][a-z0-9-]*$/.test(proof.run_id) || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(proof.attempt_id) || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(proof.operation_id) || !hash(proof.preview_hash)) throw new Error("Qualified operation identity invalid");
@@ -65431,7 +65463,7 @@ function createManagedClaudeRuntime(input) {
         }
       }
       if (approval.schema_version !== "guild.stack.approval-record.v1" || approval.decision !== "approved" || approval.approval_id !== proof.operation_id || approval.operation_id !== proof.operation_id || approval.source_id !== authorization.source_id || approval.preview_hash !== proof.preview_hash || approval.session_id !== preview.session_id || receipt2.schema_version !== "guild.stack.operation-receipt.v1" || receipt2.operation !== proof.operation || receipt2.operation_id !== proof.operation_id || receipt2.source_id !== authorization.source_id || receipt2.preview_hash !== proof.preview_hash || receipt2.idempotency_key !== journal.apply_key || receipt2.state !== "applied" || !same(receipt2.before, preview.targets) || !receipt2.after?.some((ref) => ref.source_id === authorization.source_id && ref.kind === "run" && ref.id === proof.run_id) || !receipt2.touched?.some((ref) => ref.source_id === authorization.source_id && ref.path === "runs/" + proof.run_id + "/attempts/" + proof.attempt_id + "/intent.json" && ref.sha256 === proof.intent_sha256)) throw new Error("Qualified C5/C6 governed dispatch differs");
-      const expected = buildManagedClaudeLaunch({ sourceRoot, host_id: p.host_id, model: p.model, brief: preview.arguments.brief, max_usd: preview.arguments.max_usd, max_duration_ms: preview.arguments.max_duration_ms, native_session_id: launch.native_session_id, operation: proof.operation, qualification: "probe" });
+      const expected = buildManagedClaudeLaunch({ sourceRoot, host_id: p.host_id, model: p.model, brief: preview.arguments.brief, max_usd: preview.arguments.max_usd, max_duration_ms: preview.arguments.max_duration_ms, native_session_id: launch.native_session_id, operation: proof.operation, qualification: "probe" }, p);
       if (!same(spec.args, expected.args) || spec.binary !== p.binary || spec.binary_sha256 !== p.binary_sha256 || spec.operation !== proof.operation || spec.profile !== p.profile || spec.classification !== "qualification_probe" || spec.budget_mode !== p.budget_mode || spec.policy_sha256 !== p.policy_sha256 || spec.strict_usd_qualified !== false || spec.native_threshold_qualified !== true || spec.native_cost_baseline_usd !== 0 || spec.cwd !== sourceRoot || launch.classification !== "qualification_probe" || launch.profile !== p.profile || launch.host_binary_sha256 !== p.binary_sha256 || launch.policy_sha256 !== p.policy_sha256 || launch.budget_mode !== p.budget_mode || launch.cost_basis !== p.cost_basis || launch.arguments.host_id !== p.host_id || launch.arguments.model !== p.model || preview.budget.max_usd !== spec.max_usd || preview.budget.max_duration_ms !== spec.max_duration_ms) throw new Error("Qualified native profile/binary/policy/budget differs");
       if (intent.schema_version !== "guild.stack.managed_run_intent.v1" || intent.source_id !== authorization.source_id || intent.run_id !== proof.run_id || intent.attempt_id !== proof.attempt_id || intent.operation_id !== proof.operation_id || intent.nonce_hash !== claim.identity.nonce_hash || intent.launch_hash !== launch.launch_hash || intent.native_session_id !== launch.native_session_id || intent.host_id !== p.host_id || intent.model !== p.model || intent.binary_sha256 !== p.binary_sha256 || intent.policy_sha256 !== p.policy_sha256 || intent.classification !== "qualification_probe" || intent.max_duration_ms !== spec.max_duration_ms || intent.budget?.mode !== p.budget_mode || intent.budget?.max_usd !== spec.max_usd || intent.budget?.cost_basis !== p.cost_basis || intent.budget?.in_flight_overshoot_possible !== true || intent.budget?.strict_actual_billing_ceiling !== false) throw new Error("Qualified immutable intent differs from reviewed launch");
       if (admission.schema_version !== "guild.stack.managed_native_admission.v1" || admission.source_id !== authorization.source_id || admission.run_id !== proof.run_id || admission.operation_id !== proof.operation_id || admission.operation !== proof.operation || admission.attempt_id !== proof.attempt_id || admission.launch_hash !== launch.launch_hash || admission.native_session_id !== launch.native_session_id || admission.profile !== p.profile || admission.binary_sha256 !== p.binary_sha256 || admission.policy_sha256 !== p.policy_sha256 || admission.model !== p.model || admission.mode !== p.budget_mode || admission.cost_basis !== p.cost_basis || typeof admission.authorization_bytes !== "string" || Buffer.byteLength(admission.authorization_bytes) > 16384 || stackHash(admission.authorization_bytes) !== admission.authorization_sha256) throw new Error("Qualified private native admission differs");
@@ -65463,7 +65495,7 @@ function createManagedClaudeRuntime(input) {
       authorize();
       validateObserved();
       if (source.realpath !== sourceRoot || !authorization.allowed_operations.includes(operation) || !native_session_id) throw new Error("Source-qualified native session required");
-      return { launch: buildManagedClaudeLaunch({ sourceRoot, host_id: args.host_id, model: args.model, brief: args.brief, max_usd: args.max_usd, max_duration_ms: args.max_duration_ms, native_session_id, operation, qualification: candidate ? "probe" : "qualified" }), worker };
+      return { launch: buildManagedClaudeLaunch({ sourceRoot, host_id: args.host_id, model: args.model, brief: args.brief, max_usd: args.max_usd, max_duration_ms: args.max_duration_ms, native_session_id, operation, qualification: candidate ? "probe" : "qualified" }, p), worker };
     },
     workerStatus: inspectManagedWorker,
     checkAdmission(runtime) {
@@ -65495,8 +65527,8 @@ function createManagedClaudeRuntime(input) {
 function loadManagedClaudeRuntime(sourceRoot, packageRoot, validate) {
   const storage = createGuildStorage(sourceRoot), base = storage.root.state;
   if (!fs68.existsSync(base)) return void 0;
-  const relative21 = "roots/" + storage.rootId + "/stack/managed/qualification.json";
-  const file = stackContained(fs68.realpathSync(base), relative21, true);
+  const relative20 = "roots/" + storage.rootId + "/stack/managed/qualification.json";
+  const file = stackContained(fs68.realpathSync(base), relative20, true);
   if (!fs68.existsSync(file)) return void 0;
   const proof = JSON.parse(fs68.readFileSync(file, "utf8"));
   if (proof.schema_version !== "guild.stack.managed_host_qualification.v1") throw new Error("Normal facade requires observed host qualification");
@@ -65610,9 +65642,9 @@ function stackValidator() {
     allowUnionTypes: true
   });
   (0, import_ajv_formats.default)(ajv);
-  for (const schema of Object.values(stack_contracts_generated_default.schemas)) ajv.addSchema(schema);
-  ajv.addSchema(stack_p05_schemas_default);
-  ajv.addSchema(managed_run_schemas_default);
+  for (const schema of Object.values(stackContractBundle.schemas)) ajv.addSchema(schema);
+  ajv.addSchema(stackP05Schemas);
+  ajv.addSchema(stackManagedSchemas);
   return (schema, value) => {
     const check = ajv.getSchema(schema) ?? ajv.compile({ $ref: schema });
     if (!check(value))
