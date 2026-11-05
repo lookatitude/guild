@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
+import { checkContained, isRefused } from "../kernel";
 import { parseYaml } from "./frontmatter";
 import { guildRootId } from "./storage-roots";
 
@@ -52,13 +53,8 @@ export function stackContained(
       throw error;
     }
   }
-  const ancestor = (() => {
-    let p = target;
-    while (!fs.existsSync(p)) p = path.dirname(p);
-    return fs.realpathSync(p);
-  })();
-  const rel = path.relative(fs.realpathSync(root), ancestor);
-  if (rel.startsWith("..") || path.isAbsolute(rel))
+  // The shared primitive proves the deepest existing ancestor resolves inside the root.
+  if (isRefused(checkContained(root, target)))
     throw new StackError("path_refused", "Record escaped owning root", 403);
   return target;
 }

@@ -564,6 +564,8 @@ function consumerExports(claimed: ReadonlySet<string>): Entry[] {
     if (!spec.startsWith(".")) return null;
     const rel = path.relative(ROOT, path.resolve(path.dirname(from), spec)).replace(/\\/g, "/")
       .replace(/\.(ts|js)$/, "").replace(/\/index$/, "");
+    // The adapter tree's index is a public surface too (domainSurfaces includes it).
+    if (rel === "src/adapters") return "adapters";
     const m = /^src\/domains\/([^/]+)$/.exec(rel);
     return m ? m[1] : null;
   };
@@ -578,7 +580,7 @@ function consumerExports(claimed: ReadonlySet<string>): Entry[] {
         if ((ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) &&
             n.moduleSpecifier && ts.isStringLiteral(n.moduleSpecifier)) {
           const d = domainOf(n.moduleSpecifier.text, abs);
-          if (d && !rel.startsWith(`src/domains/${d}/`)) {
+          if (d && !rel.startsWith(`${domainTree(d)}/`)) {
             const clause = ts.isImportDeclaration(n) ? n.importClause?.namedBindings : n.exportClause;
             if (clause && (ts.isNamedImports(clause) || ts.isNamedExports(clause))) {
               for (const el of clause.elements) note(d, (el.propertyName ?? el.name).text, rel);

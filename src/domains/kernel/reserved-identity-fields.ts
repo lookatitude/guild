@@ -44,8 +44,8 @@ export function reservedIdentityFieldsIn(record: unknown, legacyFields: readonly
 
 export const RUN_KIND_FILE = "run-kind.json";
 /** Mirrors lifecycle LOGICAL_RUN_MANIFEST_RELPATH (kernel cannot import lifecycle). */
-export const RUN_KIND_V2_MANIFEST_RELPATH = path.join("lineage", "logical-run.json");
-export type RunKind = "v1" | "v2";
+const RUN_KIND_V2_MANIFEST_RELPATH = path.join("lineage", "logical-run.json");
+type RunKind = "v1" | "v2";
 
 export class RunKindConflictError extends Error {
   constructor(readonly runDir: string, readonly claimed: RunKind, readonly existing: RunKind | "unreadable" | "uncontained") {

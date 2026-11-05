@@ -5,7 +5,7 @@
  *
  * It records ONLY digests, booleans and allowlisted public specialist metadata to
  * <root>/.claude-fixture.json (root = its cwd): never argv, env values or binding
- * material. Mode comes from <root>/.claude-fixture-mode: "exit" returns at once,
+ * material. Mode comes from <root>/.claude-fixture-mode: "exit" returns after 1s,
  * otherwise it idles as the pane's foreground process until torn down.
  */
 import { createHash } from "node:crypto";
@@ -43,4 +43,6 @@ fs.writeFileSync(path.join(root, ".claude-fixture.json"), JSON.stringify({
   binding_ref_keys_present: Object.keys(process.env).filter((k) => /BINDING_REF$/.test(k)).length,
 }) + "\n");
 const mode = (() => { try { return fs.readFileSync(path.join(root, ".claude-fixture-mode"), "utf8").trim(); } catch { return "normal"; } })();
+// "exit" lingers 1s so the spawn can capture the pane identity first (a fast host races it on Linux).
 if (mode !== "exit") setInterval(() => {}, 1 << 30);
+else setTimeout(() => {}, 1000);

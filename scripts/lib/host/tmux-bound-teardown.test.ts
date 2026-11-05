@@ -382,7 +382,7 @@ describe("TmuxTaskCellWorkerPort spawn guards (fake tmux)", () => {
     const f = fixture({ spawnOut: "%9_9001_77_1793000000\n" });
     const out = f.spawn();
     expect(out.ok).toBe(false);
-    expect(out.reason).toMatch(/^spawn_identity_unavailable: a created pane may remain live and untracked/);
+    expect(out.reason).toStartWith("spawn_identity_unavailable: a created pane may remain live and untracked");
     expect(f.calls.some((c) => c.args[1] === "if-shell" || c.args[1] === "kill-pane")).toBe(false);
     expect(f.launches[0]).toMatchObject({ state: "identity_unknown", live_pane_may_remain: true, observed_spawn_output: "%9_9001_77_1793000000" });
     expect(f.port.paneIdentity("T1.a1.i-1")).toBeNull();
@@ -399,7 +399,7 @@ describe("TmuxTaskCellWorkerPort spawn guards (fake tmux)", () => {
       const f = fixture({ spawnStatus: status });
       const out = f.spawn();
       expect(out).toMatchObject({ ok: false, spawn_effect: "unknown" });
-      expect(out.reason).toMatch(/^spawn_outcome_unknown: create /);
+      expect(out.reason).toStartWith("spawn_outcome_unknown: create ");
       expect(f.launches[0]).toMatchObject({ state: "identity_unknown", live_pane_may_remain: true });
       expect(f.calls.some((c) => c.args[1] === "if-shell" || c.args[1] === "kill-pane")).toBe(false);
     }

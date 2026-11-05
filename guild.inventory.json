@@ -1254,6 +1254,11 @@
       "kind": "cli"
     },
     {
+      "id": "learn/lib/tsconfig-chain",
+      "source_path": "scripts/learn/lib/tsconfig-chain.ts",
+      "kind": "cli"
+    },
+    {
       "id": "learn/lib/walk",
       "source_path": "scripts/learn/lib/walk.ts",
       "kind": "cli"
@@ -2061,6 +2066,11 @@
     {
       "id": "lib/skill-source-transform",
       "source_path": "scripts/lib/skill-source-transform.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/stack-contract-reader-validator",
+      "source_path": "scripts/lib/stack-contract-reader-validator.ts",
       "kind": "lib"
     },
     {

@@ -24,13 +24,14 @@ import { analyzeSource } from "./lib/extract";
 import { buildImportMap } from "./lib/import-map";
 import { generateStarterIgnoreFile } from "./lib/ignore";
 import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
+import { readContainedFile } from "../../src/domains/knowledge/source-basis";
 
 function main(): void {
   const argv = process.argv.slice(2);
   const cwd = parseCwd(argv);
   ensureStorageLayout(cwd, { detectOnly: true });
   const gp = guildPaths(cwd);
-  const repoRoot = gp.repoRoot;
+  const repoRoot = gp.sourceRoot;
 
   // Stage 0.5: seed a starter .guildignore if absent (user-tunable scope).
   const ignorePath = path.join(repoRoot, ".guildignore");
@@ -43,7 +44,8 @@ function main(): void {
 
   let pkgJson: Record<string, unknown> | null = null;
   try {
-    pkgJson = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"));
+    const pkg = readContainedFile(repoRoot, "package.json"); // K01: bound resolver input
+    if (pkg) pkgJson = JSON.parse(pkg.toString("utf8"));
   } catch { /* none */ }
 
   const languages = new Set<string>();
@@ -110,10 +112,10 @@ function main(): void {
 
   process.stderr.write(
     `[scan] ${fileEntries.length} files · ${languages.size} languages · ` +
-    `${importMap.length} import edges → ${path.relative(repoRoot, gp.codebaseMap)}\n`,
+    `${importMap.length} import edges → ${path.relative(gp.repoRoot, gp.codebaseMap)}\n`,
   );
   if (hasFlag(argv, "print")) process.stdout.write(JSON.stringify(codebaseMap, null, 2) + "\n");
-  else process.stdout.write(path.relative(repoRoot, gp.codebaseMap) + "\n");
+  else process.stdout.write(path.relative(gp.repoRoot, gp.codebaseMap) + "\n");
 }
 
 main();
