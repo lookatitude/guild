@@ -71,15 +71,23 @@ export interface BindingFs {
   /** Atomically replace one physically-contained file. Production always supplies this. */
   writeFileAtomicContained?(root: string, absPath: string, contents: string): void;
   /** Create a new file without replacing an existing inode. */
-  writeFileExclusive?(absPath: string, contents: string): boolean;
+  writeFileExclusive?(absPath: string, contents: string, mode?: number): boolean;
   readFile(absPath: string): string | null;
   exists(absPath: string): boolean;
 }
 
+// binding.json carries the run nonce: the real writers create and update it
+// owner-only (0600, CD21). chmod after the write also tightens a record created
+// earlier with a wider mode the first time this process updates it.
+const PRIVATE_BINDING_MODE = 0o600;
+
 function realBindingFs(): BindingFs {
   return {
     mkdirp: (p) => fsReal.mkdirSync(p, { recursive: true }),
-    writeFile: (p, c) => fsReal.writeFileSync(p, c, "utf8"),
+    writeFile: (p, c) => {
+      fsReal.writeFileSync(p, c, { encoding: "utf8", mode: PRIVATE_BINDING_MODE });
+      fsReal.chmodSync(p, PRIVATE_BINDING_MODE);
+    },
     writeFileAtomicContained: (root, p, c) => {
       const result = writeContainedFile(root, p, Buffer.from(c, "utf8"), { policy: "physical" });
       if (!result.written) {
@@ -89,7 +97,8 @@ function realBindingFs(): BindingFs {
     writeFileExclusive: (p, c) => {
       fsReal.mkdirSync(path.dirname(p), { recursive: true });
       try {
-        fsReal.writeFileSync(p, c, { encoding: "utf8", flag: "wx" });
+        fsReal.writeFileSync(p, c, { encoding: "utf8", flag: "wx", mode: PRIVATE_BINDING_MODE });
+        fsReal.chmodSync(p, PRIVATE_BINDING_MODE);
         return true;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
@@ -225,7 +234,8 @@ export interface RunBindingLocator {
  * would orphan in-flight holders). Resume RESTORES the existing record via
  * loadRunBinding; it never re-mints.
  */
-export function mintRunBinding(opts: RunBindingLocator): RunBindingRecord {
+export function mintRunBinding(opts: RunBindingLocator & { readonly reserved_binding_ref?: string }): RunBindingRecord {
+  if (opts.reserved_binding_ref !== undefined && !/^rb-[a-f0-9]{32}$/.test(opts.reserved_binding_ref)) throw new Error("run-binding: invalid private reserved binding");
   const fs = opts.fs ?? realBindingFs();
   const p = runBindingPath(opts.root, opts.run_id);
   if (fs.exists(p)) {
@@ -237,7 +247,7 @@ export function mintRunBinding(opts: RunBindingLocator): RunBindingRecord {
   const record: RunBindingRecord = {
     schema_version: "guild.run_binding.v1",
     run_id: opts.run_id,
-    binding_ref: `rb-${crypto.randomBytes(16).toString("hex")}`,
+    binding_ref: opts.reserved_binding_ref ?? `rb-${crypto.randomBytes(16).toString("hex")}`,
     state: "open",
   };
   fs.mkdirp(path.dirname(p));
@@ -246,7 +256,7 @@ export function mintRunBinding(opts: RunBindingLocator): RunBindingRecord {
   // exists check above improves the normal diagnostic but is not the race
   // control: only this exclusive create makes one same-ID starter the owner.
   const created = fs.writeFileExclusive
-    ? fs.writeFileExclusive(p, contents)
+    ? fs.writeFileExclusive(p, contents, PRIVATE_BINDING_MODE)
     : !fs.exists(p) && (fs.writeFile(p, contents), true);
   if (!created) {
     throw new Error(

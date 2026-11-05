@@ -96,6 +96,9 @@ const AGENT_TEAM_IDS = ["task-created", "task-completed", "teammate-idle"];
  * bundle or a domain function, never through `npx tsx`.
  */
 const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
+  { id: "stack-operations", entry: "scripts/stack-operations.ts" },
+  { id: "stack-run-worker", entry: "scripts/stack-run-worker.ts" },
+  { id: "stack-qualify-host", entry: "scripts/stack-qualify-host.ts" },
   // SessionStart, from hooks/bootstrap.sh — was `npx --yes tsx`, the single
   // slowest thing on the start path and the last tsx spawn a user could hit.
   { id: "write-host-capability", entry: "scripts/write-host-capability.ts" },
@@ -210,6 +213,11 @@ const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
   { id: "stamp-recall-importance", entry: "scripts/stamp-recall-importance.ts" },
   { id: "station-compose", entry: "scripts/station-compose.ts" },
   { id: "task-cell-audit", entry: "scripts/task-cell-audit.ts" },
+  // E00 TaskCell controller (CD14): the two CLIs plus the facade-only library
+  // chunk. task-cell-api re-exports the approved facades and nothing else.
+  { id: "task-cell-controller", entry: "scripts/task-cell-controller.ts" },
+  { id: "task-cell-ack", entry: "scripts/task-cell-ack.ts" },
+  { id: "task-cell-api", entry: "scripts/task-cell-api.ts" },
   { id: "task-cell-team-result", entry: "scripts/task-cell-team-result.ts" },
   { id: "validate-graph", entry: "scripts/learn/validate-graph.ts" },
   { id: "verify-gate-pass", entry: "scripts/verify-gate-pass.ts" },

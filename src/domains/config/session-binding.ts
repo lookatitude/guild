@@ -87,6 +87,11 @@ const ENV_SIGNALS: ReadonlyArray<{ env: string; family?: string; fromValue?: boo
   { env: "GEMINI_CLI", family: "gemini" },
 ]);
 
+/** The model family of a registry host family, or null when the map does not name one. */
+export function modelFamilyForHostFamily(hostFamily: string): string | null {
+  return Object.prototype.hasOwnProperty.call(HOST_TO_MODEL_FAMILY, hostFamily) ? HOST_TO_MODEL_FAMILY[hostFamily]! : null;
+}
+
 const KNOWN_FAMILIES = new Set([...Object.keys(HOST_TO_MODEL_FAMILY), "cline", "zed", "aider", "windsurf", "pi"]);
 
 /**
@@ -287,6 +292,7 @@ export interface BindFsSeam {
 }
 
 export interface BindForRunOptions {
+  now?: () => Date;
   runDir: string;
   runId: string;
   env?: NodeJS.ProcessEnv;
@@ -304,7 +310,7 @@ export function bindSessionForRun(opts: BindForRunOptions): BindResult {
 
   // No seam → the real filesystem, and the exclusive create with it.
   if (seam === undefined) {
-    return bindSession({ runDir: opts.runDir, runId: opts.runId, detected, promptCompose, models: opts.models });
+    return bindSession({ runDir: opts.runDir, runId: opts.runId, detected, promptCompose, models: opts.models, now: opts.now });
   }
 
   const file = sessionBindingPath(opts.runDir);
@@ -330,7 +336,7 @@ export function bindSessionForRun(opts: BindForRunOptions): BindResult {
     run_id: opts.runId,
     host_family: detected.host_family,
     surface: detected.surface,
-    detected_at: new Date().toISOString(),
+    detected_at: (opts.now ?? (() => new Date()))().toISOString(),
     models: isUnknownHost(detected) ? {} : (opts.models ?? {}),
     model_family: detected.model_family,
     prompt_compose: promptCompose,

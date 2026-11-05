@@ -2064,6 +2064,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/stack-contract-validator",
+      "source_path": "scripts/lib/stack-contract-validator.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/state/ensure-storage-layout",
       "source_path": "scripts/lib/state/ensure-storage-layout.ts",
       "kind": "lib"
@@ -2269,6 +2274,21 @@
       "kind": "cli"
     },
     {
+      "id": "stack-operations",
+      "source_path": "scripts/stack-operations.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "stack-qualify-host",
+      "source_path": "scripts/stack-qualify-host.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "stack-run-worker",
+      "source_path": "scripts/stack-run-worker.ts",
+      "kind": "cli"
+    },
+    {
       "id": "stamp-recall-importance",
       "source_path": "scripts/stamp-recall-importance.ts",
       "kind": "cli"
@@ -2284,8 +2304,23 @@
       "kind": "cli"
     },
     {
+      "id": "task-cell-ack",
+      "source_path": "scripts/task-cell-ack.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "task-cell-api",
+      "source_path": "scripts/task-cell-api.ts",
+      "kind": "cli"
+    },
+    {
       "id": "task-cell-audit",
       "source_path": "scripts/task-cell-audit.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "task-cell-controller",
+      "source_path": "scripts/task-cell-controller.ts",
       "kind": "cli"
     },
     {

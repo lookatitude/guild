@@ -8,7 +8,7 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import { casVerify, publish, readBusLog, sha256 } from "./artifact-bus";
+import { casGet, casVerify, publish, readBusLog, sha256 } from "./artifact-bus";
 import type { BusEventV1 } from "./artifact-bus";
 import {
   HANDOFF_ACCEPTANCE_SCHEMA,
@@ -19,8 +19,10 @@ import {
   validateTaskAttemptV1,
   type TaskAssignmentV2,
 } from "./task-cell-contract";
+import { verifyClosedCleanup } from "./task-cell-cleanup-check";
 import { STATIONS, readTeamPlan, readTeamResult, type TeamResultV1 } from "../teams";
 import { durableGuildDir } from "../state";
+import { verifyRunBinding } from "../lifecycle";
 
 export const TASK_CELL_TERMINAL_SCHEMA = "guild.task_cell_terminal.v1" as const;
 
@@ -61,12 +63,10 @@ export interface PublishTaskCellFileInput {
   role: string;
   /**
    * The run's minted `binding_ref` — the runtime-issued identity the bus
-   * authenticates this write against (KTD19). Round 2 removed the self-declared
-   * `tier` this replaced: machinery proves what it is, it does not say so.
-   *
-   * Optional only because two machinery call sites (`acknowledgeAssignment`, the
-   * acceptance publisher) are reached without a dispatch envelope; absent, it is
-   * read from the run's own binding record.
+   * authenticates this write against (KTD19). Required (CD10): every caller
+   * already holds a verified binding and threads it; this module never reads the
+   * binding record itself. Typed optional only so an unbound caller is refused
+   * (null) instead of failing to compile.
    */
   bindingRef?: string;
   now: () => string;
@@ -74,23 +74,6 @@ export interface PublishTaskCellFileInput {
 
 function runDir(cwd: string, runId: string): string {
   return path.join(durableGuildDir(cwd), "runs", runId);
-}
-
-/**
- * The run's minted `binding_ref` from its own binding record.
- *
- * Empty string when unreadable, which authenticates as NOTHING — a gated publish
- * without a provable identity is refused rather than waved through.
- */
-function readRunBindingRef(dir: string): string {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(path.join(dir, "binding.json"), "utf8")) as {
-      binding_ref?: unknown;
-    };
-    return typeof parsed.binding_ref === "string" ? parsed.binding_ref : "";
-  } catch {
-    return "";
-  }
 }
 
 function topic(kind: TaskCellArtifactKind, ids: TaskCellCoordinates): string {
@@ -115,6 +98,10 @@ export function publishTaskCellFile(
   const root = path.resolve(input.cwd);
   const rel = path.relative(root, abs);
   if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) return null;
+  // Fail closed before reading or publishing: absent, closed, malformed, unminted
+  // and mismatched bindings all refuse with no bus event.
+  if (typeof input.bindingRef !== "string" || input.bindingRef.length === 0) return null;
+  if (!verifyRunBinding({ root: input.cwd, run_id: input.ids.run_id, binding_ref: input.bindingRef }).ok) return null;
   let content: Buffer;
   try {
     const stat = fs.lstatSync(abs);
@@ -133,14 +120,99 @@ export function publishTaskCellFile(
     // worker role for provenance; the TIER is proved by the run's minted
     // binding_ref, which a worker process does not hold.
     publisher: { host_id: input.hostId, role: input.role },
-    identity: {
-      kind: "runtime",
-      binding_ref: input.bindingRef ?? readRunBindingRef(runDir(input.cwd, input.ids.run_id)),
-    },
+    identity: { kind: "runtime", binding_ref: input.bindingRef },
     now: input.now,
   });
   if (!event || event.sha256 === null) return null;
   return { kind: input.kind, path: input.relativePath, sha256: event.sha256, seq: event.seq };
+}
+
+/** One CD17 check-12 join result over an existing canonical kind. */
+export interface PrereleaseBusJoin {
+  kind: TaskCellArtifactKind;
+  path: string | null;
+  sha256: string | null;
+  bus_seq: number | null;
+  cas_ok: boolean;
+  /** null when the join holds; otherwise why (prerelease_bus_join_missing for any missing/altered/foreign join). */
+  reason: null | "prerelease_bus_join_missing" | "prerelease_bus_join_path_unresolved";
+}
+
+function isInsideDir(dir: string, rel: string): boolean {
+  const r = path.relative(path.normalize(dir), path.normalize(rel));
+  return r !== "" && !r.startsWith("..") && !path.isAbsolute(r);
+}
+
+function canonicalJoinPath(cwd: string, ids: TaskCellCoordinates, kind: TaskCellArtifactKind): string | null {
+  const paths = taskCellPaths(ids);
+  switch (kind) {
+    case "assignment": return paths.assignment_path;
+    case "ack": return path.join(paths.instance_dir, "assignment-ack.json");
+    case "handoff": return paths.handoff_path;
+    case "validation": return paths.validation_path;
+    case "acceptance": return paths.acceptance_path;
+    case "terminal": return paths.terminal_path;
+    case "attempt": return paths.attempt_path;
+    case "instance": return paths.instance_path;
+    case "heartbeat": return paths.heartbeat_path;
+    case "context":
+    case "team_plan":
+    case "team_result": {
+      const assignment = validateTaskAssignmentV2(parseJson(path.resolve(cwd, paths.assignment_path)));
+      if (!assignment) return null;
+      if (kind === "context") return expectedContextPath(assignment);
+      const dir = kind === "team_plan" ? "team-plan" : "team-result";
+      return path.join(".guild", "runs", ids.run_id, dir, `${assignment.phase_id}.json`);
+    }
+  }
+}
+
+/**
+ * CD17 check 12: verify the pre-release bus/CAS joins for one instance over
+ * EXISTING canonical kinds only (no new kind; topic() stays private). A kind
+ * holds when the latest event on the canonical path and the latest event on
+ * the canonical per-instance topic are both artifact.published with the file's
+ * current sha256, for a path inside the instance directory those are the same
+ * event, and the CAS header carries the same sha256, path and run_id. Shared
+ * paths (team_plan, context) admit other publishers of the same bytes. Anything
+ * else is prerelease_bus_join_missing.
+ */
+export function verifyPrereleaseBusJoins(
+  cwd: string,
+  ids: TaskCellCoordinates,
+  kinds: readonly TaskCellArtifactKind[],
+): PrereleaseBusJoin[] {
+  const dir = runDir(cwd, ids.run_id);
+  const events = readBusLog(dir);
+  return kinds.map((kind): PrereleaseBusJoin => {
+    const rel = canonicalJoinPath(cwd, ids, kind);
+    if (rel === null) return { kind, path: null, sha256: null, bus_seq: null, cas_ok: false, reason: "prerelease_bus_join_path_unresolved" };
+    let bytes: Buffer;
+    try {
+      const stat = fs.lstatSync(path.resolve(cwd, rel));
+      if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("not regular");
+      bytes = fs.readFileSync(path.resolve(cwd, rel));
+    } catch {
+      return { kind, path: rel, sha256: null, bus_seq: null, cas_ok: false, reason: "prerelease_bus_join_missing" };
+    }
+    const digest = sha256(bytes);
+    const wanted = topic(kind, ids);
+    const current = (e: BusEventV1 | undefined): e is BusEventV1 => e?.event === "artifact.published" && e.sha256 === digest;
+    const onPath = events.filter((e) => e.path === rel);
+    const pathLatest = onPath.at(-1);
+    const own = onPath.filter((e) => e.topic === wanted).at(-1);
+    // P1: the path's latest event publishes the current bytes. P2: so does this instance's latest on its topic.
+    // P3: a path inside this instance's directory has no other publisher, so its latest event must be its own.
+    const instanceScoped = isInsideDir(taskCellPaths(ids).instance_dir, rel);
+    const event = current(pathLatest) && current(own) && (!instanceScoped || pathLatest === own) ? own : null;
+    const header = casGet(dir, digest);
+    const casOk = header !== null && header.sha256 === digest && header.path === rel && header.run_id === ids.run_id &&
+      casVerify(dir, digest, bytes);
+    if (!event || !casOk) {
+      return { kind, path: rel, sha256: digest, bus_seq: event?.seq ?? null, cas_ok: casOk, reason: "prerelease_bus_join_missing" };
+    }
+    return { kind, path: rel, sha256: digest, bus_seq: event.seq, cas_ok: true, reason: null };
+  });
 }
 
 export interface TaskCellJoinAudit {
@@ -371,6 +443,20 @@ export function auditTaskCellArtifactJoin(input: {
       if (instance?.terminal_state !== attempt?.terminal_state || instance?.terminated_at !== attempt?.terminated_at) {
         invalid.push(`instance terminal state mismatch for ${assignment.instance_id}`);
       }
+      // E00 (controller-stamped done_when_ref on the hash-joined assignment) closes only with verified
+      // complete cleanup; absent or malformed cleanup fails closed and never falls back to legacy rules.
+      if ((assignment as unknown as Record<string, unknown>)["done_when_ref"] !== undefined) {
+        const cleanup = verifyClosedCleanup({
+          cwd: input.cwd,
+          runId: input.runId,
+          instanceId: assignment.instance_id,
+          terminalPath: paths.terminal_path,
+          attemptTerminalState: attempt?.immutable ? attempt.terminal_state : null,
+          terminalBusSha256: latestEventForPath(events, paths.terminal_path)?.sha256 ?? null,
+        });
+        missing.push(...cleanup.missing);
+        invalid.push(...cleanup.invalid);
+      }
     }
   }
 
@@ -395,12 +481,43 @@ export function auditTaskCellArtifactJoin(input: {
       if (JSON.stringify(observed) !== JSON.stringify(expected)) {
         invalid.push(`team_result/${result.station} assignment identity set mismatch`);
       }
+      // CD13 extension: each lane names its own assignment's role and that
+      // instance's canonical handoff / acceptance paths — null exactly when the
+      // canonical file is absent.
+      for (const lane of result.lanes) {
+        const assignment = assignments.find((a) => a.instance_id === lane.instance_id && a.phase_id === result.station);
+        if (!assignment) continue;
+        const paths = taskCellPaths({
+          run_id: assignment.run_id,
+          logical_task_id: assignment.logical_task_id,
+          attempt: assignment.attempt,
+          instance_id: assignment.instance_id,
+        });
+        const canonicalOrNull = (rel: string): string | null => (fs.existsSync(path.resolve(input.cwd, rel)) ? rel : null);
+        if (lane.role !== assignment.worker_role) {
+          invalid.push(`team_result/${result.station} lane ${lane.instance_id} role ${lane.role} is not the assignment worker_role ${assignment.worker_role}`);
+        }
+        if (lane.handoff_ref !== canonicalOrNull(paths.handoff_path)) {
+          invalid.push(`team_result/${result.station} lane ${lane.instance_id} handoff_ref is not its canonical handoff`);
+        }
+        if (lane.acceptance_ref !== canonicalOrNull(paths.acceptance_path)) {
+          invalid.push(`team_result/${result.station} lane ${lane.instance_id} acceptance_ref is not its canonical acceptance`);
+        }
+      }
     }
     for (const assignment of assignments) {
       for (const dependency of assignment.dependencies) {
-        const upstream = assignments.find((candidate) => candidate.logical_task_id === dependency.logical_task_id);
-        if (!upstream || dependency.accepted_artifact_ref === null) {
+        const upstreams = assignments.filter((candidate) => candidate.logical_task_id === dependency.logical_task_id);
+        if (upstreams.length === 0 || dependency.accepted_artifact_ref === null) {
           invalid.push(`dependency join unresolved: ${assignment.logical_task_id} -> ${dependency.logical_task_id}`);
+          continue;
+        }
+        // The ref must name an upstream instance's canonical acceptance record.
+        const named = upstreams.some((u) => taskCellPaths({
+          run_id: u.run_id, logical_task_id: u.logical_task_id, attempt: u.attempt, instance_id: u.instance_id,
+        }).acceptance_path === dependency.accepted_artifact_ref);
+        if (!named) {
+          invalid.push(`dependency join ${assignment.logical_task_id} -> ${dependency.logical_task_id} names no upstream acceptance`);
         }
       }
     }

@@ -63,6 +63,7 @@ export {
   teamPlanDir,
 } from "./team-decision-surface";
 export {
+  dispatchGate,
   recordDecision,
   type TeamDecisionV1,
   writeDecision,

@@ -14,6 +14,7 @@ import {
   type TaskAssignmentV2,
 } from "./task-cell-contract";
 import { acknowledgeAssignment } from "./task-assignment-v2";
+import type { DispatchBindingEnvelope } from "./task-assignment";
 import {
   initProgressLedger,
   recordOracleOutcome,
@@ -235,9 +236,16 @@ class LiveHostWorkerPort implements TaskCellWorkerPort {
   private readonly input: RunTaskCellHostConformanceInput;
   private readonly preflight: HostProbePreflight;
   private readonly now: () => string;
+  private readonly binding: DispatchBindingEnvelope;
 
-  constructor(input: RunTaskCellHostConformanceInput, preflight: HostProbePreflight, now: () => string) {
+  constructor(
+    input: RunTaskCellHostConformanceInput,
+    preflight: HostProbePreflight,
+    now: () => string,
+    binding: DispatchBindingEnvelope,
+  ) {
     this.input = input;
+    this.binding = binding;
     this.preflight = preflight;
     this.now = now;
     this.mode = preflight.mechanics_mode;
@@ -351,7 +359,7 @@ class LiveHostWorkerPort implements TaskCellWorkerPort {
       const absReceipt = path.resolve(this.input.cwd, handoffReceiptPath);
       fs.mkdirSync(path.dirname(absReceipt), { recursive: true });
       fs.writeFileSync(absReceipt, receipt, "utf8");
-      acknowledgeAssignment(this.input.cwd, assignment, this.now);
+      acknowledgeAssignment(this.input.cwd, assignment, this.now, this.binding);
       writeJson(this.input.cwd, assignment.handoff_path, {
         receipt_id: `handoff-sha256:${sha256(receipt)}`,
         receipt_path: handoffReceiptPath,
@@ -435,13 +443,14 @@ export async function runTaskCellHostConformance(
   const binding = loadRunBinding({ root: cwd, run_id: input.run_id }) ??
     mintRunBinding({ root: cwd, run_id: input.run_id });
   if (binding.state !== "open") throw new Error(`run binding is closed: ${input.run_id}`);
-  const worker = new LiveHostWorkerPort({ ...input, cwd }, preflight, now);
+  const runBinding: DispatchBindingEnvelope = { binding_ref: binding.binding_ref };
+  const worker = new LiveHostWorkerPort({ ...input, cwd }, preflight, now, runBinding);
   let idSeq = 0;
   const runtime = new FilesystemTaskCellRuntime({
     cwd,
     substrate: "serial",
     parallelism: 1,
-    binding: { binding_ref: binding.binding_ref },
+    binding: runBinding,
     worker,
     now,
     idFactory: (kind) => `${hostSlug}-${kind}-${++idSeq}`,
@@ -556,6 +565,7 @@ export async function runTaskCellHostConformance(
         assignment_id: assignmentId(assignment),
         done_when: doneWhen,
         now,
+        binding: runBinding,
       });
       if (!ledger.ok) throw new Error(`conformance ledger refused: ${(ledger as { reason: string }).reason}`);
       const delivered = await runtime.deliverAssignment(instance, assignment);
@@ -575,6 +585,7 @@ export async function runTaskCellHostConformance(
         item_id: "structured_result",
         state: "pass",
         now,
+        binding: runBinding,
       });
       if (!settled.ok) throw new Error(`conformance oracle not settled: ${(settled as { reason: string }).reason}`);
       const accepted = await runtime.acceptHandoff(instance, {

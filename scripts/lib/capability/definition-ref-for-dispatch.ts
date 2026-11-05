@@ -177,3 +177,19 @@ export function definitionRefForDispatch(projectRoot: string, specialist: {
   if (artifact.status !== "resolved") return artifact;
   return { status: "resolved", ref: current.ref };
 }
+
+/** Resolve the exact adopted definition for a worker role, read-through the federated registry. */
+export function resolveAdoptedDefinition(root: string, role: string): { ref: ProjectDefinitionRefV1; definition_abs: string } | { error: string } {
+  const definition = path.relative(root, path.join(durableGuildDir(root), "agents", `${role}.md`));
+  const resolved = definitionRefForDispatch(root, { name: role, definition });
+  if (resolved.status !== "resolved") return { error: `${resolved.status}: ${resolved.detail}` };
+  const committed = readCommittedAdoptionManifest(root);
+  if (committed.status !== "committed") return { error: `${committed.status}: ${committed.detail}` };
+  let artifactRoot = root;
+  if (resolved.ref.project_id !== committed.manifest.project_id) {
+    const federated = resolveWorkspaceProjectRoot(root, resolved.ref.project_id);
+    if (federated.status !== "resolved") return { error: `${federated.status}: ${federated.detail}` };
+    artifactRoot = federated.root;
+  }
+  return { ref: resolved.ref, definition_abs: path.join(artifactRoot, resolved.ref.relative_path) };
+}

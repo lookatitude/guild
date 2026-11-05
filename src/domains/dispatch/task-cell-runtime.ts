@@ -62,15 +62,24 @@ import type { DispatchBindingEnvelope } from "./task-assignment";
 import {
   buildAcceptance,
   buildRejection,
+  classifyPersistedAcceptance,
+  classifyPersistedTerminal,
+  classifyPersistedValidation,
   findRunAcceptances,
   gateDependencies,
   markAttemptOrphaned,
+  publishPersistedLifecycleRecord,
   retainSubmittedHandoffReceipt,
   runDeterministicFloor,
   sealTerminalAttempt,
   writeAcceptanceRecord,
   writeValidationRecord,
+  type IntendedAcceptance,
+  type IntendedTerminal,
+  type PersistedLifecycleKind,
+  type PersistedPublication,
 } from "./task-cell-acceptance";
+import type { HandoffAcceptanceV1, HandoffValidationV1 } from "./task-cell-contract";
 import { publishTaskCellFile } from "./task-cell-artifact-join";
 import { cellBlocked, cellCanGoDone, ledgerBoundToAssignment, readProgressLedger } from "./progress-ledger";
 import { DEFAULT_MAX_INSTANCES, reserveInstance, reserveRefused } from "./instance-cap";
@@ -94,10 +103,38 @@ import type {
   ExecutionSpawnRequest,
   ExecutionTransportPort,
 } from "./execution-transport-ports";
+import { isExecutionTransportId } from "./execution-transport-ports";
 import { durableGuildDir } from "../state";
 
 export type TaskCellMechanicsMode = "native" | "wrapped" | "bridged" | "emulated" | "degraded";
 export interface TaskCellMechanicsResult { ok: boolean; reason: string | null }
+
+/**
+ * A spawn result. `spawn_effect` says whether a refused spawn may have left a
+ * worker behind: "none" only when the refusal is proven to precede any action,
+ * "unknown" once the launch action ran (or threw) without a usable outcome.
+ * Absent is the legacy reading, "none".
+ */
+export interface TaskCellSpawnResult extends TaskCellMechanicsResult { spawn_effect?: "none" | "unknown" }
+
+/**
+ * The spawn may have started a worker the runtime cannot identify. The attempt is
+ * left nonterminal and orphaned (its cap slot stays held); nothing is sealed.
+ * `orphan_recorded` is bookkeeping only: false means the orphan marker write failed,
+ * never that no worker exists.
+ */
+export class SpawnOutcomeUnknownError extends Error {
+  constructor(
+    readonly instance_id: string,
+    readonly attempt_id: string,
+    readonly logical_task_id: string,
+    readonly reason: string,
+    readonly orphan_recorded: boolean,
+  ) {
+    super(reason);
+    this.name = "SpawnOutcomeUnknownError";
+  }
+}
 
 /** Host mechanics only. Lifecycle semantics and durable records stay in this class. */
 export interface TaskCellWorkerPort {
@@ -109,7 +146,7 @@ export interface TaskCellWorkerPort {
     run_id: string;
     assignment_path: string;
     instance: AgentInstanceV1;
-  }): TaskCellMechanicsResult;
+  }): TaskCellSpawnResult;
   ready(input: { instance_id: string; run_id: string }): TaskCellMechanicsResult;
   notifyAssignment(input: {
     instance_id: string;
@@ -145,7 +182,52 @@ export interface FilesystemTaskCellRuntimeOpts {
    * pre-collapsed by the claim it is testing.
    */
   rungPlan: RungPlan | "conformance_probe";
+  /**
+   * The acceptances deliverAssignment's dependency gate reads. E00 controller
+   * runs pass findQualifiedRunAcceptances (CD17b, same_run); omitted, the legacy
+   * findRunAcceptances reader is used, unchanged for existing callers.
+   */
+  dependencyAcceptances?: (cwd: string, runId: string) => readonly HandoffAcceptanceV1[];
 }
+
+/** One publish-only reconciliation observed by a reconcilePersisted* call (CD24). */
+export interface RuntimeReconciliation {
+  kind: PersistedLifecycleKind;
+  path: string;
+  sha256: string;
+  outcome: "published" | "already_published";
+  bus_seq: number;
+  reconciled_at: string;
+  cas_created_at: string | null;
+  cas_preexisting: boolean;
+}
+
+export type ReconcilePersistedResult =
+  | {
+      ok: true;
+      instance: InstanceHandle;
+      /** The immutable fact time read from the persisted payload. */
+      fact_at: string;
+      /** When the runtime transitioned and emitted its lifecycle event. */
+      runtime_transition_at: string;
+      publications: RuntimeReconciliation[];
+    }
+  | OpFailure
+  | {
+      /**
+       * The reconciler published and transitioned (post-state reached), then its
+       * lifecycle event could not be appended. Every field is the value this call
+       * actually observed; the caller must not re-transition or re-emit.
+       */
+      ok: false;
+      failure: "lifecycle_event_incomplete";
+      reason: string;
+      post_state_reached: true;
+      instance: InstanceHandle;
+      fact_at: string;
+      runtime_transition_at: string;
+      publications: RuntimeReconciliation[];
+    };
 
 export interface ExecutionTransportTaskCellWorkerPortOpts {
   transport: ExecutionTransportPort;
@@ -189,11 +271,33 @@ export class ExecutionTransportTaskCellWorkerPort implements TaskCellWorkerPort 
   }
 
   isAvailable(): boolean { return this.transport.supports("spawn"); }
-  spawn(input: { instance_id: string; run_id: string; assignment_path: string; instance: AgentInstanceV1 }): TaskCellMechanicsResult {
-    const outcome = this.transport.spawn(this.requestFor(input));
-    if (outcome.status !== "succeeded" || !outcome.value) {
-      return { ok: false, reason: outcome.detail ?? outcome.reason_code ?? "transport spawn failed" };
+  spawn(input: { instance_id: string; run_id: string; assignment_path: string; instance: AgentInstanceV1 }): TaskCellSpawnResult {
+    if (!this.transport.supports("spawn")) return { ok: false, reason: "transport spawn unsupported", spawn_effect: "none" };
+    let outcome: ReturnType<ExecutionTransportPort["spawn"]>;
+    try {
+      outcome = this.transport.spawn(this.requestFor(input));
+    } catch (error) {
+      return { ok: false, reason: `transport spawn threw: ${error instanceof Error ? error.message : String(error)}`, spawn_effect: "unknown" };
     }
+    // Only a typed unsupported outcome proves no side effect; any other non-success
+    // (or a success without a usable handle) happened after the launch call.
+    if (outcome.status !== "succeeded" || !outcome.value) {
+      return {
+        ok: false,
+        reason: outcome.detail ?? outcome.reason_code ?? "transport spawn failed",
+        spawn_effect: outcome.status === "unsupported" ? "none" : "unknown",
+      };
+    }
+    // A stored handle drives readiness and delivery, so it must be usable and carry the
+    // port's own required transport identity, agreed by the outcome and the handle.
+    const portTransport = (this.transport as { transport_id?: unknown }).transport_id;
+    const value = outcome.value as unknown as { transport_id?: unknown; handle_id?: unknown } | null;
+    const usable = isExecutionTransportId(portTransport) &&
+      (outcome as { transport_id?: unknown }).transport_id === portTransport &&
+      typeof value === "object" && value !== null && !Array.isArray(value) &&
+      value.transport_id === portTransport &&
+      typeof value.handle_id === "string" && value.handle_id.trim().length > 0;
+    if (!usable) return { ok: false, reason: "transport spawn returned an unusable or mismatched handle", spawn_effect: "unknown" };
     this.handles.set(input.instance_id, outcome.value);
     return { ok: true, reason: null };
   }
@@ -304,6 +408,7 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
   readonly rungPlan: RungPlan | "conformance_probe";
   /** Cells the rung plan collapsed from an isolated fanout to `lead_only`. */
   private readonly rungCollapsed = new Set<string>();
+  private readonly dependencyAcceptances: (cwd: string, runId: string) => readonly HandoffAcceptanceV1[];
 
   constructor(opts: FilesystemTaskCellRuntimeOpts) {
     if (!Number.isInteger(opts.parallelism) || opts.parallelism < 1) throw new Error("parallelism must be >= 1");
@@ -324,6 +429,8 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
       throw new Error("rungPlan is required: pass the host family's adapter rung plan (KTD28)");
     }
     this.rungPlan = opts.rungPlan;
+    this.dependencyAcceptances = opts.dependencyAcceptances
+      ?? ((cwd, runId) => findRunAcceptances(cwd, runId).map((x) => x.acceptance));
   }
 
 
@@ -388,6 +495,10 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
     try {
       return await this.spawnReserved(cell, known, req);
     } catch (error) {
+      // An unknown spawn is thrown only after the real attempt record replaced the
+      // placeholder; that attempt holds the slot, and a release (a no-op there) must
+      // not be able to mask the typed error with its own lock failure.
+      if (error instanceof SpawnOutcomeUnknownError) throw error;
       // ONLY on failure. On success the attempt record has replaced the
       // placeholder and IS the live marker; releasing then would hand back a slot
       // the run is still holding.
@@ -517,14 +628,36 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
       this.leadOnly.add(instanceId);
       this.emitLifecycle(instance, "spawned", this.now());
     } else {
-      const spawned = this.worker.spawn({ instance_id: instanceId, run_id: cell.run_id, assignment_path: paths.assignment_path, instance });
+      let spawned: TaskCellSpawnResult;
+      try {
+        spawned = this.worker.spawn({ instance_id: instanceId, run_id: cell.run_id, assignment_path: paths.assignment_path, instance });
+      } catch (error) {
+        spawned = { ok: false, reason: `spawn threw: ${error instanceof Error ? error.message : String(error)}`, spawn_effect: "unknown" };
+      }
+      // A worker may be live: never seal or emit a terminal event; the nonterminal
+      // attempt keeps the cap slot (instance-cap counts it) until a confirmed teardown.
+      const unknownOutcome = (reason: string): SpawnOutcomeUnknownError => {
+        let orphanRecorded = true;
+        try {
+          markAttemptOrphaned(this.cwd, this.ids(handle), this.binding);
+        } catch {
+          orphanRecorded = false;
+        }
+        return new SpawnOutcomeUnknownError(instanceId, attemptId, cell.logical_task_id, reason, orphanRecorded);
+      };
+      if (!spawned.ok && spawned.spawn_effect === "unknown") throw unknownOutcome(spawned.reason ?? "spawn outcome unknown");
       if (!spawned.ok) {
         const failedAt = this.now();
-        sealTerminalAttempt({ cwd: this.cwd, ids: this.ids(handle), terminal_state: "failed", reason: spawned.reason ?? "spawn failed", now: () => failedAt });
+        sealTerminalAttempt({ cwd: this.cwd, binding: this.binding, ids: this.ids(handle), terminal_state: "failed", reason: spawned.reason ?? "spawn failed", now: () => failedAt });
         this.emitLifecycle(instance, "failed", failedAt);
         throw new Error(spawned.reason ?? "TaskCell worker spawn failed");
       }
-      this.emitLifecycle(instance, "spawned", this.now());
+      try {
+        this.emitLifecycle(instance, "spawned", this.now());
+      } catch (error) {
+        // The worker did start; losing its spawned event leaves it physically unknown, not failed.
+        throw unknownOutcome(`spawned_event_failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
     const nextCell = Object.freeze({ ...known, instance_ids: Object.freeze([...known.instance_ids, instanceId]) });
     this.cells.set(cell.cell_id, nextCell);
@@ -604,7 +737,7 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
     if (projectionRefused(narrowing)) {
       return this.forceTerminal(live, "failed", narrowing.reason, "not_authorized");
     }
-    const gate = gateDependencies(assignment.dependencies, findRunAcceptances(this.cwd, assignment.run_id).map((x) => x.acceptance));
+    const gate = gateDependencies(assignment.dependencies, this.dependencyAcceptances(this.cwd, assignment.run_id));
     if (!gate.ready) return { ...this.failure(live, "dependencies_blocked", `blocked on ${gate.blocked_on.join(", ")}`), blocked_on: gate.blocked_on };
     const assignmentPath = writeTaskAssignmentV2(this.cwd, assignment, this.binding);
     this.publish(this.instanceRecord(instance), "assignment", assignment.assignment_path, assignment.written_at, true);
@@ -614,7 +747,7 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
     if (this.leadOnly.has(instance.instance_id)) {
       // Delivered IN-SESSION: the parent is the lead and the worker, so delivery
       // and acknowledgement are the same act. No transport call is made at all.
-      acknowledgeAssignment(this.cwd, assignment, this.now);
+      acknowledgeAssignment(this.cwd, assignment, this.now, this.binding);
     } else {
       const notified = this.worker.notifyAssignment({ instance_id: instance.instance_id, run_id: instance.run_id, assignment_path: assignment.assignment_path });
       if (!notified.ok) return this.forceTerminal(live, "failed", notified.reason ?? "assignment delivery failed");
@@ -697,7 +830,7 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
       );
     }
     const validation = runDeterministicFloor({ assignment, submitted: submittedForValidation, validationResultId: this.idFactory("validation"), now: this.now });
-    writeValidationRecord(this.cwd, validation);
+    writeValidationRecord(this.cwd, validation, this.binding);
     if (validation.result !== "passed") return { ...this.failure(live, "validation_failed", validation.reason ?? "validation failed"), validation };
     this.transition(live, "handoff_validated");
     this.emitLifecycle(live.handle, "handoff_validated", validation.validated_at);
@@ -735,7 +868,7 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
     if (cellBlocked(done)) return this.failure(live, "validation_failed", done.reason);
     try {
       const acceptance = buildAcceptance({ validation, acceptancePolicyVersion: req.acceptance_policy_version, authoritiesRequired: req.authorities_required, authoritiesObserved: req.authorities_observed, reviewerCellId: req.reviewer_cell_id, reviewIndependence: req.review_independence, now: this.now });
-      writeAcceptanceRecord(this.cwd, acceptance);
+      writeAcceptanceRecord(this.cwd, acceptance, this.binding);
       this.transition(live, "handoff_accepted");
       this.emitLifecycle(live.handle, "handoff_accepted", acceptance.downstream_release_at ?? acceptance.termination_authorized_at ?? this.now());
       return { ok: true, instance: this.snapshot(live), acceptance };
@@ -750,7 +883,7 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
     const validation = this.validationRecord(instance);
     if (!validation) return this.failure(live, "validation_failed", "missing validation record");
     const acceptance = buildRejection({ validation, acceptancePolicyVersion: req.acceptance_policy_version, authoritiesRequired: req.authorities_required, authoritiesObserved: req.authorities_observed, reviewerCellId: req.reviewer_cell_id, reason: req.reason, now: this.now });
-    writeAcceptanceRecord(this.cwd, acceptance);
+    writeAcceptanceRecord(this.cwd, acceptance, this.binding);
     const terminated = await this.terminate(instance, { force: true, forced_state: "rejected", reason: req.reason });
     if (!terminated.ok) {
       const failed = terminated as OpFailure;
@@ -763,6 +896,154 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
       };
     }
     return { ok: true, instance: terminated.instance, acceptance };
+  }
+
+  // ── CD24 · in-process reconciliation of persisted, unpublished records ──────
+  //
+  // Live-owner only: each method publishes the EXACT persisted bytes at the
+  // current clock, then transitions and emits at the current clock. Payload
+  // fact times are never rewritten. Refused outside its pre-state
+  // (illegal_state) and on absent or conflicting records. Never called by
+  // record-loss and never exposed as a CLI subcommand.
+
+  private reconciliationFrom(p: PersistedPublication): RuntimeReconciliation {
+    return {
+      kind: p.kind, path: p.path, sha256: p.sha256, outcome: p.outcome, bus_seq: p.bus_seq,
+      reconciled_at: p.reconciled_at, cas_created_at: p.cas_created_at, cas_preexisting: p.cas_preexisting,
+    };
+  }
+
+  /**
+   * handoff_validated + a persisted_matching acceptance → handoff_accepted.
+   * `intended` is the acceptance input the controller pinned in pre.json; when
+   * omitted, the persisted record must reproduce byte-for-byte from its own
+   * authority fields over this instance's validation (a self-consistent record
+   * the canonical writer produced), with its fact time not before validation.
+   */
+  async reconcilePersistedAcceptance(instance: InstanceHandle, intended?: IntendedAcceptance): Promise<ReconcilePersistedResult> {
+    const live = this.mustLive(instance);
+    if (live.state !== "handoff_validated") return this.failure(live, "illegal_state", `expected handoff_validated, got ${live.state}`);
+    const ids = this.ids(instance);
+    const validation = this.validationRecord(instance);
+    if (!validation || validation.result !== "passed") return this.failure(live, "validation_failed", "no passed validation record");
+    const assignment = readTaskAssignmentV2(this.cwd, taskCellPaths(ids).assignment_path);
+    if (!assignment) return this.failure(live, "malformed_assignment", "no readable assignment for this instance");
+    const ledger = readProgressLedger({ cwd: this.cwd, run_id: ids.run_id, logical_task_id: ids.logical_task_id });
+    const bound = ledgerBoundToAssignment(ledger, assignment);
+    if (cellBlocked(bound)) return this.failure(live, "validation_failed", bound.reason);
+    const done = cellCanGoDone(ledger);
+    if (cellBlocked(done)) return this.failure(live, "validation_failed", done.reason);
+    const target = intended ?? this.selfIntendedAcceptance(ids, validation);
+    if (target === null) return this.failure(live, "not_authorized", "persisted acceptance absent or unreadable");
+    const persisted = classifyPersistedAcceptance(this.cwd, ids, target);
+    if (persisted.kind !== "persisted_matching") {
+      return this.failure(live, "not_authorized", `acceptance ${persisted.kind}${persisted.kind === "persisted_conflicting" ? `: ${persisted.reason}` : ""}`);
+    }
+    const missing = persisted.record.authorities_required.filter(
+      (a) => !persisted.record.authorities_observed.some((o) => o.authority === a && o.decision === "accepted"),
+    );
+    if (missing.length > 0 || persisted.record.downstream_release_at === null) {
+      return this.failure(live, "not_authorized", "persisted acceptance does not release downstream");
+    }
+    const publications = [this.reconciliationFrom(publishPersistedLifecycleRecord(this.cwd, ids, "acceptance", this.binding, this.now))];
+    const at = this.now();
+    this.transition(live, "handoff_accepted");
+    return this.emitAfterReconciledTransition(live, "handoff_accepted", at, persisted.record.termination_authorized_at as string, publications);
+  }
+
+  /**
+   * handoff_submitted + a persisted validation → handoff_validated (passed) or a
+   * validation_failed result (failed), after publishing the exact bytes.
+   * `expected` is the controller's in-memory validation; when omitted, the
+   * persisted record is used if it is this instance's well-formed validation.
+   */
+  async reconcilePersistedValidation(instance: InstanceHandle, expected?: HandoffValidationV1): Promise<ReconcilePersistedResult> {
+    const live = this.mustLive(instance);
+    if (live.state !== "handoff_submitted") return this.failure(live, "illegal_state", `expected handoff_submitted, got ${live.state}`);
+    const ids = this.ids(instance);
+    const target = expected ?? this.validationRecord(instance);
+    if (!target) return this.failure(live, "validation_failed", "persisted validation absent or unreadable");
+    const persisted = classifyPersistedValidation(this.cwd, ids, target);
+    if (persisted.kind !== "persisted_matching") {
+      return this.failure(live, "not_authorized", `validation ${persisted.kind}${persisted.kind === "persisted_conflicting" ? `: ${persisted.reason}` : ""}`);
+    }
+    const publications: RuntimeReconciliation[] = [];
+    publications.push(this.reconciliationFrom(publishPersistedLifecycleRecord(this.cwd, ids, "validation", this.binding, this.now)));
+    if (persisted.record.result !== "passed") {
+      return this.failure(live, "validation_failed", persisted.record.reason ?? "validation failed");
+    }
+    const at = this.now();
+    this.transition(live, "handoff_validated");
+    return this.emitAfterReconciledTransition(live, "handoff_validated", at, persisted.record.validated_at, publications);
+  }
+
+  /**
+   * A non-terminal live instance whose terminal seal persisted → that terminal
+   * state, after publishing the exact attempt, instance and terminal bytes.
+   * `intended` is the seal request; when omitted, the persisted immutable
+   * attempt's own state and reason are used.
+   */
+  async reconcilePersistedTerminal(instance: InstanceHandle, intended?: IntendedTerminal): Promise<ReconcilePersistedResult> {
+    const live = this.mustLive(instance);
+    if (["terminated", "failed", "cancelled", "timed_out", "rejected"].includes(live.state)) {
+      return this.failure(live, "illegal_state", `${live.state} is terminal`);
+    }
+    const ids = this.ids(instance);
+    const attempt = this.attemptRecord(instance);
+    if (!attempt?.immutable || attempt.terminal_state === null) return this.failure(live, "illegal_state", "no persisted terminal attempt");
+    const target: IntendedTerminal = intended ?? { terminal_state: attempt.terminal_state, reason: attempt.terminal_reason };
+    const persisted = classifyPersistedTerminal(this.cwd, ids, target);
+    if (persisted.kind !== "persisted_matching") {
+      return this.failure(live, "not_authorized", `terminal ${persisted.kind}${persisted.kind === "persisted_conflicting" ? `: ${persisted.reason}` : ""}`);
+    }
+    const publications = (["attempt", "instance", "terminal"] as const).map((kind) =>
+      this.reconciliationFrom(publishPersistedLifecycleRecord(this.cwd, ids, kind, this.binding, this.now)));
+    const state = persisted.record.terminal_state as TerminalState;
+    const at = this.now();
+    live.state = state;
+    return this.emitAfterReconciledTransition(live, state, at, persisted.record.terminated_at as string, publications);
+  }
+
+  /**
+   * Emit the post-transition lifecycle event exactly once. A failed append (marker
+   * or event line) after the state advanced is returned as structured
+   * lifecycle_event_incomplete with the metadata this call observed; it is never
+   * retried, re-emitted or turned back into a pre-state.
+   */
+  private emitAfterReconciledTransition(
+    live: Live,
+    eventName: TaskCellLifecycleEventName,
+    at: string,
+    factAt: string,
+    publications: RuntimeReconciliation[],
+  ): ReconcilePersistedResult {
+    try {
+      this.emitLifecycle(live.handle, eventName, at);
+    } catch (error) {
+      return {
+        ok: false, failure: "lifecycle_event_incomplete", reason: error instanceof Error ? error.message : String(error),
+        post_state_reached: true, instance: this.snapshot(live), fact_at: factAt, runtime_transition_at: at, publications,
+      };
+    }
+    return { ok: true, instance: this.snapshot(live), fact_at: factAt, runtime_transition_at: at, publications };
+  }
+
+  private selfIntendedAcceptance(
+    ids: { run_id: string; logical_task_id: string; attempt: number; instance_id: string },
+    validation: HandoffValidationV1,
+  ): IntendedAcceptance | null {
+    const raw = readJson(path.resolve(this.cwd, taskCellPaths(ids).acceptance_path)) as HandoffAcceptanceV1 | null;
+    if (!raw || raw.schema_version !== "guild.handoff_acceptance.v1") return null;
+    return {
+      acceptance_policy_version: raw.acceptance_policy_version,
+      authorities_required: raw.authorities_required,
+      authorities_observed: raw.authorities_observed,
+      reviewer_cell_id: raw.reviewer_cell_id ?? null,
+      validation_result_id: validation.validation_result_id,
+      receipt_id: validation.receipt_id,
+      assignment_id: validation.assignment_id,
+      not_before: validation.validated_at,
+    };
   }
 
   async cancel(instance: InstanceHandle, reason: string): Promise<TerminateResult> {
@@ -787,12 +1068,12 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
     }
     const killed = this.port(instance.instance_id).terminate({ instance_id: instance.instance_id, run_id: instance.run_id, reason: req.reason ?? "accepted handoff" });
     if (!killed.ok) {
-      markAttemptOrphaned(this.cwd, this.ids(instance));
+      markAttemptOrphaned(this.cwd, this.ids(instance), this.binding);
       live.state = "terminating";
       this.emitLifecycle(live.handle, "orphaned", this.now());
       return this.failure(live, "termination_failed", killed.reason ?? "worker termination failed");
     }
-    const attempt = sealTerminalAttempt({ cwd: this.cwd, ids: this.ids(instance), terminal_state: target, reason: req.reason ?? null, now: this.now });
+    const attempt = sealTerminalAttempt({ cwd: this.cwd, binding: this.binding, ids: this.ids(instance), terminal_state: target, reason: req.reason ?? null, now: this.now });
     live.state = target;
     const outcome = this.outcome(attempt);
     this.emitLifecycle(live.handle, target, outcome.terminated_at);
@@ -814,11 +1095,11 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
     if (!attempt?.orphaned || attempt.terminal_state !== null) return { ok: true, reaped: false, instance: this.snapshot(live), reap_attempts: attempt?.reap_attempts ?? 0, outcome: attempt?.terminal_state ? this.outcome(attempt) : null };
     const killed = this.port(ref.instance_id).terminate({ instance_id: ref.instance_id, run_id: ref.run_id, reason: "orphan reap" });
     if (!killed.ok) {
-      const again = markAttemptOrphaned(this.cwd, this.ids(live.handle));
+      const again = markAttemptOrphaned(this.cwd, this.ids(live.handle), this.binding);
       this.emitLifecycle(live.handle, "orphaned", this.now());
       return { ok: false, reaped: false, instance: this.snapshot(live), reap_attempts: again.reap_attempts, outcome: null };
     }
-    const sealed = sealTerminalAttempt({ cwd: this.cwd, ids: this.ids(live.handle), terminal_state: "terminated", reason: "orphan reaped", orphaned: true, reapAttempts: attempt.reap_attempts, now: this.now });
+    const sealed = sealTerminalAttempt({ cwd: this.cwd, binding: this.binding, ids: this.ids(live.handle), terminal_state: "terminated", reason: "orphan reaped", orphaned: true, reapAttempts: attempt.reap_attempts, now: this.now });
     live.state = "terminated";
     this.emitLifecycle(live.handle, "reaped", sealed.terminated_at ?? this.now());
     return { ok: true, reaped: true, instance: this.snapshot(live), reap_attempts: sealed.reap_attempts, outcome: this.outcome(sealed) };
@@ -957,7 +1238,7 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
     this.emitLifecycle(live.handle, "termination_started", this.now());
     const killed = this.port(live.handle.instance_id).terminate({ instance_id: live.handle.instance_id, run_id: live.handle.run_id, reason });
     if (!killed.ok) {
-      markAttemptOrphaned(this.cwd, this.ids(live.handle));
+      markAttemptOrphaned(this.cwd, this.ids(live.handle), this.binding);
       live.state = "terminating";
       this.emitLifecycle(live.handle, "orphaned", this.now());
       return this.failure(
@@ -966,7 +1247,7 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
         `${reason}; cleanup failed: ${killed.reason ?? "worker termination could not be confirmed"}`,
       );
     }
-    const attempt = sealTerminalAttempt({ cwd: this.cwd, ids: this.ids(live.handle), terminal_state: state, reason, now: this.now });
+    const attempt = sealTerminalAttempt({ cwd: this.cwd, binding: this.binding, ids: this.ids(live.handle), terminal_state: state, reason, now: this.now });
     live.state = state;
     this.emitLifecycle(live.handle, state, attempt.terminated_at ?? this.now());
     return this.failure(live, failure, reason);

@@ -103,13 +103,25 @@ function makeRecordingTmux(root: string): { binDir: string; logPath: string } {
   const binDir = path.join(root, "fakebin");
   fs.mkdirSync(binDir, { recursive: true });
   const logPath = path.join(root, "tmux-invocations.log");
+  const titlesPath = path.join(root, "tmux-pane-titles");
   fs.writeFileSync(
     path.join(binDir, "tmux"),
     [
       "#!/bin/sh",
       `echo "$@" >> ${JSON.stringify(logPath)}`,
+      // The pre/post-create credential probe: tmux's exact answer for an unset variable.
+      'if [ "$1" = show-environment ] && { { [ "$#" -eq 3 ] && [ "$2" = -g ] && [ "$3" = GUILD_RUN_BINDING_REF ]; } || { [ "$#" -eq 4 ] && [ "$2" = -t ] && [ "$4" = GUILD_RUN_BINDING_REF ]; } || { [ "$#" -eq 2 ] && [ "$2" = GUILD_RUN_BINDING_REF ]; }; }; then',
+      '  echo "unknown variable: GUILD_RUN_BINDING_REF" >&2; exit 1',
+      "fi",
       'case "$1" in',
       '  -V) echo "tmux 3.4 (recording stub)"; exit 0;;',
+      // The creating command prints its identity (CREATE_IDENTITY_FORMAT).
+      "  new-session|new-window) printf '$1 @1 77 1793000000\\n'; exit 0;;",
+      // Titles the launcher sets (`select-pane -T <title>`), reported back by
+      // list-panes from the creating server in creation order; each pane process
+      // is the live launcher ($PPID), so `ps` observes a real pid and start.
+      `  select-pane) p=""; for a in "$@"; do [ "$p" = "-T" ] && echo "$a" >> ${JSON.stringify(titlesPath)}; p="$a"; done; exit 0;;`,
+      `  list-panes) i=0; while IFS= read -r t; do printf '77 1793000000 @1 %%%d %s %s\\n' "$i" "$PPID" "$t"; i=$((i+1)); done < ${JSON.stringify(titlesPath)}; exit 0;;`,
       // "no such session" — otherwise the launcher refuses to clobber and the
       // non-dry anti-vacuity leg never reaches pane creation.
       "  has-session) exit 1;;",

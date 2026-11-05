@@ -190,7 +190,7 @@ function seedAcceptance(cwd: string, runId: string, logicalTaskId: string, worke
     ],
     now: SEED_NOW,
   });
-  writeAcceptanceRecord(cwd, acceptance);
+  writeAcceptanceRecord(cwd, acceptance, { binding_ref: bindingRef });
 }
 
 // ── Fixtures ───────────────────────────────────────────────────────────────

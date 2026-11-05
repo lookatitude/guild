@@ -10,10 +10,12 @@
  *   AT3  a malformed/missing assignment is a HARD dispatch failure — the writer
  *        throws, the reader returns null; a lane never proceeds on garbage.
  *
- * Plus the D5 ack primitive + the attempt companion + the reader roundtrip.
+ * Plus the D5 ack primitive + the attempt companion + the reader roundtrip, and
+ * C6 atomic publication: workers treat the assignment's existence as readiness,
+ * so it must never be visible with incomplete bytes.
  */
 
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, spyOn, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -251,7 +253,7 @@ describe("D5 ack primitive", () => {
     // No ack yet — running is not authorized.
     expect(readAssignmentAck(cwd, ids)).toBeNull();
 
-    const ackPath = acknowledgeAssignment(cwd, cell.assignment, FIXED_NOW);
+    const ackPath = acknowledgeAssignment(cwd, cell.assignment, FIXED_NOW, bindFor(cwd, "run-g3"));
     expect(path.resolve(cwd, assignmentAckPath(ids))).toBe(ackPath);
     const ack = readAssignmentAck(cwd, ids);
     expect(ack).not.toBeNull();
@@ -405,5 +407,205 @@ describe("FU08 — one preview session allocates faithful run-local confirmation
 
     expect([first.prompt_id, second.prompt_id, repeat.prompt_id]).toEqual([0, 1, 0]);
     expect(fs.existsSync(first.statePath)).toBe(false);
+  });
+});
+
+describe("C6 — the assignment is published atomically and exclusively", () => {
+  // Real fs bound before any spy, so the instrumentation never recurses into itself.
+  const real = {
+    openSync: fs.openSync.bind(fs),
+    writeSync: fs.writeSync.bind(fs),
+    writeFileSync: fs.writeFileSync.bind(fs),
+    fsyncSync: fs.fsyncSync.bind(fs),
+    closeSync: fs.closeSync.bind(fs),
+    linkSync: fs.linkSync.bind(fs),
+    unlinkSync: fs.unlinkSync.bind(fs),
+  };
+  const restore: Array<{ mockRestore(): void }> = [];
+  afterEach(() => {
+    while (restore.length > 0) restore.pop()!.mockRestore();
+  });
+  function spy<K extends keyof typeof real>(name: K, impl: (typeof real)[K]): void {
+    restore.push(spyOn(fs, name).mockImplementation(impl as never));
+  }
+  const errno = (code: string) => Object.assign(new Error(`${code} (injected)`), { code });
+
+  function setup() {
+    const cwd = tmpCwd();
+    const binding = bindFor(cwd, "run-g3");
+    const cell = buildTaskCell(dispatch());
+    const rel = cell.assignment.assignment_path;
+    const out = path.resolve(cwd, rel);
+    const bytes = JSON.stringify(cell.assignment, null, 2) + "\n";
+    const isOut = (p: unknown) => typeof p === "string" && p.endsWith(path.sep + rel);
+    const isTemp = (p: unknown) => typeof p === "string" && p.includes(path.sep + rel + ".") && p.endsWith(".tmp");
+    const dirEntries = () => (fs.existsSync(path.dirname(out)) ? fs.readdirSync(path.dirname(out)).sort() : []);
+    return { cwd, binding, cell, out, bytes, isOut, isTemp, dirEntries };
+  }
+
+  /**
+   * A reader that looks at the canonical path before and after EVERY fs call the
+   * writer makes. Existence must imply the exact final bytes. A path-form
+   * writeFileSync is replayed as the O_CREAT|O_EXCL open, write and close it
+   * performs, so a file created before its data is observable here.
+   */
+  function readerOracle(s: ReturnType<typeof setup>): string[] {
+    const seen: string[] = [];
+    const observe = (at: string) => {
+      if (!fs.existsSync(s.out)) return;
+      const got = fs.readFileSync(s.out, "utf8");
+      if (got !== s.bytes) seen.push(`${at}: ${got.length}/${s.bytes.length} bytes`);
+    };
+    const around =
+      <A extends unknown[], R>(name: string, fn: (...a: A) => R) =>
+      (...a: A): R => {
+        observe(`before ${name}`);
+        try {
+          return fn(...a);
+        } finally {
+          observe(`after ${name}`);
+        }
+      };
+    spy("openSync", around("openSync", real.openSync) as typeof real.openSync);
+    spy("writeSync", around("writeSync", real.writeSync) as typeof real.writeSync);
+    spy("fsyncSync", around("fsyncSync", real.fsyncSync) as typeof real.fsyncSync);
+    spy("closeSync", around("closeSync", real.closeSync) as typeof real.closeSync);
+    spy("linkSync", around("linkSync", real.linkSync) as typeof real.linkSync);
+    spy("writeFileSync", ((file: fs.PathOrFileDescriptor, data: string, opts?: fs.WriteFileOptions) => {
+      if (typeof file === "number") return around("writeFileSync", real.writeFileSync)(file, data, opts);
+      const flag = typeof opts === "object" && opts?.flag ? String(opts.flag) : "w";
+      const fd = fs.openSync(file, flag);
+      try {
+        fs.writeSync(fd, data);
+      } finally {
+        fs.closeSync(fd);
+      }
+    }) as typeof real.writeFileSync);
+    return seen;
+  }
+
+  it("a reader never sees the assignment with bytes other than its final bytes", () => {
+    const s = setup();
+    const seen = readerOracle(s);
+    writeTaskAssignmentV2(s.cwd, s.cell.assignment, s.binding);
+    expect(seen).toEqual([]);
+    expect(fs.readFileSync(s.out, "utf8")).toBe(s.bytes);
+    expect(readTaskAssignmentV2(s.cwd, s.cell.assignment.assignment_path)).toEqual(s.cell.assignment);
+  });
+
+  it("anti-vacuity: the same oracle catches a writer that creates the file before its data", () => {
+    const s = setup();
+    fs.mkdirSync(path.dirname(s.out), { recursive: true });
+    const seen = readerOracle(s);
+    const fd = fs.openSync(s.out, "wx");
+    try {
+      const half = Math.floor(s.bytes.length / 2);
+      fs.writeSync(fd, s.bytes.slice(0, half));
+      fs.writeSync(fd, s.bytes.slice(half));
+    } finally {
+      fs.closeSync(fd);
+    }
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen[0]).toBe(`after openSync: 0/${s.bytes.length} bytes`);
+  });
+
+  it("publishes the exact bytes with the default file mode and leaves no temp", () => {
+    const s = setup();
+    writeTaskAssignmentV2(s.cwd, s.cell.assignment, s.binding);
+    expect(fs.readFileSync(s.out, "utf8")).toBe(s.bytes);
+    const control = path.join(path.dirname(s.out), "control");
+    fs.writeFileSync(control, "", { flag: "wx" });
+    expect(fs.statSync(s.out).mode & 0o777).toBe(fs.statSync(control).mode & 0o777);
+    fs.rmSync(control);
+    expect(s.dirEntries()).toEqual(["assignment.json"]);
+  });
+
+  it("a duplicate write is refused by the pre-check: original bytes kept, no temp created", () => {
+    const s = setup();
+    writeTaskAssignmentV2(s.cwd, s.cell.assignment, s.binding);
+    const opened: string[] = [];
+    spy("openSync", ((p: fs.PathLike, ...rest: never[]) => {
+      opened.push(String(p));
+      return (real.openSync as (...a: unknown[]) => number)(p, ...rest);
+    }) as typeof real.openSync);
+    expect(() => writeTaskAssignmentV2(s.cwd, s.cell.assignment, s.binding)).toThrow(/assignment overwrite refused/);
+    expect(opened.filter(s.isTemp)).toEqual([]);
+    expect(fs.readFileSync(s.out, "utf8")).toBe(s.bytes);
+    expect(s.dirEntries()).toEqual(["assignment.json"]);
+  });
+
+  it("a racing publisher that lands between the pre-check and the link wins: EEXIST is the overwrite refusal", () => {
+    const s = setup();
+    const rival = "rival bytes\n";
+    spy("linkSync", ((from: fs.PathLike, to: fs.PathLike) => {
+      if (s.isOut(String(to))) real.writeFileSync(to, rival, { flag: "wx" });
+      return real.linkSync(from, to);
+    }) as typeof real.linkSync);
+    expect(() => writeTaskAssignmentV2(s.cwd, s.cell.assignment, s.binding)).toThrow(/assignment overwrite refused/);
+    expect(fs.readFileSync(s.out, "utf8")).toBe(rival);
+    expect(s.dirEntries()).toEqual(["assignment.json"]);
+  });
+
+  it("a failure before the link publishes nothing and removes only its own temp", () => {
+    const s = setup();
+    fs.mkdirSync(path.dirname(s.out), { recursive: true });
+    const foreign = `${s.out}.0000000000000000.tmp`;
+    fs.writeFileSync(foreign, "someone else's temp");
+    const created: string[] = [];
+    const unlinked: string[] = [];
+    spy("openSync", ((p: fs.PathLike, flags?: fs.OpenMode, ...rest: never[]) => {
+      if (flags === "wx") created.push(String(p));
+      return (real.openSync as (...a: unknown[]) => number)(p, flags, ...rest);
+    }) as typeof real.openSync);
+    spy("unlinkSync", ((p: fs.PathLike) => {
+      unlinked.push(String(p));
+      return real.unlinkSync(p);
+    }) as typeof real.unlinkSync);
+    spy("fsyncSync", (() => {
+      throw errno("EIO");
+    }) as typeof real.fsyncSync);
+    expect(() => writeTaskAssignmentV2(s.cwd, s.cell.assignment, s.binding)).toThrow(/EIO/);
+    expect(fs.existsSync(s.out)).toBe(false);
+    expect(unlinked.length).toBe(1);
+    expect(created).toContain(unlinked[0]);
+    expect(s.dirEntries()).toEqual([path.basename(foreign)]);
+    expect(fs.readFileSync(foreign, "utf8")).toBe("someone else's temp");
+  });
+
+  it("a cleanup fault never masks the original failure", () => {
+    const s = setup();
+    spy("fsyncSync", (() => {
+      throw errno("EIO");
+    }) as typeof real.fsyncSync);
+    spy("unlinkSync", ((p: fs.PathLike) => {
+      if (s.isTemp(String(p))) throw errno("EPERM");
+      return real.unlinkSync(p);
+    }) as typeof real.unlinkSync);
+    expect(() => writeTaskAssignmentV2(s.cwd, s.cell.assignment, s.binding)).toThrow(/EIO/);
+    expect(fs.existsSync(s.out)).toBe(false);
+  });
+
+  it("after the link commits, a temp-cleanup fault keeps the published assignment and the leftover is not an assignment", () => {
+    const s = setup();
+    spy("unlinkSync", ((p: fs.PathLike) => {
+      if (s.isTemp(String(p))) throw errno("EPERM");
+      return real.unlinkSync(p);
+    }) as typeof real.unlinkSync);
+    expect(writeTaskAssignmentV2(s.cwd, s.cell.assignment, s.binding)).toBe(s.out);
+    expect(fs.readFileSync(s.out, "utf8")).toBe(s.bytes);
+    const leftovers = s.dirEntries().filter((n) => n !== "assignment.json");
+    expect(leftovers.length).toBe(1);
+    expect(path.join(path.dirname(s.out), leftovers[0]).endsWith("/assignment.json")).toBe(false);
+  });
+
+  it("after the link commits, a directory-fsync fault throws but never removes the published assignment", () => {
+    const s = setup();
+    spy("fsyncSync", ((fd: number) => {
+      if (fs.fstatSync(fd).isDirectory()) throw errno("EIO");
+      return real.fsyncSync(fd);
+    }) as typeof real.fsyncSync);
+    expect(() => writeTaskAssignmentV2(s.cwd, s.cell.assignment, s.binding)).toThrow(/EIO/);
+    expect(fs.readFileSync(s.out, "utf8")).toBe(s.bytes);
+    expect(s.dirEntries()).toEqual(["assignment.json"]);
   });
 });

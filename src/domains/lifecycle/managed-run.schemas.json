@@ -1,0 +1,773 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guildstack.dev/contracts/guild-stack/p05/v1/managed-run.schema.json",
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "operation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "run_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "attempt_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "launch_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "max_duration_ms": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "nonce_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "source_id",
+        "operation_id",
+        "run_id",
+        "attempt_id",
+        "launch_hash",
+        "max_duration_ms",
+        "nonce_hash"
+      ],
+      "additionalProperties": false
+    },
+    "usage": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "enum": [
+            "unknown",
+            "observed_native_estimate"
+          ]
+        },
+        "cost_usd": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "basis": {
+          "type": "string"
+        },
+        "native_session_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "result_subtype": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cumulative_estimate_usd": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "usage": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "result_sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "parser": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "cost_usd",
+        "basis"
+      ],
+      "additionalProperties": false
+    },
+    "outcome": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "guild.stack.managed_run_outcome.v1"
+        },
+        "source_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "run_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "attempt_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "state": {
+          "enum": [
+            "exited",
+            "cancelled",
+            "timed_out",
+            "recovery_needed"
+          ]
+        },
+        "exit_code": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "signal": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "admitted_at": {
+          "type": "string"
+        },
+        "ended_at": {
+          "type": "string"
+        },
+        "deadline_at": {
+          "type": "string"
+        },
+        "classification": {
+          "enum": [
+            "local_process_test",
+            "qualification_probe",
+            "qualified_host"
+          ]
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "bytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "hashed_bytes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1048576
+            },
+            "retained_bytes": {
+              "const": 0
+            },
+            "prefix_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "bytes",
+            "hashed_bytes",
+            "retained_bytes",
+            "prefix_sha256"
+          ],
+          "additionalProperties": false
+        },
+        "usage": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "enum": [
+                "unknown",
+                "observed_native_estimate"
+              ]
+            },
+            "cost_usd": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "basis": {
+              "type": "string"
+            },
+            "native_session_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "result_subtype": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "cumulative_estimate_usd": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "usage": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "result_sha256": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "parser": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "state",
+            "cost_usd",
+            "basis"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "source_id",
+        "run_id",
+        "attempt_id",
+        "state",
+        "exit_code",
+        "signal",
+        "admitted_at",
+        "ended_at",
+        "deadline_at",
+        "classification",
+        "output",
+        "usage"
+      ],
+      "additionalProperties": false
+    },
+    "intent": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "guild.stack.managed_run_intent.v1"
+        },
+        "source_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "operation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "run_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "attempt_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "launch_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "max_duration_ms": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "nonce_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "deadline_derivation": {
+          "const": "admitted_at + max_duration_ms"
+        },
+        "classification": {
+          "enum": [
+            "local_process_test",
+            "qualification_probe",
+            "qualified_host"
+          ]
+        },
+        "host_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "model": {
+          "type": "string"
+        },
+        "binary_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "budget": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "enum": [
+                "no_model_test",
+                "strict",
+                "native_estimated_spend_threshold"
+              ]
+            },
+            "max_usd": {
+              "type": "number",
+              "minimum": 0
+            },
+            "cost_basis": {
+              "type": "string"
+            },
+            "in_flight_overshoot_possible": {
+              "type": "boolean"
+            },
+            "strict_actual_billing_ceiling": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "mode",
+            "max_usd",
+            "cost_basis",
+            "in_flight_overshoot_possible",
+            "strict_actual_billing_ceiling"
+          ],
+          "additionalProperties": false
+        },
+        "native_session_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "policy_sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "source_id",
+        "operation_id",
+        "run_id",
+        "attempt_id",
+        "launch_hash",
+        "max_duration_ms",
+        "nonce_hash",
+        "deadline_derivation",
+        "classification",
+        "host_id",
+        "model",
+        "binary_sha256",
+        "budget",
+        "native_session_id",
+        "policy_sha256"
+      ],
+      "additionalProperties": false
+    },
+    "private_claim": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "guild.stack.managed_private_claim.v1"
+        },
+        "identity": {
+          "$ref": "#/$defs/identity"
+        },
+        "worker_nonce": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "admitted_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "deadline_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "enum": [
+            "claimed",
+            "running",
+            "recovery_needed",
+            "exited",
+            "cancelled",
+            "timed_out"
+          ]
+        },
+        "worker": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "host": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/outcome"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "identity",
+        "worker_nonce",
+        "admitted_at",
+        "deadline_at",
+        "state",
+        "worker",
+        "host",
+        "outcome"
+      ],
+      "additionalProperties": false
+    },
+    "private_acceptance": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "guild.stack.managed_private_acceptance.v1"
+        },
+        "identity": {
+          "$ref": "#/$defs/identity"
+        },
+        "accepted_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "worker_pid": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "worker_start_identity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "worker": {
+          "type": "object",
+          "properties": {
+            "node_binary": {
+              "type": "string"
+            },
+            "node_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "entry": {
+              "type": "string"
+            },
+            "entry_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "node_binary",
+            "node_sha256",
+            "entry",
+            "entry_sha256"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "identity",
+        "accepted_at",
+        "worker_pid",
+        "worker_start_identity",
+        "worker"
+      ],
+      "additionalProperties": false
+    },
+    "launch": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "guild.stack.managed_launch.v1"
+        },
+        "source_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "run_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "operation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "operation": {
+          "enum": [
+            "run.start",
+            "run.rerun"
+          ]
+        },
+        "attempt_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "classification": {
+          "enum": [
+            "local_process_test",
+            "qualification_probe",
+            "qualified_host"
+          ]
+        },
+        "profile": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "host_binary_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "policy_sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "budget_mode": {
+          "enum": [
+            "strict",
+            "native_estimated_spend_threshold"
+          ]
+        },
+        "cost_basis": {
+          "enum": [
+            "unknown",
+            "api_equivalent_native_estimate"
+          ]
+        },
+        "preview_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "arguments": {
+          "$ref": "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/launch"
+        },
+        "native_session_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "parent_run": {
+          "anyOf": [
+            {
+              "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "parent_attempt_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "launch_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "worker": {
+          "type": "object",
+          "properties": {
+            "node_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "entry_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "node_sha256",
+            "entry_sha256"
+          ],
+          "additionalProperties": false
+        },
+        "budget_semantics": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "source_id",
+        "run_id",
+        "operation_id",
+        "operation",
+        "attempt_id",
+        "classification",
+        "profile",
+        "host_binary_sha256",
+        "policy_sha256",
+        "budget_mode",
+        "cost_basis",
+        "preview_hash",
+        "arguments",
+        "native_session_id",
+        "parent_run",
+        "parent_attempt_id",
+        "launch_hash",
+        "worker",
+        "budget_semantics"
+      ],
+      "additionalProperties": false
+    },
+    "observed_proof": {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "enum": [
+            "run.start",
+            "run.rerun"
+          ]
+        },
+        "operation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "run_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "attempt_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "preview_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "launch_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "outcome_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "intent_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "approval_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "receipt_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "admission_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "operation",
+        "operation_id",
+        "run_id",
+        "attempt_id",
+        "preview_hash",
+        "launch_sha256",
+        "outcome_sha256",
+        "intent_sha256",
+        "approval_sha256",
+        "receipt_sha256",
+        "admission_sha256"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -23,6 +23,7 @@
  *     file (the caller then fails the lane rather than acting on garbage).
  */
 
+import { randomBytes } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import {
@@ -358,14 +359,58 @@ export function writeTaskAssignmentV2(
   assertDispatchBinding(cwd, valid.run_id, binding); // §5 — no descriptor without a valid binding
   const out = writePathUnderCwd(cwd, valid.assignment_path);
   const publicPath = path.resolve(cwd, valid.assignment_path);
-  if (fs.existsSync(out)) {
-    throw new Error(
+  const refused = () =>
+    new Error(
       `assignment overwrite refused at ${valid.assignment_path} — assignments are ` +
         `immutable per (task_run_id, attempt, instance_id) (D6)`
     );
-  }
-  fs.writeFileSync(out, JSON.stringify(valid, null, 2) + "\n", { encoding: "utf8", flag: "wx" });
+  if (fs.existsSync(out)) throw refused();
+  publishExclusive(out, JSON.stringify(valid, null, 2) + "\n", refused);
   return publicPath;
+}
+
+function syncDirectory(dir: string): void {
+  const fd = fs.openSync(dir, "r");
+  try {
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+/**
+ * Exclusive atomic publish (the managed-run `publish` / artifact-bus `casPut`
+ * pattern). Workers treat the assignment's EXISTENCE as readiness, so the final
+ * name must appear only with complete bytes: write and fsync a same-directory
+ * temp, then hard-link it into place. link never replaces, so EEXIST is the
+ * overwrite refusal. The link is the commit point: a later directory-fsync fault
+ * still throws, but nothing ever removes the published assignment. Cleanup only
+ * unlinks the temp this call created (`.tmp` suffix, never `assignment.json`).
+ */
+function publishExclusive(out: string, bytes: string, refused: () => Error): void {
+  const temp = `${out}.${randomBytes(8).toString("hex")}.tmp`;
+  const fd = fs.openSync(temp, "wx");
+  try {
+    try {
+      fs.writeFileSync(fd, bytes, "utf8");
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+    try {
+      fs.linkSync(temp, out);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "EEXIST") throw refused();
+      throw e;
+    }
+    syncDirectory(path.dirname(out));
+  } finally {
+    try {
+      fs.unlinkSync(temp);
+    } catch {
+      /* best effort: a leftover temp is never read as an assignment */
+    }
+  }
 }
 
 /**
@@ -568,7 +613,8 @@ export function assignmentAckPath(ids: {
 export function acknowledgeAssignment(
   cwd: string,
   assignment: TaskAssignmentV2,
-  now: () => string
+  now: () => string,
+  binding?: DispatchBindingEnvelope
 ): string {
   const valid = validateTaskAssignmentV2(assignment);
   if (!valid) {
@@ -577,6 +623,9 @@ export function acknowledgeAssignment(
         "requires a validated assignment (D5)"
     );
   }
+  // CD10: the controller records the ack with its own verified binding. A worker
+  // holds no binding, so it writes an ack CLAIM (writeAckClaim), never this record.
+  assertDispatchBinding(cwd, valid.run_id, binding as DispatchBindingEnvelope);
   const ack: AssignmentAckV1 = {
     schema_version: ASSIGNMENT_ACK_SCHEMA,
     run_id: valid.run_id,
@@ -634,6 +683,7 @@ export function acknowledgeAssignment(
       relativePath,
       hostId: valid.host_id,
       role: "task-cell-runtime",
+      bindingRef: (binding as DispatchBindingEnvelope).binding_ref,
       now: () => ack.acknowledged_at,
     });
     if (published === null) throw new Error(`artifact-bus publish failed for ${kind}:${relativePath}`);

@@ -267,3 +267,19 @@ export {
   type TraceV2Fields,
   writePayloadSidecar,
 } from "./trace-v2";
+
+export * from "./stack-operations";
+
+import stackContractBundleJson from './stack-contracts.generated.json';
+import stackP05SchemasJson from "./stack-p05.schemas.json";
+import stackManagedSchemasJson from "./managed-run.schemas.json";
+import { deepFreeze as deepFreezeStack } from "../kernel";
+/** The generated contract bundle and schemas, deep-frozen at the public index (closed collections). */
+export const stackContractBundle = deepFreezeStack(stackContractBundleJson);
+
+export { loadInitiativeManifest, buildD8Input, checkInitiativeEvidenceRefs, type InitiativeEvidenceCheck, type LoadedManifest, type BuiltD8Input } from "./initiative-evidence";
+export const stackP05Schemas = deepFreezeStack(stackP05SchemasJson);
+
+export * from "./managed-run";
+
+export const stackManagedSchemas = deepFreezeStack(stackManagedSchemasJson);

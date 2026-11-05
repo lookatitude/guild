@@ -102,6 +102,13 @@ export const RUNTIME_USAGE: Readonly<Record<string, string>> = deepFreeze({
     "<station> [--signals <file.json | ->] [--cwd <root>] [--plugin-root <dir>] [--run-id <id> --emit]",
   "task-cell-audit": "--cwd <root> --run-id <id> [--open]",
   "task-cell-team-result": "--cwd <root> --run-id <id> --station <station>",
+  "task-cell-controller":
+    "start --root <abs> --run <id> --phase <station> --worker-trust-policy <cooperative_local|isolated_worker> --lanes <abs> --team-plan <abs> --proposal <abs> [--package-root <abs> --reviewed-basis <abs>]\n       status --root <abs> --run <id> --consumer-policy <cooperative_local|isolated_worker> [--consumer-context same_run|release:<context.json>] [--view-version <v>]\n       record-loss --root <abs> --run <id>\n       approve-oracles --root <abs> --run <id> --phase <station> --decided-by <operator>\n       decide --root <abs> --run <id> --instance <id> --lead-binding-id <id> --decision <accepted|rejected> [--reason <text>]",
+  "task-cell-ack": "--assignment <absolute assignment.json path>",
+  "task-cell-api": LIBRARY,
+  "stack-operations": "--cwd <absolute guild root>   (request JSON on stdin)",
+  "stack-run-worker": "--runtime <absolute private runtime dir> --attempt <attempt-id>",
+  "stack-qualify-host": "--cwd <absolute scratch guild root> --authorization <absolute reviewed-candidate.json>   (request JSON on stdin)",
   "validate-graph": "[--cwd <path>] [--in <path>] [--dry] [--print] [--force]\n       --cwd <path> --stdin",
   "verify-gate-pass": "--result <result-round.json> --artifact <artifact-file> [--packet-id <id>] [--force-pass]",
   "wiki-lint-checks": "[--root <repo>] [--json]",

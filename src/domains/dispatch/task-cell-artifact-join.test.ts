@@ -3,7 +3,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import { sha256 } from ".";
+import { sha256, taskCellPaths } from ".";
 import {
   acknowledgeAssignment,
   buildTaskCell,
@@ -79,7 +79,7 @@ function prepare(cwd: string) {
   };
   const cell = buildTaskCell(input);
   writeTaskCell(cwd, cell, { binding_ref: binding.binding_ref });
-  return { runId, contextRel, cell };
+  return { runId, contextRel, cell, binding: { binding_ref: binding.binding_ref } };
 }
 
 function writeBuildStationArtifacts(cwd: string, runId: string, instanceIds: string[]): void {
@@ -88,7 +88,11 @@ function writeBuildStationArtifacts(cwd: string, runId: string, instanceIds: str
     schema_version: "guild.team_result.v1",
     station: "build",
     team_plan_ref: `.guild/runs/${runId}/team-plan/build.json`,
-    lanes: instanceIds.map((instance_id) => ({ role: "backend", instance_id, handoff_ref: null, acceptance_ref: null })),
+    lanes: instanceIds.map((instance_id) => {
+      const p = taskCellPaths({ run_id: runId, logical_task_id: "T1", attempt: 1, instance_id });
+      const ref = (rel: string) => (fs.existsSync(path.join(cwd, rel)) ? rel : null);
+      return { role: "backend", instance_id, handoff_ref: ref(p.handoff_path), acceptance_ref: ref(p.acceptance_path) };
+    }),
   }, { now: NOW });
 }
 
@@ -159,7 +163,7 @@ describe("TaskCell authoritative artifact join", () => {
 
   it("reconstructs a closed run from bus-linked records without a transcript", () => {
     const cwd = root();
-    const { runId, cell } = prepare(cwd);
+    const { runId, cell, binding } = prepare(cwd);
     const submitted = {
       receipt_id: "receipt-T1",
       receipt_path: cell.assignment.handoff_path,
@@ -168,7 +172,7 @@ describe("TaskCell authoritative artifact join", () => {
       acceptance_tests_passed: ["npm test -- api"],
       submitted_at: NOW(),
     };
-    acknowledgeAssignment(cwd, cell.assignment, NOW);
+    acknowledgeAssignment(cwd, cell.assignment, NOW, binding);
     fs.writeFileSync(
       path.join(cwd, cell.assignment.handoff_path),
       JSON.stringify(submitted, null, 2) + "\n",
@@ -179,7 +183,7 @@ describe("TaskCell authoritative artifact join", () => {
       validationResultId: "validation-T1",
       now: NOW,
     });
-    writeValidationRecord(cwd, validation);
+    writeValidationRecord(cwd, validation, binding);
     const acceptance = buildAcceptance({
       validation,
       acceptancePolicyVersion: "1",
@@ -190,9 +194,10 @@ describe("TaskCell authoritative artifact join", () => {
       ],
       now: NOW,
     });
-    writeAcceptanceRecord(cwd, acceptance);
+    writeAcceptanceRecord(cwd, acceptance, binding);
     sealTerminalAttempt({
       cwd,
+      binding,
       ids: { run_id: runId, logical_task_id: "T1", attempt: 1, instance_id: "T1.a1.i1" },
       terminal_state: "terminated",
       reason: null,

@@ -2447,13 +2447,14 @@ export class TeamDispatchExecutionTransport
     try {
       rawPlan = session.plan(request);
     } catch (err) {
+      // plan() only composes commands; spawn() has not been called.
       return this.observed(
         failedExecutionOutcome<TeamDispatchLaunch>(
           this.transport_id,
           "spawn",
           err,
           "spawn_failed",
-          { dispatch_kind: this.dispatch_kind }
+          { dispatch_kind: this.dispatch_kind, substrate_spawned: false }
         )
       );
     }

@@ -95,7 +95,8 @@ function seedAcceptance(cwd: string, runId: string, logicalTaskId: string, worke
         { authority: "team_lead", decision: "accepted", at: SEED_NOW(), reason: null },
       ],
       now: SEED_NOW,
-    })
+    }),
+    { binding_ref: bindingRef }
   );
 }
 

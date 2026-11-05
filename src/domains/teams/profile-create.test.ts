@@ -33,6 +33,7 @@ const SEAM_CALL = /\bgateProfileCreation\s*\(/;
 /** Reviewed: these name the agents tree and write files, but never create a profile. */
 const NON_CREATING_WRITERS: Record<string, string> = {
   "src/domains/lifecycle/run-lifecycle.ts": "hashes .guild/agents/registry.yaml for the run snapshot; its writes are run records",
+  "src/domains/lifecycle/stack-operations.ts": "reads .guild/agents only to list the read-only component collection; its writes are its operation journal and config/P05 apply targets, and the facade refuses profile create/overwrite/move (tests/e00/e00-stack-profile-boundary-ta.test.ts)",
   "src/domains/state/upgrade-steps.ts": "deletes the DERIVED agents/registry.yaml; never writes a profile",
   "src/domains/state/upgrade-runner.ts": "reads profiles to prove the upgrade left them byte-identical",
   "scripts/lib/capability/profile-emit.ts": "hashes the agents tree before/after Learn; its writes are the capability profile",

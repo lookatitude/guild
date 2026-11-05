@@ -36,10 +36,12 @@ import * as path from "path";
 import { createHash } from "node:crypto";
 
 import {
+  assertWritableBinding,
   hasCanonicalReceiptWrapper,
   readReceiptFrontmatter,
   validateFrozenReceiptDocument,
 } from "../lifecycle";
+import type { DispatchBindingEnvelope } from "./task-assignment";
 import {
   checkContained,
   isRefused,
@@ -73,6 +75,7 @@ import {
   type TaskCellArtifactKind,
 } from "./task-cell-artifact-join";
 import { durableGuildDir } from "../state";
+import { casGet, readBusLog, sha256 as busSha256 } from "./artifact-bus";
 
 // ── Path ids the run-tree records are keyed by (D6) ──────────────────────────
 
@@ -213,22 +216,59 @@ export function publishSubmittedHandoffPointer(input: {
   cwd: string;
   assignment: TaskAssignmentV2;
   submittedAt: string;
+  /** The caller's verified run binding (CD10); absent or invalid throws BindingRejectedError. */
+  binding?: DispatchBindingEnvelope;
 }): SubmittedHandoff | null {
+  const published = publishPointer(input, null);
+  return published.ok ? published.submitted : null;
+}
+
+/**
+ * Module-internal (deliberately not a dispatch index export): publish the pointer for
+ * exactly `scannedBytes`, the receipt bytes the controller already checked. When the
+ * contained lane bytes no longer equal them, nothing is written (receipt_changed); an
+ * existing pointer is never replaced.
+ */
+export function publishScannedHandoffPointer(input: {
+  cwd: string;
+  assignment: TaskAssignmentV2;
+  submittedAt: string;
+  binding: DispatchBindingEnvelope;
+  scannedBytes: Buffer;
+}): { ok: true; submitted: SubmittedHandoff } | { ok: false; reason: "receipt_changed" | "refused" } {
+  return publishPointer(input, input.scannedBytes);
+}
+
+function publishPointer(
+  input: { cwd: string; assignment: TaskAssignmentV2; submittedAt: string; binding?: DispatchBindingEnvelope },
+  scanned: Buffer | null,
+): { ok: true; submitted: SubmittedHandoff } | { ok: false; reason: "receipt_changed" | "refused" } {
   const { cwd, assignment, submittedAt } = input;
+  requireWritableBinding(cwd, assignment.run_id, input.binding);
+  const refused = { ok: false as const, reason: "refused" as const };
+  const changed = { ok: false as const, reason: "receipt_changed" as const };
   const parsedAt = Date.parse(submittedAt);
-  if (!Number.isFinite(parsedAt) || new Date(parsedAt).toISOString() !== submittedAt) return null;
+  if (!Number.isFinite(parsedAt) || new Date(parsedAt).toISOString() !== submittedAt) return refused;
 
   const receiptPath = receiptPathsForAssignment(assignment).lane;
-  const rawBytes = physicallyContainedFileBytes(cwd, receiptPath);
-  if (rawBytes === null) return null;
+  const current = physicallyContainedFileBytes(cwd, receiptPath);
+  if (current === null) return refused;
+  if (scanned !== null && !current.equals(scanned)) return changed;
+  const rawBytes = scanned ?? current;
+  // A scanned publication whose lane bytes moved since the scan is a change, not a plain refusal.
+  const refusedOrChanged = () => {
+    if (scanned === null) return refused;
+    const now = physicallyContainedFileBytes(cwd, receiptPath);
+    return now !== null && now.equals(scanned) ? refused : changed;
+  };
 
   const text = rawBytes.toString("utf8");
   if (
     validateFrozenReceiptDocument(text).status !== "parsed" ||
     !hasCanonicalReceiptWrapper(text)
-  ) return null;
+  ) return refused;
   const frontmatter = readReceiptFrontmatter(text);
-  if (!frontmatter.ok) return null;
+  if (!frontmatter.ok) return refused;
   const changedFiles = receiptChangedFiles(frontmatter.document);
   const passedRefs = passedEvidenceRefs(frontmatter.document);
   const submitted: SubmittedHandoff = {
@@ -239,19 +279,21 @@ export function publishSubmittedHandoffPointer(input: {
     acceptance_tests_passed: assignment.acceptance_tests.filter((test) => passedRefs.has(test)),
     submitted_at: submittedAt,
   };
-  if (!validateSubmittedHandoffReceipt({ cwd, assignment, submitted })) return null;
+  // Re-reads the contained receipt and requires it to hash to receipt_id: for a scanned
+  // publication, the scanned digest, immediately before the exclusive write.
+  if (!validateSubmittedHandoffReceipt({ cwd, assignment, submitted })) return refusedOrChanged();
 
   const prepared = prepareContainedWrite(cwd, assignment.handoff_path, {
     policy: "physical",
     requireRegularFileLeaf: true,
   });
-  if (isRefused(prepared)) return null;
+  if (isRefused(prepared)) return refused;
   const serialized = JSON.stringify(submitted, null, 2) + "\n";
 
   try {
     if (fs.existsSync(prepared.realPath)) {
       const stat = fs.lstatSync(prepared.realPath);
-      if (!stat.isFile() || stat.isSymbolicLink()) return null;
+      if (!stat.isFile() || stat.isSymbolicLink()) return refused;
       const existingBytes = fs.readFileSync(prepared.realPath, "utf8");
       const existing = JSON.parse(existingBytes) as SubmittedHandoff;
       const existingAt = typeof existing.submitted_at === "string"
@@ -261,17 +303,19 @@ export function publishSubmittedHandoffPointer(input: {
         ...submitted,
         submitted_at: existing.submitted_at,
       };
-      return Number.isFinite(existingAt) &&
+      if (
+        Number.isFinite(existingAt) &&
         new Date(existingAt).toISOString() === existing.submitted_at &&
         existingBytes === JSON.stringify(expectedExisting, null, 2) + "\n" &&
         validateSubmittedHandoffReceipt({ cwd, assignment, submitted: existing })
-        ? existing
-        : null;
+      ) return { ok: true, submitted: existing };
+      // The immutable earlier pointer stays; a scanned publication for another digest is a change.
+      return scanned !== null && existing.receipt_id !== submitted.receipt_id ? changed : refused;
     }
     fs.writeFileSync(prepared.realPath, serialized, { encoding: "utf8", flag: "wx", mode: 0o600 });
-    return submitted;
+    return { ok: true, submitted };
   } catch {
-    return null;
+    return refused;
   }
 }
 
@@ -314,12 +358,26 @@ function absUnderCwd(cwd: string, relPath: string): string {
   return path.resolve(cwd, relPath);
 }
 
+/**
+ * The binding gate every lifecycle writer runs BEFORE touching disk (CD10): the
+ * caller presents its verified envelope; nothing here reads binding.json. Throws
+ * BindingRejectedError (absent / not minted / malformed / closed / mismatch).
+ */
+function requireWritableBinding(
+  cwd: string,
+  runId: string,
+  binding: DispatchBindingEnvelope | undefined,
+): string {
+  return assertWritableBinding({ root: cwd, run_id: runId, binding_ref: binding?.binding_ref }).binding_ref;
+}
+
 function publishLifecycleFile(args: {
   cwd: string;
   ids: TaskCellInstanceIds;
   kind: TaskCellArtifactKind;
   relativePath: string;
   at: string;
+  bindingRef: string;
   required?: boolean;
 }): void {
   const instance = (() => {
@@ -337,6 +395,7 @@ function publishLifecycleFile(args: {
     relativePath: args.relativePath,
     hostId: instance?.host_id ?? "unknown-host",
     role: "task-cell-runtime",
+    bindingRef: args.bindingRef,
     now: () => args.at,
   });
   if ((args.required ?? true) && published === null) {
@@ -417,10 +476,15 @@ export function runDeterministicFloor(input: DeterministicFloorInput): HandoffVa
  * (D6 run-tree containment). Idempotent for the same result; a DIFFERENT record at
  * the same path THROWS — a validation result is written once.
  */
-export function writeValidationRecord(cwd: string, validation: HandoffValidationV1): string {
+export function writeValidationRecord(
+  cwd: string,
+  validation: HandoffValidationV1,
+  binding?: DispatchBindingEnvelope,
+): string {
   if (validation.schema_version !== HANDOFF_VALIDATION_SCHEMA) {
     throw new Error("refusing to write a non-guild.handoff_validation.v1 record");
   }
+  const bindingRef = requireWritableBinding(cwd, validation.run_id, binding);
   const paths = taskCellPaths({
     run_id: validation.run_id,
     logical_task_id: validation.logical_task_id,
@@ -444,8 +508,8 @@ export function writeValidationRecord(cwd: string, validation: HandoffValidation
     attempt: validation.attempt,
     instance_id: validation.instance_id,
   };
-  publishLifecycleFile({ cwd, ids, kind: "handoff", relativePath: paths.handoff_path, at: validation.validated_at, required: false });
-  publishLifecycleFile({ cwd, ids, kind: "validation", relativePath: paths.validation_path, at: validation.validated_at });
+  publishLifecycleFile({ cwd, ids, kind: "handoff", relativePath: paths.handoff_path, at: validation.validated_at, bindingRef, required: false });
+  publishLifecycleFile({ cwd, ids, kind: "validation", relativePath: paths.validation_path, at: validation.validated_at, bindingRef });
   return out;
 }
 
@@ -547,10 +611,15 @@ function acceptanceRecord(
  * is the ONLY record that releases downstream / authorizes termination, so it is
  * written once — a differing record at the same path THROWS.
  */
-export function writeAcceptanceRecord(cwd: string, acceptance: HandoffAcceptanceV1): string {
+export function writeAcceptanceRecord(
+  cwd: string,
+  acceptance: HandoffAcceptanceV1,
+  binding?: DispatchBindingEnvelope,
+): string {
   if (acceptance.schema_version !== HANDOFF_ACCEPTANCE_SCHEMA) {
     throw new Error("refusing to write a non-guild.handoff_acceptance.v1 record");
   }
+  const bindingRef = requireWritableBinding(cwd, acceptance.run_id, binding);
   const paths = taskCellPaths({
     run_id: acceptance.run_id,
     logical_task_id: acceptance.logical_task_id,
@@ -579,6 +648,7 @@ export function writeAcceptanceRecord(cwd: string, acceptance: HandoffAcceptance
     kind: "acceptance",
     relativePath: paths.acceptance_path,
     at: acceptance.termination_authorized_at ?? acceptance.downstream_release_at ?? "1970-01-01T00:00:00.000Z",
+    bindingRef,
   });
   return out;
 }
@@ -718,6 +788,8 @@ export interface SealTerminalInput {
   orphaned?: boolean;
   reapAttempts?: number;
   now: () => string;
+  /** The caller's verified run binding (CD6/CD10); checked before any write. */
+  binding?: DispatchBindingEnvelope;
 }
 
 /**
@@ -730,6 +802,7 @@ export interface SealTerminalInput {
  *     state THROWS (a retry must mint a new attempt).
  */
 export function sealTerminalAttempt(input: SealTerminalInput): TaskAttemptV1 {
+  const bindingRef = requireWritableBinding(input.cwd, input.ids.run_id, input.binding);
   const paths = taskCellPaths(input.ids);
   const out = absUnderCwd(input.cwd, paths.attempt_path);
 
@@ -758,7 +831,7 @@ export function sealTerminalAttempt(input: SealTerminalInput): TaskAttemptV1 {
       orphaned: input.orphaned ?? existing.orphaned,
       reap_attempts: input.reapAttempts ?? existing.reap_attempts,
     };
-    return writeTerminalArtifacts(input, paths, writeSealed(out, paths.attempt_path, bookkept));
+    return writeTerminalArtifacts(input, paths, writeSealed(out, paths.attempt_path, bookkept), bindingRef);
   }
 
   const sealed: TaskAttemptV1 = {
@@ -770,13 +843,14 @@ export function sealTerminalAttempt(input: SealTerminalInput): TaskAttemptV1 {
     orphaned: input.orphaned ?? existing.orphaned,
     reap_attempts: input.reapAttempts ?? existing.reap_attempts,
   };
-  return writeTerminalArtifacts(input, paths, writeSealed(out, paths.attempt_path, sealed));
+  return writeTerminalArtifacts(input, paths, writeSealed(out, paths.attempt_path, sealed), bindingRef);
 }
 
 function writeTerminalArtifacts(
   input: SealTerminalInput,
   paths: ReturnType<typeof taskCellPaths>,
   attempt: TaskAttemptV1,
+  bindingRef: string,
 ): TaskAttemptV1 {
   const terminatedAt = attempt.terminated_at ?? input.now();
   const instanceAbs = absUnderCwd(input.cwd, paths.instance_path);
@@ -820,9 +894,9 @@ function writeTerminalArtifacts(
     reap_attempts: attempt.reap_attempts,
   };
   fs.writeFileSync(absUnderCwd(input.cwd, paths.terminal_path), JSON.stringify(terminal, null, 2) + "\n", "utf8");
-  publishLifecycleFile({ cwd: input.cwd, ids: input.ids, kind: "attempt", relativePath: paths.attempt_path, at: terminatedAt });
-  publishLifecycleFile({ cwd: input.cwd, ids: input.ids, kind: "instance", relativePath: paths.instance_path, at: terminatedAt });
-  publishLifecycleFile({ cwd: input.cwd, ids: input.ids, kind: "terminal", relativePath: paths.terminal_path, at: terminatedAt });
+  publishLifecycleFile({ cwd: input.cwd, ids: input.ids, kind: "attempt", relativePath: paths.attempt_path, at: terminatedAt, bindingRef });
+  publishLifecycleFile({ cwd: input.cwd, ids: input.ids, kind: "instance", relativePath: paths.instance_path, at: terminatedAt, bindingRef });
+  publishLifecycleFile({ cwd: input.cwd, ids: input.ids, kind: "terminal", relativePath: paths.terminal_path, at: terminatedAt, bindingRef });
   return attempt;
 }
 
@@ -835,7 +909,9 @@ function writeTerminalArtifacts(
 export function markAttemptOrphaned(
   cwd: string,
   ids: TaskCellInstanceIds,
+  binding?: DispatchBindingEnvelope,
 ): TaskAttemptV1 {
+  const bindingRef = requireWritableBinding(cwd, ids.run_id, binding);
   const paths = taskCellPaths(ids);
   const out = absUnderCwd(cwd, paths.attempt_path);
   let existing: TaskAttemptV1 | null = null;
@@ -865,6 +941,7 @@ export function markAttemptOrphaned(
     kind: "attempt",
     relativePath: paths.attempt_path,
     at: new Date().toISOString(),
+    bindingRef,
   });
   return written;
 }
@@ -877,6 +954,263 @@ function writeSealed(absPath: string, relLabel: string, record: TaskAttemptV1): 
   fs.mkdirSync(path.dirname(absPath), { recursive: true });
   fs.writeFileSync(absPath, JSON.stringify(valid, null, 2) + "\n", "utf8");
   return valid;
+}
+
+// ── CD24 · persisted-record classification + publish-only reconciliation ─────
+//
+// writeAcceptanceRecord, writeValidationRecord and sealTerminalAttempt persist a
+// file and THEN publish it. When publication throws, the file stays on disk and
+// the caller sees an error. These helpers let the controller decide from disk
+// (never from the thrown error) whether the record exists, matches what it
+// intended, and was published; and publish the exact persisted bytes at the
+// current clock without rewriting any payload byte. Existing writers are unchanged.
+
+/** Persisted-record classification (CD24). */
+export type PersistedRecordClass<T> =
+  | { kind: "absent" }
+  | { kind: "persisted_matching"; bytes: Buffer; sha256: string; record: T }
+  | { kind: "persisted_conflicting"; sha256: string; reason: string };
+
+/** The acceptance input recorded in pre.json (CD17a) the persisted record must equal. */
+export interface IntendedAcceptance {
+  acceptance_policy_version: string;
+  authorities_required: AcceptanceAuthority[];
+  authorities_observed: AuthorityDecision[];
+  reviewer_cell_id: string | null;
+  validation_result_id: string;
+  receipt_id: string;
+  assignment_id: string;
+  /** pre.json written_at: the persisted fact time may not be earlier. */
+  not_before: string;
+}
+
+function readExactBytes(cwd: string, relPath: string): Buffer | null | "not_regular" {
+  const abs = absUnderCwd(cwd, relPath);
+  try {
+    const stat = fs.lstatSync(abs);
+    if (!stat.isFile() || stat.isSymbolicLink()) return "not_regular";
+    return fs.readFileSync(abs);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function isIsoInstant(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const t = Date.parse(value);
+  return Number.isFinite(t) && new Date(t).toISOString() === value;
+}
+
+function readValidationOnDisk(cwd: string, ids: TaskCellInstanceIds): HandoffValidationV1 | null {
+  try {
+    const v = JSON.parse(fs.readFileSync(absUnderCwd(cwd, taskCellPaths(ids).validation_path), "utf8")) as HandoffValidationV1;
+    return v.schema_version === HANDOFF_VALIDATION_SCHEMA ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Classify the acceptance at `ids` against the intended acceptance. A persisted
+ * record matches when every byte equals the canonical writer's serialization of
+ * buildAcceptance(intended) over this instance's validation, except that
+ * downstream_release_at and termination_authorized_at carry the persisted fact
+ * time: both equal and not earlier than `not_before`.
+ */
+export function classifyPersistedAcceptance(
+  cwd: string,
+  ids: TaskCellInstanceIds,
+  intended: IntendedAcceptance,
+): PersistedRecordClass<HandoffAcceptanceV1> {
+  const bytes = readExactBytes(cwd, taskCellPaths(ids).acceptance_path);
+  if (bytes === null) return { kind: "absent" };
+  if (bytes === "not_regular") return { kind: "persisted_conflicting", sha256: "", reason: "acceptance_not_regular_file" };
+  const digest = busSha256(bytes);
+  const conflict = (reason: string): PersistedRecordClass<HandoffAcceptanceV1> => ({ kind: "persisted_conflicting", sha256: digest, reason });
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(bytes.toString("utf8")) as Record<string, unknown>;
+  } catch {
+    return conflict("acceptance_unparseable");
+  }
+  const at = parsed["termination_authorized_at"];
+  if (!isIsoInstant(at) || parsed["downstream_release_at"] !== at) return conflict("acceptance_fact_time_invalid");
+  if (!isIsoInstant(intended.not_before) || Date.parse(at) < Date.parse(intended.not_before)) {
+    return conflict("acceptance_fact_time_before_preflight");
+  }
+  const validation = readValidationOnDisk(cwd, ids);
+  if (
+    !validation ||
+    validation.run_id !== ids.run_id ||
+    validation.logical_task_id !== ids.logical_task_id ||
+    validation.attempt !== ids.attempt ||
+    validation.instance_id !== ids.instance_id ||
+    validation.validation_result_id !== intended.validation_result_id ||
+    validation.receipt_id !== intended.receipt_id ||
+    validation.assignment_id !== intended.assignment_id
+  ) return conflict("acceptance_validation_join_mismatch");
+  const expected = acceptanceRecord(
+    {
+      validation,
+      acceptancePolicyVersion: intended.acceptance_policy_version,
+      authoritiesRequired: intended.authorities_required,
+      authoritiesObserved: intended.authorities_observed,
+      reviewerCellId: intended.reviewer_cell_id,
+      now: () => at,
+    },
+    at,
+    at,
+  );
+  if (JSON.stringify(expected, null, 2) + "\n" !== bytes.toString("utf8")) return conflict("acceptance_bytes_differ");
+  return { kind: "persisted_matching", bytes, sha256: digest, record: expected };
+}
+
+/** Classify the validation at `ids` against the controller's in-memory result (exact bytes). */
+export function classifyPersistedValidation(
+  cwd: string,
+  ids: TaskCellInstanceIds,
+  expected: HandoffValidationV1,
+): PersistedRecordClass<HandoffValidationV1> {
+  const bytes = readExactBytes(cwd, taskCellPaths(ids).validation_path);
+  if (bytes === null) return { kind: "absent" };
+  if (bytes === "not_regular") return { kind: "persisted_conflicting", sha256: "", reason: "validation_not_regular_file" };
+  const digest = busSha256(bytes);
+  if (
+    expected.run_id !== ids.run_id || expected.instance_id !== ids.instance_id ||
+    JSON.stringify(expected, null, 2) + "\n" !== bytes.toString("utf8")
+  ) return { kind: "persisted_conflicting", sha256: digest, reason: "validation_bytes_differ" };
+  return { kind: "persisted_matching", bytes, sha256: digest, record: expected };
+}
+
+/** The seal request a terminal record must match (CD24). */
+export interface IntendedTerminal {
+  terminal_state: TerminalState;
+  reason: string | null;
+  /** The controller clock before the seal: when given, terminated_at may not be earlier. */
+  not_before?: string;
+}
+
+/**
+ * Classify the terminal seal at `ids`: attempt immutable with the requested
+ * state and reason, instance and terminal.json agreeing on state and
+ * terminated_at. `bytes` / `sha256` are the terminal.json record's.
+ */
+export function classifyPersistedTerminal(
+  cwd: string,
+  ids: TaskCellInstanceIds,
+  intended: IntendedTerminal,
+): PersistedRecordClass<TaskAttemptV1> {
+  const paths = taskCellPaths(ids);
+  const terminalBytes = readExactBytes(cwd, paths.terminal_path);
+  const attempt = readAttemptForInstance(cwd, ids);
+  if (terminalBytes === null && (!attempt || attempt.terminal_state === null)) return { kind: "absent" };
+  if (terminalBytes === null || terminalBytes === "not_regular") {
+    return { kind: "persisted_conflicting", sha256: "", reason: "terminal_record_missing_or_irregular" };
+  }
+  const digest = busSha256(terminalBytes);
+  const conflict = (reason: string): PersistedRecordClass<TaskAttemptV1> => ({ kind: "persisted_conflicting", sha256: digest, reason });
+  if (!attempt || !attempt.immutable || attempt.terminal_state !== intended.terminal_state || attempt.terminal_reason !== intended.reason) {
+    return conflict("terminal_attempt_mismatch");
+  }
+  if (!isIsoInstant(attempt.terminated_at)) return conflict("terminal_fact_time_invalid");
+  if (intended.not_before !== undefined &&
+      (!isIsoInstant(intended.not_before) || Date.parse(attempt.terminated_at) < Date.parse(intended.not_before))) {
+    return conflict("terminal_fact_time_before_request");
+  }
+  let terminal: Record<string, unknown>;
+  let instance: ReturnType<typeof validateAgentInstanceV1>;
+  try {
+    terminal = JSON.parse(terminalBytes.toString("utf8")) as Record<string, unknown>;
+    instance = validateAgentInstanceV1(JSON.parse(fs.readFileSync(absUnderCwd(cwd, paths.instance_path), "utf8")));
+  } catch {
+    return conflict("terminal_unparseable");
+  }
+  if (
+    terminal["schema_version"] !== TASK_CELL_TERMINAL_SCHEMA ||
+    terminal["instance_id"] !== ids.instance_id ||
+    terminal["terminal_state"] !== attempt.terminal_state ||
+    terminal["terminated_at"] !== attempt.terminated_at ||
+    !instance || instance.terminal_state !== attempt.terminal_state || instance.terminated_at !== attempt.terminated_at
+  ) return conflict("terminal_records_disagree");
+  return { kind: "persisted_matching", bytes: terminalBytes, sha256: digest, record: attempt };
+}
+
+/** Lifecycle kinds publishPersistedLifecycleRecord may republish (no new kind). */
+export type PersistedLifecycleKind = "acceptance" | "validation" | "handoff" | "attempt" | "instance" | "terminal";
+
+export interface PersistedPublication {
+  ok: true;
+  outcome: "published" | "already_published";
+  kind: PersistedLifecycleKind;
+  path: string;
+  sha256: string;
+  bus_seq: number;
+  /** The reconciliation clock this call used (never a fact time). */
+  reconciled_at: string;
+  cas_created_at: string | null;
+  cas_preexisting: boolean;
+}
+
+function persistedPathFor(ids: TaskCellInstanceIds, kind: PersistedLifecycleKind): string {
+  const p = taskCellPaths(ids);
+  switch (kind) {
+    case "acceptance": return p.acceptance_path;
+    case "validation": return p.validation_path;
+    case "handoff": return p.handoff_path;
+    case "attempt": return p.attempt_path;
+    case "instance": return p.instance_path;
+    case "terminal": return p.terminal_path;
+  }
+}
+
+/**
+ * Publish the exact on-disk bytes of one persisted lifecycle record (CD24).
+ * Returns already_published when the bus already holds an artifact.published
+ * event for the same path and sha256; otherwise publishes at `now()` (the
+ * reconciliation clock), so the new bus event is never backdated. The payload
+ * is read, never rewritten. A pre-existing CAS header keeps its first-creation
+ * created_at. Throws BindingRejectedError on an unverified binding, and an
+ * Error when the file is absent or publication fails.
+ */
+export function publishPersistedLifecycleRecord(
+  cwd: string,
+  ids: TaskCellInstanceIds,
+  kind: PersistedLifecycleKind,
+  binding: DispatchBindingEnvelope | undefined,
+  now: () => string,
+): PersistedPublication {
+  const bindingRef = requireWritableBinding(cwd, ids.run_id, binding);
+  const relativePath = persistedPathFor(ids, kind);
+  const bytes = readExactBytes(cwd, relativePath);
+  if (bytes === null || bytes === "not_regular") {
+    throw new Error(`no persisted regular ${kind} record at ${relativePath} to publish`);
+  }
+  const digest = busSha256(bytes);
+  const runDirAbs = path.join(durableGuildDir(cwd), "runs", ids.run_id);
+  const prior = readBusLog(runDirAbs).filter(
+    (e) => e.event === "artifact.published" && e.path === relativePath && e.sha256 === digest,
+  );
+  const at = now();
+  const casBefore = casGet(runDirAbs, digest);
+  if (prior.length > 0) {
+    return {
+      ok: true, outcome: "already_published", kind, path: relativePath, sha256: digest,
+      bus_seq: prior[prior.length - 1].seq, reconciled_at: at,
+      cas_created_at: casBefore?.created_at ?? null, cas_preexisting: casBefore !== null,
+    };
+  }
+  publishLifecycleFile({ cwd, ids, kind, relativePath, at, bindingRef });
+  const events = readBusLog(runDirAbs).filter(
+    (e) => e.event === "artifact.published" && e.path === relativePath && e.sha256 === digest,
+  );
+  if (events.length === 0) throw new Error(`artifact-bus publish left no event for ${kind}:${relativePath}`);
+  const casAfter = casGet(runDirAbs, digest);
+  return {
+    ok: true, outcome: "published", kind, path: relativePath, sha256: digest,
+    bus_seq: events[events.length - 1].seq, reconciled_at: at,
+    cas_created_at: casAfter?.created_at ?? null, cas_preexisting: casBefore !== null,
+  };
 }
 
 // ── run-tree enumerators (shared walk) ───────────────────────────────────────

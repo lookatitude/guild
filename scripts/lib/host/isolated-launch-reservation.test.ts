@@ -59,6 +59,10 @@ function recordingRun(): { run: RunFn; calls: string[][] } {
   const calls: string[][] = [];
   const run: RunFn = (_cmd, args) => {
     calls.push(args);
+    // The pre-create credential probe: tmux's exact answer for an unset variable.
+    if (args.length === 3 && args[0] === "show-environment" && args[1] === "-g" && args[2] === "GUILD_RUN_BINDING_REF") {
+      return { status: 1, stdout: "", stderr: "unknown variable: GUILD_RUN_BINDING_REF\n" };
+    }
     return { status: 0, stdout: "", stderr: "" };
   };
   return { run, calls };

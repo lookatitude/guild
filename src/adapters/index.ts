@@ -113,3 +113,7 @@ export {
 
 // Session-start surface projection (KTD31).
 export { projectSurfaces, type SurfaceProjection } from "./session-start";
+
+export { ManagedNodeProcessPort, ManagedLocalControlPort, requestManagedControl, launchManagedWorker, inspectManagedWorker } from "./managed-node-process";
+
+export { buildManagedClaudeLaunch, createManagedClaudeParser, MANAGED_CLAUDE_PROFILE, createManagedClaudeRuntime, loadManagedClaudeRuntime } from "./managed-claude";

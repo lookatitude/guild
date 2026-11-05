@@ -112,6 +112,33 @@ function makeLaunchableTmuxBin(root: string): string {
       '  -V) echo "tmux 3.4 (fake)"; exit 0;;',
       "  has-session) exit 1;;",
       "  list-windows) exit 0;;",
+      // The backend's pre/post-create credential probe: tmux's canonical answer for an unset
+      // variable, for the exact global and session (-t) queries only. Any other show-environment form stays an
+      // empty status-0 answer, which the backend refuses as unverifiable.
+      "  show-environment)",
+      `    printf '%s\\n' "$*" >> ${JSON.stringify(logPath)}`,
+      '    if { [ "$#" -eq 3 ] && [ "$2" = "-g" ] && [ "$3" = "GUILD_RUN_BINDING_REF" ]; } || { [ "$#" -eq 4 ] && [ "$2" = "-t" ] && [ "$4" = "GUILD_RUN_BINDING_REF" ]; } || { [ "$#" -eq 2 ] && [ "$2" = "GUILD_RUN_BINDING_REF" ]; }; then',
+      "      printf 'unknown variable: GUILD_RUN_BINDING_REF\\n' >&2; exit 1",
+      "    fi",
+      "    exit 0;;",
+      // A create that asks for the creating server's identity gets a synthetic one in that format.
+      "  new-session|new-window)",
+      `    printf '%s\\n' "$*" >> ${JSON.stringify(logPath)}`,
+      `    case " $* " in *" -P -F #{session_id} #{window_id} #{pid} #{start_time} "*) printf '$1 @1 4242 1700000000\\n';; esac`,
+      "    exit 0;;",
+      // Pane titles set during the launch, replayed by the creating-server pane listing below.
+      "  select-pane)",
+      `    printf '%s\\n' "$*" >> ${JSON.stringify(logPath)}`,
+      `    if [ "$#" -eq 3 ] && [ "$2" = "-T" ]; then printf '%s\\n' "$3" >> ${JSON.stringify(`${logPath}.panes`)}; fi`,
+      "    exit 0;;",
+      // Only the exact capture query of the created window lists panes; the pane pid is this
+      // fake's live parent (the launcher) so the production ps start-time read observes a real process.
+      "  list-panes)",
+      `    printf '%s\\n' "$*" >> ${JSON.stringify(logPath)}`,
+      `    if [ "$#" -eq 5 ] && [ "$2" = "-t" ] && [ "$3" = "@1" ] && [ "$4" = "-F" ] && [ "$5" = "#{pid} #{start_time} #{window_id} #{pane_id} #{pane_pid} #{pane_title}" ] && [ -f ${JSON.stringify(`${logPath}.panes`)} ]; then`,
+      `      i=0; while IFS= read -r t; do printf '4242 1700000000 @1 %%%s %s %s\\n' "$i" "$PPID" "$t"; i=$((i+1)); done < ${JSON.stringify(`${logPath}.panes`)}`,
+      "    fi",
+      "    exit 0;;",
       `  *) printf '%s\\n' "$*" >> ${JSON.stringify(logPath)}; exit 0;;`,
       "esac",
       "",

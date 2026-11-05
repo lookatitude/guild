@@ -164,9 +164,12 @@ function writeHostManifest(cwd: string, hostId: string, hostKind: "claude" | "co
 
 /**
  * Stub `tmux` that also answers `list-panes` with the orchestrator + one pane
- * per fixture specialist, in the exact `#{pane_index}\t#{pane_id}\t#{pane_title}`
- * shape TmuxTeamBackend.spawn() asks for. `%%` is printf's literal `%`, so the
- * ids materialize as %0/%1/%2/%3 — real tmux pane ids.
+ * per fixture specialist, in the exact
+ * `#{pid} #{start_time} #{window_id} #{pane_id} #{pane_pid} #{pane_title}` shape
+ * TmuxTeamBackend.spawn() asks the creating server for. `%%` is printf's literal
+ * `%`, so the ids materialize as %0/%1/%2/%3 — real tmux pane ids. The server
+ * (77, start 1793000000) is the one the create command prints; each pane process
+ * is the live launcher ($PPID), so `ps` observes a real pid and start.
  */
 function makeFakeTmuxBin(tmpDir: string): string {
   const binDir = path.join(tmpDir, "fakebin");
@@ -175,12 +178,18 @@ function makeFakeTmuxBin(tmpDir: string): string {
     path.join(binDir, "tmux"),
     [
       "#!/bin/sh",
+      // The global and created-session credential probes: tmux's exact answer for an unset variable.
+      'if [ "$1" = show-environment ] && { { [ "$#" -eq 3 ] && [ "$2" = -g ] && [ "$3" = GUILD_RUN_BINDING_REF ]; } || { [ "$#" -eq 4 ] && [ "$2" = -t ] && [ "$4" = GUILD_RUN_BINDING_REF ]; } || { [ "$#" -eq 2 ] && [ "$2" = GUILD_RUN_BINDING_REF ]; }; }; then',
+      '  echo "unknown variable: GUILD_RUN_BINDING_REF" >&2; exit 1',
+      "fi",
       'case "$1" in',
       '  -V) echo "tmux 3.4 (fake)"; exit 0;;',
       "  list-windows) printf 'other-window\\n'; exit 0;;",
+      // The creating command prints its identity (CREATE_IDENTITY_FORMAT).
+      "  new-session|new-window) printf '$1 @1 77 1793000000\\n'; exit 0;;",
       // Pane titles are TaskCell DISPATCH KEYS (role--task--a1) since the
       // per-task expansion — not bare role names.
-      "  list-panes) printf '0\\t%%0\\torchestrator\\n1\\t%%1\\tarchitect--architect--a1\\n2\\t%%2\\tbackend--backend--a1\\n3\\t%%3\\tqa--qa--a1\\n'; exit 0;;",
+      "  list-panes) printf '77 1793000000 @1 %%0 %s orchestrator\\n77 1793000000 @1 %%1 %s architect--architect--a1\\n77 1793000000 @1 %%2 %s backend--backend--a1\\n77 1793000000 @1 %%3 %s qa--qa--a1\\n' \"$PPID\" \"$PPID\" \"$PPID\" \"$PPID\"; exit 0;;",
       '  display-message) echo "fake-session"; exit 0;;',
       "  *) exit 0;;",
       "esac",
