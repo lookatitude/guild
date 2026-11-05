@@ -307,29 +307,29 @@ export function validateRunAnalysisV2(value: unknown): Verdict {
   analysisShape(value, "$", errors);
   if (errors.length) return verdict(errors);
   const v = value as RunAnalysisV2;
-  const require = (ok: boolean, msg: string) => { if (!ok) errors.push(msg); };
-  require(v.metrics.length === 0, "nested metric series are not verified by this reader");
+  const assertRule = (ok: boolean, msg: string) => { if (!ok) errors.push(msg); };
+  assertRule(v.metrics.length === 0, "nested metric series are not verified by this reader");
   const ids = new Set<string>();
   for (const u of v.usage) {
-    usageRules(u, require);
-    require(!ids.has(u.accounting_identity), "duplicate accounting identity; normalized ledger keeps only current observation");
+    usageRules(u, assertRule);
+    assertRule(!ids.has(u.accounting_identity), "duplicate accounting identity; normalized ledger keeps only current observation");
     ids.add(u.accounting_identity);
-    require(u.inclusion !== "parent_inclusive", "normalized usage cannot bill parent-inclusive counters");
+    assertRule(u.inclusion !== "parent_inclusive", "normalized usage cannot bill parent-inclusive counters");
   }
   const sessions = new Set(v.usage.filter((u) => u.granularity === "native_session").map((u) => u.accounting_identity));
-  require(!v.usage.some((u) => u.granularity === "leaf_request" && u.parent_accounting_identity !== null && sessions.has(u.parent_accounting_identity)), "normalized ledger cannot overlap session and leaf scopes");
-  queryRules(v.query, require);
-  if (v.state.outcome === "succeeded") require(v.state.acceptance === "verified", "success requires verified acceptance");
-  if (v.state.lifecycle === "closed") require(v.state.outcome !== "pending" && v.state.outcome !== "unknown", "closed cannot have pending/unknown outcome");
+  assertRule(!v.usage.some((u) => u.granularity === "leaf_request" && u.parent_accounting_identity !== null && sessions.has(u.parent_accounting_identity)), "normalized ledger cannot overlap session and leaf scopes");
+  queryRules(v.query, assertRule);
+  if (v.state.outcome === "succeeded") assertRule(v.state.acceptance === "verified", "success requires verified acceptance");
+  if (v.state.lifecycle === "closed") assertRule(v.state.outcome !== "pending" && v.state.outcome !== "unknown", "closed cannot have pending/unknown outcome");
   const sources = v.query.snapshot.source_ids;
-  require(v.run.kind === "run" && sources.includes(v.run.source_id), "analysis source/run mismatch");
-  require(v.input_evidence.every((x) => sources.includes(x.source_id)), "analysis input evidence outside query snapshot sources");
+  assertRule(v.run.kind === "run" && sources.includes(v.run.source_id), "analysis source/run mismatch");
+  assertRule(v.input_evidence.every((x) => sources.includes(x.source_id)), "analysis input evidence outside query snapshot sources");
   return verdict(errors);
 }
 
-function queryRules(q: QueryIdentity, require: (ok: boolean, msg: string) => void): void {
-  require(snapshotGenerationsOwned(q), "snapshot source/generation identity mismatch");
-  require(compareTraceInstants(q.window.from, q.window.to) < 0, "window must be nonempty half-open [from,to)");
+function queryRules(q: QueryIdentity, assertRule: (ok: boolean, msg: string) => void): void {
+  assertRule(snapshotGenerationsOwned(q), "snapshot source/generation identity mismatch");
+  assertRule(compareTraceInstants(q.window.from, q.window.to) < 0, "window must be nonempty half-open [from,to)");
 }
 
 function snapshotGenerationsOwned(q: QueryIdentity): boolean {
@@ -342,19 +342,19 @@ export function validateRunComparisonV2(value: unknown): Verdict {
   comparisonShape(value, "$", errors);
   if (errors.length) return verdict(errors);
   const v = value as RunComparisonV2;
-  const require = (ok: boolean, msg: string) => { if (!ok) errors.push(msg); };
-  require(v.metrics.length === 0, "nested metric series are not verified by this reader");
+  const assertRule = (ok: boolean, msg: string) => { if (!ok) errors.push(msg); };
+  assertRule(v.metrics.length === 0, "nested metric series are not verified by this reader");
   const keys = v.runs.map((x) => `${x.source_id}\u0000${x.id}`);
-  require(new Set(keys).size === keys.length, "duplicate compared run");
-  require(v.runs.length === v.analysis_refs.length && v.runs.length === v.input_versions.length, "comparison input cardinality mismatch");
-  queryRules(v.query, require);
+  assertRule(new Set(keys).size === keys.length, "duplicate compared run");
+  assertRule(v.runs.length === v.analysis_refs.length && v.runs.length === v.input_versions.length, "comparison input cardinality mismatch");
+  queryRules(v.query, assertRule);
   const sources = v.query.snapshot.source_ids;
-  require([...v.runs, ...v.analysis_refs].every((x) => sources.includes(x.source_id)), "comparison run or analysis ref outside query snapshot sources");
+  assertRule([...v.runs, ...v.analysis_refs].every((x) => sources.includes(x.source_id)), "comparison run or analysis ref outside query snapshot sources");
   if (v.compatibility === "compatible") {
-    require(v.analysis_refs.every((e) => e.schema_version === RUN_ANALYSIS_V2_SCHEMA) && v.input_versions.every((x) => canonical(x) === canonical(v.query.versions)),
+    assertRule(v.analysis_refs.every((e) => e.schema_version === RUN_ANALYSIS_V2_SCHEMA) && v.input_versions.every((x) => canonical(x) === canonical(v.query.versions)),
       "incompatible analysis schema/normalizer/semantics/pricing versions cannot be ranked");
   }
-  require((v.compatibility === "compatible") === (v.refusal_reasons.length === 0), "comparison refusal state mismatch");
+  assertRule((v.compatibility === "compatible") === (v.refusal_reasons.length === 0), "comparison refusal state mismatch");
   return verdict(errors);
 }
 
