@@ -37,7 +37,11 @@ const panePid = (shim: ReturnType<typeof shimRoot>["shim"]) => Number((tmuxOn(sh
 
 /** Server processes whose argv names this exact socket, from the process table. */
 function serversFor(socket: string): Array<{ pid: number; start: string }> {
-  return (listProcesses() ?? []).filter((r) => argvNamesSocket(r.command, socket)).map((r) => ({ pid: r.pid, start: r.start }));
+  const seen = (listProcesses() ?? []).filter((r) => argvNamesSocket(r.command, socket)).map((r) => ({ pid: r.pid, start: r.start }));
+  // The forking client carries the same argv for a moment after `new-session -d`
+  // (visible on Linux): only processes still alive after a short settle are servers.
+  Bun.sleepSync(250);
+  return alive(seen);
 }
 
 async function killExact(ids: Array<{ pid: number; start: string }>): Promise<void> {
