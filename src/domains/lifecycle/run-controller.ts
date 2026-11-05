@@ -150,7 +150,7 @@ export interface JournalEntry {
   schema_version: typeof CONTROLLER_JOURNAL_SCHEMA;
   seq: number;
   prev_mac: string;
-  kind: "genesis" | "epoch_open" | "suspend" | "writer_grant" | "attempt_grant" | "admission" | "control" | "observation" | "artifact_bind" | "commit";
+  kind: "genesis" | "epoch_open" | "suspend" | "writer_grant" | "attempt_grant" | "admission" | "control" | "observation" | "artifact_bind" | "commit" | "extension";
   epoch: number;
   at_ms: number;
   body: Record<string, unknown>;
@@ -187,6 +187,16 @@ export interface OpenControllerOptions {
   pidAlive?: (pid: number) => boolean;
   /** Upper bound of observation files examined per collect call; traversal resumes after the last one. */
   maxObservationsPerCollect?: number;
+  /** R03 hook: trusted gate run before an attempt grant is issued or re-delivered; throws to refuse. */
+  attemptGate?: (req: { execution_id: string; attempt_id: string; scope_hash: string }, records: readonly ExtensionRecord[]) => void;
+}
+
+/** R03 hook: a committed `extension` journal entry (owner-defined body, keyed and epoch-fenced like any control write). */
+export interface ExtensionRecord {
+  seq: number;
+  epoch: number;
+  at_ms: number;
+  body: Record<string, unknown>;
 }
 
 // ── primitives ───────────────────────────────────────────────────────────────
@@ -527,6 +537,19 @@ export interface RunController {
   setAdmission(grant: WriterGrant, execution_id: string, state: Exclude<AdmissionState, "active">): void;
   collectObservations(): CollectReport;
   bindArtifact(grant: WriterGrant, a: { kind: ArtifactKind; id: string; text: string }): { kind: ArtifactKind; id: string; sha256: string };
+  // ── R03 hooks (worker ingress) ──
+  /** Refuse unless this controller may write now; with a grant, also unless it is a current-epoch writer grant. */
+  assertWritable(grant?: WriterGrant): void;
+  /** Journal an owner-defined record under a current-epoch writer grant. */
+  extend(grant: WriterGrant, body: Record<string, unknown>): ExtensionRecord;
+  /** Committed extension records, oldest first, after folding any newer journal entries. */
+  extensionRecords(): ExtensionRecord[];
+  /** Committed claims of an attempt grant, or undefined. */
+  attemptClaims(grant_id: string): AttemptGrantClaims | undefined;
+  /** HMAC of `message` under the attempt's worker secret; the secret itself never leaves the controller. */
+  attemptMac(grant_id: string, message: string): string;
+  /** Effective admission of an attempt grant's execution (explicit state, else epoch-derived). */
+  attemptAdmission(grant_id: string): AdmissionState | undefined;
 }
 
 /** Open the run's controller on this host, advancing the epoch. Throws ControllerRefusal. */
@@ -704,6 +727,12 @@ export function openRunController(opts: OpenControllerOptions): RunController {
     publishDurable(durableRoot, receiptRel(r.operation_id), bytes, "receipt_conflict");
     return sha256(bytes);
   };
+  const extensionRecords = (): ExtensionRecord[] => {
+    loadJournal(privateDir, k, view);
+    const committed = new Set(view.entries.filter((x) => x.kind === "commit").map((x) => Number(x.body.target_seq)));
+    return view.entries.filter((e) => e.kind === "extension" && committed.has(e.seq))
+      .map((e) => ({ seq: e.seq, epoch: e.epoch, at_ms: e.at_ms, body: structuredClone(e.body.ext as Record<string, unknown>) }));
+  };
   const receiptBytes = (r: ControlReceipt) => Buffer.from(`${JSON.stringify(r, null, 2)}\n`, "utf8");
 
   return {
@@ -752,6 +781,7 @@ export function openRunController(opts: OpenControllerOptions): RunController {
       const adm = view.admission.get(execution_id);
       if (adm === "revoked" || adm === "sealed") throw new ControllerRefusal("admission_closed", `execution ${execution_id} is ${adm}`);
       const scope_hash = sha256(canonical({ scope: requireId(req.scope, "scope") }));
+      opts.attemptGate?.({ execution_id, attempt_id, scope_hash }, extensionRecords());
       if (view.attempts.has(attempt_id)) {
         // Immutable: an identical request re-delivers the committed grant (crash before delivery); anything else refuses.
         const prior = [...view.attemptGrants.values()].find((g) => g.attempt_id === attempt_id);
@@ -892,6 +922,38 @@ export function openRunController(opts: OpenControllerOptions): RunController {
       const digest = sha256(Buffer.from(a.text, "utf8"));
       write("artifact_bind", { kind: a.kind, id, sha256: digest, claimed_hash: claimed });
       return { kind: a.kind, id, sha256: digest };
+    },
+
+    assertWritable(grant) { assertLive(); if (grant !== undefined) checkWriter(grant); },
+
+    extend(grant, body) {
+      assertLive();
+      checkWriter(grant);
+      if (!isObj(body)) throw new ControllerRefusal("request_invalid", "extension body must be an object");
+      canonical(body);
+      const e = write("extension", { ext: body });
+      return { seq: e.seq, epoch: e.epoch, at_ms: e.at_ms, body: structuredClone(body) };
+    },
+
+    extensionRecords,
+
+    attemptClaims(grant_id) {
+      const g = view.attemptGrants.get(grant_id);
+      if (!g) return undefined;
+      const { claims_hash: _h, ...claims } = g;
+      return claims;
+    },
+
+    attemptAdmission(grant_id) {
+      const g = view.attemptGrants.get(grant_id);
+      return g ? effectiveAdmission(g) : undefined;
+    },
+
+    attemptMac(grant_id, message) {
+      const g = view.attemptGrants.get(grant_id);
+      if (!g) throw new ControllerRefusal("request_invalid", `unknown attempt grant ${grant_id}`);
+      const { claims_hash: _h, ...claims } = g;
+      return hmac(workerSecret(claims), message);
     },
   };
 }
