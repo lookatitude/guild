@@ -1915,6 +1915,9 @@ const KTD29_DEEP_IMPORTS: ReadonlyMap<string, readonly string[]> = new Map<strin
   ["scripts/stack-operations.ts", ["lifecycle/stack-contract-reader"]],
   ["scripts/lib/stack-contract-reader-validator.ts", ["lifecycle/stack-contracts.v2.generated.json"]],
   ["scripts/lib/stack-contract-reader.test.ts", ["lifecycle/stack-contract-reader", "lifecycle/stack-contracts.v2.generated.json"]],
+  // T01: the AT19/AT20 test drives the R01 records (lifecycle-internal) into the
+  // trace capture, which stays off the telemetry index until activation.
+  ["src/domains/lifecycle/trace-capture.test.ts", ["telemetry/trace-capture-v3"]],
 ]);
 
 const CHECKS: Check[] = [

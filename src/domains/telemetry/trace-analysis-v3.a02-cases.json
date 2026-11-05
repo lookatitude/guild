@@ -1,0 +1,1060 @@
+{
+ "schema_version": "guild.t01.a02_fixture_subset.v1",
+ "note": "Derived subset of the frozen A02 contract fixtures for trace-analysis v3. Do not hand-edit; trace-analysis-v3.test.ts re-derives it from contracts/guild-stack/v2 when that checkout is present.",
+ "source": {
+  "bundle": "contracts/guild-stack/v2/contract-bundle.json",
+  "bundle_sha256": "sha256:05833d374acb729cad021bb7a54141d67f1429fcaaca112b6fa29a10d3ec7d94",
+  "cases_sha256": "sha256:6bcdb72135d90e9e18dfed1ed720bc80c50c344428a3046a594a9501a72c7763",
+  "regressions_sha256": "sha256:18ef72473b5101bddb3f1263ad086b951509dfbf8d57e9807ee55d0f1374b69c"
+ },
+ "schemas": [
+  "trace-analysis"
+ ],
+ "cases": [
+  {
+   "id": "trace-analysis-valid",
+   "origin": "cases",
+   "schema": "trace-analysis",
+   "valid": true,
+   "expected_errors": [],
+   "instance": {
+    "schema_version": "guild.trace.analysis.v3",
+    "event_id": "event-1",
+    "sequence": 1,
+    "event_class": "request_completed",
+    "at": "2026-10-26T00:00:20Z",
+    "lineage": {
+     "source_id": "source-a",
+     "run_id": "run-20261026-000000-demo",
+     "execution_id": "exec-1",
+     "host_session_id": "host-session-1",
+     "initiative_id": null,
+     "goal_id": null,
+     "logical_task_id": null,
+     "attempt_id": null,
+     "agent_instance_id": null,
+     "request_id": "request-1"
+    },
+    "operation_id": "op-1",
+    "component_invocation_id": null,
+    "actor_id": "agent-1",
+    "pins": {
+     "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "requested_model": "requested-model",
+    "observed_identity": {
+     "provider": "provider",
+     "model": "observed-model",
+     "status": "observed",
+     "reason": null
+    },
+    "usage": {
+     "granularity": "leaf_request",
+     "observation_id": "obs-1",
+     "revision": 1,
+     "final": true,
+     "accounting_identity": "request-1",
+     "parent_accounting_identity": null,
+     "inclusion": "leaf_exclusive",
+     "input_inclusive": 100,
+     "output": 20,
+     "cache_read_subset": 40,
+     "cache_write_subset": 0,
+     "total": 120,
+     "cost_usd": 0.0003,
+     "cost_basis": "derived_estimate",
+     "currency": "USD",
+     "pricing_version": "p1",
+     "usage_semantics": "inclusive_input_cache_subset.v1",
+     "coverage": {
+      "eligible": 1,
+      "covered": 1,
+      "excluded": 0,
+      "missing": 0,
+      "state": "complete",
+      "reason": null,
+      "exclusion_reasons": []
+     },
+     "native_baseline_usd": null,
+     "native_cumulative_usd": null
+    },
+    "payload_ref": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "prompt_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "redaction_version": "scrub-v1",
+    "capture": {
+     "eligible": 2,
+     "covered": 2,
+     "excluded": 0,
+     "missing": 0,
+     "state": "complete",
+     "reason": null,
+     "exclusion_reasons": []
+    },
+    "interval": {
+     "start": "2026-10-26T00:00:00Z",
+     "end": "2026-10-26T00:00:20Z",
+     "duration_ms": 20000,
+     "clock": {
+      "domain": "controller-a",
+      "basis": "controller",
+      "comparable": true,
+      "skew_bound_ms": 0
+     }
+    }
+   }
+  },
+  {
+   "id": "trace-analysis-unknown-field",
+   "origin": "cases",
+   "schema": "trace-analysis",
+   "valid": false,
+   "expected_errors": [],
+   "instance": {
+    "schema_version": "guild.trace.analysis.v3",
+    "event_id": "event-1",
+    "sequence": 1,
+    "event_class": "request_completed",
+    "at": "2026-10-26T00:00:20Z",
+    "lineage": {
+     "source_id": "source-a",
+     "run_id": "run-20261026-000000-demo",
+     "execution_id": "exec-1",
+     "host_session_id": "host-session-1",
+     "initiative_id": null,
+     "goal_id": null,
+     "logical_task_id": null,
+     "attempt_id": null,
+     "agent_instance_id": null,
+     "request_id": "request-1"
+    },
+    "operation_id": "op-1",
+    "component_invocation_id": null,
+    "actor_id": "agent-1",
+    "pins": {
+     "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "requested_model": "requested-model",
+    "observed_identity": {
+     "provider": "provider",
+     "model": "observed-model",
+     "status": "observed",
+     "reason": null
+    },
+    "usage": {
+     "granularity": "leaf_request",
+     "observation_id": "obs-1",
+     "revision": 1,
+     "final": true,
+     "accounting_identity": "request-1",
+     "parent_accounting_identity": null,
+     "inclusion": "leaf_exclusive",
+     "input_inclusive": 100,
+     "output": 20,
+     "cache_read_subset": 40,
+     "cache_write_subset": 0,
+     "total": 120,
+     "cost_usd": 0.0003,
+     "cost_basis": "derived_estimate",
+     "currency": "USD",
+     "pricing_version": "p1",
+     "usage_semantics": "inclusive_input_cache_subset.v1",
+     "coverage": {
+      "eligible": 1,
+      "covered": 1,
+      "excluded": 0,
+      "missing": 0,
+      "state": "complete",
+      "reason": null,
+      "exclusion_reasons": []
+     },
+     "native_baseline_usd": null,
+     "native_cumulative_usd": null
+    },
+    "payload_ref": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "prompt_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "redaction_version": "scrub-v1",
+    "capture": {
+     "eligible": 2,
+     "covered": 2,
+     "excluded": 0,
+     "missing": 0,
+     "state": "complete",
+     "reason": null,
+     "exclusion_reasons": []
+    },
+    "interval": {
+     "start": "2026-10-26T00:00:00Z",
+     "end": "2026-10-26T00:00:20Z",
+     "duration_ms": 20000,
+     "clock": {
+      "domain": "controller-a",
+      "basis": "controller",
+      "comparable": true,
+      "skew_bound_ms": 0
+     }
+    },
+    "undeclared_secret": "must refuse"
+   }
+  },
+  {
+   "id": "P14-qualified-cache-subsets",
+   "origin": "regressions",
+   "schema": "trace-analysis",
+   "valid": true,
+   "expected_errors": [],
+   "instance": {
+    "schema_version": "guild.trace.analysis.v3",
+    "event_id": "event-1",
+    "sequence": 1,
+    "event_class": "request_completed",
+    "at": "2026-10-26T00:00:20Z",
+    "lineage": {
+     "source_id": "source-a",
+     "run_id": "run-20261026-000000-demo",
+     "execution_id": "exec-1",
+     "host_session_id": "host-session-1",
+     "initiative_id": null,
+     "goal_id": null,
+     "logical_task_id": null,
+     "attempt_id": null,
+     "agent_instance_id": null,
+     "request_id": "request-1"
+    },
+    "operation_id": "op-1",
+    "component_invocation_id": null,
+    "actor_id": "agent-1",
+    "pins": {
+     "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "requested_model": "requested-model",
+    "observed_identity": {
+     "provider": "provider",
+     "model": "observed-model",
+     "status": "observed",
+     "reason": null
+    },
+    "usage": {
+     "granularity": "leaf_request",
+     "observation_id": "obs-1",
+     "revision": 1,
+     "final": true,
+     "accounting_identity": "request-1",
+     "parent_accounting_identity": null,
+     "inclusion": "leaf_exclusive",
+     "input_inclusive": 100,
+     "output": 20,
+     "cache_read_subset": 80,
+     "cache_write_subset": 80,
+     "total": 120,
+     "cost_usd": 0.0003,
+     "cost_basis": "derived_estimate",
+     "currency": "USD",
+     "pricing_version": "p1",
+     "usage_semantics": "inclusive_input_cache_subset.v1",
+     "coverage": {
+      "eligible": 1,
+      "covered": 1,
+      "excluded": 0,
+      "missing": 0,
+      "state": "complete",
+      "reason": null,
+      "exclusion_reasons": []
+     },
+     "native_baseline_usd": null,
+     "native_cumulative_usd": null
+    },
+    "payload_ref": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "prompt_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "redaction_version": "scrub-v1",
+    "capture": {
+     "eligible": 2,
+     "covered": 2,
+     "excluded": 0,
+     "missing": 0,
+     "state": "complete",
+     "reason": null,
+     "exclusion_reasons": []
+    },
+    "interval": {
+     "start": "2026-10-26T00:00:00Z",
+     "end": "2026-10-26T00:00:20Z",
+     "duration_ms": 20000,
+     "clock": {
+      "domain": "controller-a",
+      "basis": "controller",
+      "comparable": true,
+      "skew_bound_ms": 0
+     }
+    }
+   }
+  },
+  {
+   "id": "G4-S-inventory:trace-analysis/lineage/source_id",
+   "origin": "regressions",
+   "schema": "trace-analysis",
+   "valid": false,
+   "expected_errors": [],
+   "instance": {
+    "schema_version": "guild.trace.analysis.v3",
+    "event_id": "event-1",
+    "sequence": 1,
+    "event_class": "request_completed",
+    "at": "2026-10-26T00:00:20Z",
+    "lineage": {
+     "source_id": "source-z",
+     "run_id": "run-20261026-000000-demo",
+     "execution_id": "exec-1",
+     "host_session_id": "host-session-1",
+     "initiative_id": null,
+     "goal_id": null,
+     "logical_task_id": null,
+     "attempt_id": null,
+     "agent_instance_id": null,
+     "request_id": "request-1"
+    },
+    "operation_id": "op-1",
+    "component_invocation_id": null,
+    "actor_id": "agent-1",
+    "pins": {
+     "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "requested_model": "requested-model",
+    "observed_identity": {
+     "provider": "provider",
+     "model": "observed-model",
+     "status": "observed",
+     "reason": null
+    },
+    "usage": {
+     "granularity": "leaf_request",
+     "observation_id": "obs-1",
+     "revision": 1,
+     "final": true,
+     "accounting_identity": "request-1",
+     "parent_accounting_identity": null,
+     "inclusion": "leaf_exclusive",
+     "input_inclusive": 100,
+     "output": 20,
+     "cache_read_subset": 40,
+     "cache_write_subset": 0,
+     "total": 120,
+     "cost_usd": 0.0003,
+     "cost_basis": "derived_estimate",
+     "currency": "USD",
+     "pricing_version": "p1",
+     "usage_semantics": "inclusive_input_cache_subset.v1",
+     "coverage": {
+      "eligible": 1,
+      "covered": 1,
+      "excluded": 0,
+      "missing": 0,
+      "state": "complete",
+      "reason": null,
+      "exclusion_reasons": []
+     },
+     "native_baseline_usd": null,
+     "native_cumulative_usd": null
+    },
+    "payload_ref": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "prompt_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "redaction_version": "scrub-v1",
+    "capture": {
+     "eligible": 2,
+     "covered": 2,
+     "excluded": 0,
+     "missing": 0,
+     "state": "complete",
+     "reason": null,
+     "exclusion_reasons": []
+    },
+    "interval": {
+     "start": "2026-10-26T00:00:00Z",
+     "end": "2026-10-26T00:00:20Z",
+     "duration_ms": 20000,
+     "clock": {
+      "domain": "controller-a",
+      "basis": "controller",
+      "comparable": true,
+      "skew_bound_ms": 0
+     }
+    }
+   }
+  },
+  {
+   "id": "G4-S-inventory:trace-analysis/payload_ref/source_id",
+   "origin": "regressions",
+   "schema": "trace-analysis",
+   "valid": false,
+   "expected_errors": [],
+   "instance": {
+    "schema_version": "guild.trace.analysis.v3",
+    "event_id": "event-1",
+    "sequence": 1,
+    "event_class": "request_completed",
+    "at": "2026-10-26T00:00:20Z",
+    "lineage": {
+     "source_id": "source-a",
+     "run_id": "run-20261026-000000-demo",
+     "execution_id": "exec-1",
+     "host_session_id": "host-session-1",
+     "initiative_id": null,
+     "goal_id": null,
+     "logical_task_id": null,
+     "attempt_id": null,
+     "agent_instance_id": null,
+     "request_id": "request-1"
+    },
+    "operation_id": "op-1",
+    "component_invocation_id": null,
+    "actor_id": "agent-1",
+    "pins": {
+     "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "requested_model": "requested-model",
+    "observed_identity": {
+     "provider": "provider",
+     "model": "observed-model",
+     "status": "observed",
+     "reason": null
+    },
+    "usage": {
+     "granularity": "leaf_request",
+     "observation_id": "obs-1",
+     "revision": 1,
+     "final": true,
+     "accounting_identity": "request-1",
+     "parent_accounting_identity": null,
+     "inclusion": "leaf_exclusive",
+     "input_inclusive": 100,
+     "output": 20,
+     "cache_read_subset": 40,
+     "cache_write_subset": 0,
+     "total": 120,
+     "cost_usd": 0.0003,
+     "cost_basis": "derived_estimate",
+     "currency": "USD",
+     "pricing_version": "p1",
+     "usage_semantics": "inclusive_input_cache_subset.v1",
+     "coverage": {
+      "eligible": 1,
+      "covered": 1,
+      "excluded": 0,
+      "missing": 0,
+      "state": "complete",
+      "reason": null,
+      "exclusion_reasons": []
+     },
+     "native_baseline_usd": null,
+     "native_cumulative_usd": null
+    },
+    "payload_ref": {
+     "source_id": "source-z",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "prompt_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "redaction_version": "scrub-v1",
+    "capture": {
+     "eligible": 2,
+     "covered": 2,
+     "excluded": 0,
+     "missing": 0,
+     "state": "complete",
+     "reason": null,
+     "exclusion_reasons": []
+    },
+    "interval": {
+     "start": "2026-10-26T00:00:00Z",
+     "end": "2026-10-26T00:00:20Z",
+     "duration_ms": 20000,
+     "clock": {
+      "domain": "controller-a",
+      "basis": "controller",
+      "comparable": true,
+      "skew_bound_ms": 0
+     }
+    }
+   }
+  },
+  {
+   "id": "G5-C-coordinated-move:trace-analysis",
+   "origin": "regressions",
+   "schema": "trace-analysis",
+   "valid": true,
+   "expected_errors": [],
+   "instance": {
+    "schema_version": "guild.trace.analysis.v3",
+    "event_id": "event-1",
+    "sequence": 1,
+    "event_class": "request_completed",
+    "at": "2026-10-26T00:00:20Z",
+    "lineage": {
+     "source_id": "source-z",
+     "run_id": "run-20261026-000000-demo",
+     "execution_id": "exec-1",
+     "host_session_id": "host-session-1",
+     "initiative_id": null,
+     "goal_id": null,
+     "logical_task_id": null,
+     "attempt_id": null,
+     "agent_instance_id": null,
+     "request_id": "request-1"
+    },
+    "operation_id": "op-1",
+    "component_invocation_id": null,
+    "actor_id": "agent-1",
+    "pins": {
+     "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "requested_model": "requested-model",
+    "observed_identity": {
+     "provider": "provider",
+     "model": "observed-model",
+     "status": "observed",
+     "reason": null
+    },
+    "usage": {
+     "granularity": "leaf_request",
+     "observation_id": "obs-1",
+     "revision": 1,
+     "final": true,
+     "accounting_identity": "request-1",
+     "parent_accounting_identity": null,
+     "inclusion": "leaf_exclusive",
+     "input_inclusive": 100,
+     "output": 20,
+     "cache_read_subset": 40,
+     "cache_write_subset": 0,
+     "total": 120,
+     "cost_usd": 0.0003,
+     "cost_basis": "derived_estimate",
+     "currency": "USD",
+     "pricing_version": "p1",
+     "usage_semantics": "inclusive_input_cache_subset.v1",
+     "coverage": {
+      "eligible": 1,
+      "covered": 1,
+      "excluded": 0,
+      "missing": 0,
+      "state": "complete",
+      "reason": null,
+      "exclusion_reasons": []
+     },
+     "native_baseline_usd": null,
+     "native_cumulative_usd": null
+    },
+    "payload_ref": {
+     "source_id": "source-z",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "prompt_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "redaction_version": "scrub-v1",
+    "capture": {
+     "eligible": 2,
+     "covered": 2,
+     "excluded": 0,
+     "missing": 0,
+     "state": "complete",
+     "reason": null,
+     "exclusion_reasons": []
+    },
+    "interval": {
+     "start": "2026-10-26T00:00:00Z",
+     "end": "2026-10-26T00:00:20Z",
+     "duration_ms": 20000,
+     "clock": {
+      "domain": "controller-a",
+      "basis": "controller",
+      "comparable": true,
+      "skew_bound_ms": 0
+     }
+    }
+   }
+  },
+  {
+   "id": "QA-FU1-trace-unavailable-zero-counters",
+   "origin": "regressions",
+   "schema": "trace-analysis",
+   "valid": false,
+   "expected_errors": [
+    "unavailable usage must report null counters, not zero"
+   ],
+   "instance": {
+    "schema_version": "guild.trace.analysis.v3",
+    "event_id": "event-1",
+    "sequence": 1,
+    "event_class": "request_completed",
+    "at": "2026-10-26T00:00:20Z",
+    "lineage": {
+     "source_id": "source-a",
+     "run_id": "run-20261026-000000-demo",
+     "execution_id": "exec-1",
+     "host_session_id": "host-session-1",
+     "initiative_id": null,
+     "goal_id": null,
+     "logical_task_id": null,
+     "attempt_id": null,
+     "agent_instance_id": null,
+     "request_id": "request-1"
+    },
+    "operation_id": "op-1",
+    "component_invocation_id": null,
+    "actor_id": "agent-1",
+    "pins": {
+     "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "requested_model": "requested-model",
+    "observed_identity": {
+     "provider": "provider",
+     "model": "observed-model",
+     "status": "observed",
+     "reason": null
+    },
+    "usage": {
+     "granularity": "leaf_request",
+     "observation_id": "obs-1",
+     "revision": 1,
+     "final": true,
+     "accounting_identity": "request-1",
+     "parent_accounting_identity": null,
+     "inclusion": "leaf_exclusive",
+     "input_inclusive": 0,
+     "output": 0,
+     "cache_read_subset": 0,
+     "cache_write_subset": 0,
+     "total": 0,
+     "cost_usd": null,
+     "cost_basis": "unavailable",
+     "currency": "USD",
+     "pricing_version": null,
+     "usage_semantics": "unknown",
+     "coverage": {
+      "eligible": 1,
+      "covered": 0,
+      "excluded": 0,
+      "missing": 1,
+      "state": "unavailable",
+      "reason": "provider emitted no usage",
+      "exclusion_reasons": []
+     },
+     "native_baseline_usd": null,
+     "native_cumulative_usd": null
+    },
+    "payload_ref": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "prompt_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "redaction_version": "scrub-v1",
+    "capture": {
+     "eligible": 2,
+     "covered": 2,
+     "excluded": 0,
+     "missing": 0,
+     "state": "complete",
+     "reason": null,
+     "exclusion_reasons": []
+    },
+    "interval": {
+     "start": "2026-10-26T00:00:00Z",
+     "end": "2026-10-26T00:00:20Z",
+     "duration_ms": 20000,
+     "clock": {
+      "domain": "controller-a",
+      "basis": "controller",
+      "comparable": true,
+      "skew_bound_ms": 0
+     }
+    }
+   }
+  },
+  {
+   "id": "QA-FU1-trace-unavailable-one-zero-counter",
+   "origin": "regressions",
+   "schema": "trace-analysis",
+   "valid": false,
+   "expected_errors": [
+    "unavailable usage must report null counters, not zero"
+   ],
+   "instance": {
+    "schema_version": "guild.trace.analysis.v3",
+    "event_id": "event-1",
+    "sequence": 1,
+    "event_class": "request_completed",
+    "at": "2026-10-26T00:00:20Z",
+    "lineage": {
+     "source_id": "source-a",
+     "run_id": "run-20261026-000000-demo",
+     "execution_id": "exec-1",
+     "host_session_id": "host-session-1",
+     "initiative_id": null,
+     "goal_id": null,
+     "logical_task_id": null,
+     "attempt_id": null,
+     "agent_instance_id": null,
+     "request_id": "request-1"
+    },
+    "operation_id": "op-1",
+    "component_invocation_id": null,
+    "actor_id": "agent-1",
+    "pins": {
+     "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "requested_model": "requested-model",
+    "observed_identity": {
+     "provider": "provider",
+     "model": "observed-model",
+     "status": "observed",
+     "reason": null
+    },
+    "usage": {
+     "granularity": "leaf_request",
+     "observation_id": "obs-1",
+     "revision": 1,
+     "final": true,
+     "accounting_identity": "request-1",
+     "parent_accounting_identity": null,
+     "inclusion": "leaf_exclusive",
+     "input_inclusive": null,
+     "output": 0,
+     "cache_read_subset": null,
+     "cache_write_subset": null,
+     "total": null,
+     "cost_usd": null,
+     "cost_basis": "unavailable",
+     "currency": "USD",
+     "pricing_version": null,
+     "usage_semantics": "unknown",
+     "coverage": {
+      "eligible": 1,
+      "covered": 0,
+      "excluded": 0,
+      "missing": 1,
+      "state": "unavailable",
+      "reason": "provider emitted no usage",
+      "exclusion_reasons": []
+     },
+     "native_baseline_usd": null,
+     "native_cumulative_usd": null
+    },
+    "payload_ref": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "prompt_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "redaction_version": "scrub-v1",
+    "capture": {
+     "eligible": 2,
+     "covered": 2,
+     "excluded": 0,
+     "missing": 0,
+     "state": "complete",
+     "reason": null,
+     "exclusion_reasons": []
+    },
+    "interval": {
+     "start": "2026-10-26T00:00:00Z",
+     "end": "2026-10-26T00:00:20Z",
+     "duration_ms": 20000,
+     "clock": {
+      "domain": "controller-a",
+      "basis": "controller",
+      "comparable": true,
+      "skew_bound_ms": 0
+     }
+    }
+   }
+  },
+  {
+   "id": "QA-FU1-trace-unavailable-null-counters-ok",
+   "origin": "regressions",
+   "schema": "trace-analysis",
+   "valid": true,
+   "expected_errors": [],
+   "instance": {
+    "schema_version": "guild.trace.analysis.v3",
+    "event_id": "event-1",
+    "sequence": 1,
+    "event_class": "request_completed",
+    "at": "2026-10-26T00:00:20Z",
+    "lineage": {
+     "source_id": "source-a",
+     "run_id": "run-20261026-000000-demo",
+     "execution_id": "exec-1",
+     "host_session_id": "host-session-1",
+     "initiative_id": null,
+     "goal_id": null,
+     "logical_task_id": null,
+     "attempt_id": null,
+     "agent_instance_id": null,
+     "request_id": "request-1"
+    },
+    "operation_id": "op-1",
+    "component_invocation_id": null,
+    "actor_id": "agent-1",
+    "pins": {
+     "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "requested_model": "requested-model",
+    "observed_identity": {
+     "provider": "provider",
+     "model": "observed-model",
+     "status": "observed",
+     "reason": null
+    },
+    "usage": {
+     "granularity": "leaf_request",
+     "observation_id": "obs-1",
+     "revision": 1,
+     "final": true,
+     "accounting_identity": "request-1",
+     "parent_accounting_identity": null,
+     "inclusion": "leaf_exclusive",
+     "input_inclusive": null,
+     "output": null,
+     "cache_read_subset": null,
+     "cache_write_subset": null,
+     "total": null,
+     "cost_usd": null,
+     "cost_basis": "unavailable",
+     "currency": "USD",
+     "pricing_version": null,
+     "usage_semantics": "unknown",
+     "coverage": {
+      "eligible": 1,
+      "covered": 0,
+      "excluded": 0,
+      "missing": 1,
+      "state": "unavailable",
+      "reason": "provider emitted no usage",
+      "exclusion_reasons": []
+     },
+     "native_baseline_usd": null,
+     "native_cumulative_usd": null
+    },
+    "payload_ref": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "prompt_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "redaction_version": "scrub-v1",
+    "capture": {
+     "eligible": 2,
+     "covered": 2,
+     "excluded": 0,
+     "missing": 0,
+     "state": "complete",
+     "reason": null,
+     "exclusion_reasons": []
+    },
+    "interval": {
+     "start": "2026-10-26T00:00:00Z",
+     "end": "2026-10-26T00:00:20Z",
+     "duration_ms": 20000,
+     "clock": {
+      "domain": "controller-a",
+      "basis": "controller",
+      "comparable": true,
+      "skew_bound_ms": 0
+     }
+    }
+   }
+  },
+  {
+   "id": "QA-FU1-known-zero-usage-complete-ok",
+   "origin": "regressions",
+   "schema": "trace-analysis",
+   "valid": true,
+   "expected_errors": [],
+   "instance": {
+    "schema_version": "guild.trace.analysis.v3",
+    "event_id": "event-1",
+    "sequence": 1,
+    "event_class": "request_completed",
+    "at": "2026-10-26T00:00:20Z",
+    "lineage": {
+     "source_id": "source-a",
+     "run_id": "run-20261026-000000-demo",
+     "execution_id": "exec-1",
+     "host_session_id": "host-session-1",
+     "initiative_id": null,
+     "goal_id": null,
+     "logical_task_id": null,
+     "attempt_id": null,
+     "agent_instance_id": null,
+     "request_id": "request-1"
+    },
+    "operation_id": "op-1",
+    "component_invocation_id": null,
+    "actor_id": "agent-1",
+    "pins": {
+     "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "requested_model": "requested-model",
+    "observed_identity": {
+     "provider": "provider",
+     "model": "observed-model",
+     "status": "observed",
+     "reason": null
+    },
+    "usage": {
+     "granularity": "leaf_request",
+     "observation_id": "obs-1",
+     "revision": 1,
+     "final": true,
+     "accounting_identity": "request-1",
+     "parent_accounting_identity": null,
+     "inclusion": "leaf_exclusive",
+     "input_inclusive": 0,
+     "output": 0,
+     "cache_read_subset": 0,
+     "cache_write_subset": 0,
+     "total": 0,
+     "cost_usd": 0,
+     "cost_basis": "derived_estimate",
+     "currency": "USD",
+     "pricing_version": "p1",
+     "usage_semantics": "inclusive_input_cache_subset.v1",
+     "coverage": {
+      "eligible": 1,
+      "covered": 1,
+      "excluded": 0,
+      "missing": 0,
+      "state": "complete",
+      "reason": null,
+      "exclusion_reasons": []
+     },
+     "native_baseline_usd": null,
+     "native_cumulative_usd": null
+    },
+    "payload_ref": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "prompt_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "redaction_version": "scrub-v1",
+    "capture": {
+     "eligible": 2,
+     "covered": 2,
+     "excluded": 0,
+     "missing": 0,
+     "state": "complete",
+     "reason": null,
+     "exclusion_reasons": []
+    },
+    "interval": {
+     "start": "2026-10-26T00:00:00Z",
+     "end": "2026-10-26T00:00:20Z",
+     "duration_ms": 20000,
+     "clock": {
+      "domain": "controller-a",
+      "basis": "controller",
+      "comparable": true,
+      "skew_bound_ms": 0
+     }
+    }
+   }
+  }
+ ]
+}
