@@ -1910,6 +1910,11 @@ const KTD29_DEEP_IMPORTS: ReadonlyMap<string, readonly string[]> = new Map<strin
   ["scripts/learn/scan.ts", LEARN_SOURCE_BASIS],
   ["scripts/learn/staleness.ts", LEARN_SOURCE_BASIS],
   ["scripts/learn/lib/source-basis.test.ts", ["knowledge/source-basis", "knowledge/working-set"]],
+  // A04: only the packaged Stack entrypoints carry the v2 reader and its ~250KB contract
+  // JSON; the lifecycle barrel is whole-required by other bundles, so it must not export them.
+  ["scripts/stack-operations.ts", ["lifecycle/stack-contract-reader"]],
+  ["scripts/lib/stack-contract-reader-validator.ts", ["lifecycle/stack-contracts.v2.generated.json"]],
+  ["scripts/lib/stack-contract-reader.test.ts", ["lifecycle/stack-contract-reader", "lifecycle/stack-contracts.v2.generated.json"]],
 ]);
 
 const CHECKS: Check[] = [

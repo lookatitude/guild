@@ -65905,16 +65905,18 @@ function inspectManagedWorker(runtime, identity) {
 var import__ = __toESM(require__());
 var import_ajv_formats = __toESM(require_dist());
 init_lifecycle();
-function stackValidator() {
+function stackValidator(extraSchemas = [], formats = {}) {
   const ajv = new import__.default({
     strict: false,
     allErrors: true,
     allowUnionTypes: true
   });
   (0, import_ajv_formats.default)(ajv);
+  for (const [name, check] of Object.entries(formats)) ajv.addFormat(name, check);
   for (const schema of Object.values(stackContractBundle.schemas)) ajv.addSchema(schema);
   ajv.addSchema(stackP05Schemas);
   ajv.addSchema(stackManagedSchemas);
+  for (const schema of extraSchemas) ajv.addSchema(schema);
   return (schema, value) => {
     const check = ajv.getSchema(schema) ?? ajv.compile({ $ref: schema });
     if (!check(value))
