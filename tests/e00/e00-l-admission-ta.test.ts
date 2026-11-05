@@ -84,7 +84,7 @@ function launch(f: Fx, o: { slug?: string; env?: Record<string, string>; dryRun?
   const logFile = path.join(f.root, `preload-${crypto.randomBytes(4).toString("hex")}.log`);
   const callsBefore = fs.existsSync(f.shim.callsLog) ? fs.readFileSync(f.shim.callsLog, "utf8").split("\n").filter(Boolean).length : 0;
   const env: Record<string, string> = {
-    PATH: `${f.bin}:${process.env["PATH"] ?? "/usr/bin:/bin"}`, HOME: process.env["HOME"] ?? f.root, SHELL: "/bin/zsh", LANG: "en_US.UTF-8",
+    PATH: `${f.bin}:${process.env["PATH"] ?? "/usr/bin:/bin"}`, HOME: process.env["HOME"] ?? f.root, SHELL: fs.existsSync("/bin/zsh") ? "/bin/zsh" : "/bin/sh", LANG: "en_US.UTF-8",
     TMUX: `${f.shim.socket},1,0`,
     GUILD_DISPATCH_APPROVAL_OVERRIDE: "E00-T0 launcher admission fixture: approval verification is pinned separately",
     E00_ACTIVATION_STUB_ROOT: PKG, E00_PRELOAD_LOG: logFile, E00_RUN_ID: RUN, E00_ROOT: f.root, ...(o.env ?? {}),

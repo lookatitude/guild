@@ -1914,8 +1914,16 @@ const KTD29_DEEP_IMPORTS: ReadonlyMap<string, readonly string[]> = new Map<strin
   ["scripts/learn/lib/dependency-invalidation.test.ts", ["knowledge/source-basis", "knowledge/freshness-boundary"]],
   ["scripts/learn/lib/source-basis.test.ts", ["knowledge/source-basis", "knowledge/working-set"]],
   // K03 (CW-20): same bundle reason; learn writers publish through the generation store.
-  ["scripts/learn/lib/publish.ts", ["knowledge/publication", "knowledge/source-basis"]],
+  ["scripts/learn/lib/publish.ts", ["knowledge/publication", "knowledge/source-basis", "kernel/sealed-collections"]],
   ["scripts/learn/lib/publication-writers.test.ts", ["knowledge/publication"]],
+  // A04: only the packaged Stack entrypoints carry the v2 reader and its ~250KB contract
+  // JSON; the lifecycle barrel is whole-required by other bundles, so it must not export them.
+  ["scripts/stack-operations.ts", ["lifecycle/stack-contract-reader"]],
+  ["scripts/lib/stack-contract-reader-validator.ts", ["lifecycle/stack-contracts.v2.generated.json"]],
+  ["scripts/lib/stack-contract-reader.test.ts", ["lifecycle/stack-contract-reader", "lifecycle/stack-contracts.v2.generated.json"]],
+  // T01: the AT19/AT20 test drives the R01 records (lifecycle-internal) into the
+  // trace capture, which stays off the telemetry index until activation.
+  ["src/domains/lifecycle/trace-capture.test.ts", ["telemetry/trace-capture-v3"]],
 ]);
 
 const CHECKS: Check[] = [

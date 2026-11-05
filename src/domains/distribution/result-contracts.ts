@@ -102,7 +102,7 @@ export const EXISTING_CONTRACTS: readonly ResultContractEntry[] = deepFreeze([
     validator_kind: "lenient",
     source_path: "plugin/scripts/verify-gate-pass.ts", // correction #2.
     purpose: "Advisory/adversarial review result (gate-pass binding).",
-    live_caller: { path: "scripts/verify-gate-pass.ts", call: "parseReviewResult" },
+    live_caller: { path: "src/domains/distribution/review-gate-pass.ts", call: "parseReviewResult" },
   },
   {
     wire_schema_version: "guild.phase_result.v1",
