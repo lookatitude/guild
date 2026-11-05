@@ -32,6 +32,7 @@
  */
 
 import * as path from "path";
+import { reservedIdentityFieldsIn } from "../kernel";
 
 import type { GoalV1 } from "../teams";
 
@@ -580,6 +581,17 @@ function isDependencies(v: unknown): v is AssignmentDependency[] {
   );
 }
 
+/** Fields `guild.task_assignment.v2` owns (incl. additive done_when); other R01 reserved identity fields are refused. */
+export const TASK_ASSIGNMENT_V2_FIELDS = Object.freeze([
+  "schema_version", "run_id", "cell_id", "goal_id", "phase_id", "step_id", "team_id", "logical_task_id", "task_run_id",
+  "attempt", "attempt_id", "previous_attempt_id", "retry_reason", "instance_id", "team_lead_instance_id", "lead_binding_id",
+  "worker_role", "specialist_type_id", "specialist_type_version", "specialist_type_hash", "specialist_profile_id",
+  "specialist_profile_hash", "context_bundle_id", "context_bundle_hash", "host_id", "adapter_id", "host_capabilities_hash",
+  "objective", "non_goals", "scope_paths", "output_schema", "acceptance_tests", "dependencies", "projection",
+  "autonomy_policy", "budgets", "deadline", "written_at", "assignment_path", "handoff_path", "heartbeat_path",
+  "cancel_channel", "done_when",
+] as const);
+
 /**
  * Fail-closed validation of a `guild.task_assignment.v2`. Returns the typed
  * assignment or NULL — never throws, never repairs. D6: a malformed or missing
@@ -589,6 +601,8 @@ export function validateTaskAssignmentV2(obj: unknown): TaskAssignmentV2 | null 
   if (obj === null || typeof obj !== "object") return null;
   const o = obj as Record<string, unknown>;
   if (o["schema_version"] !== TASK_ASSIGNMENT_V2_SCHEMA) return null;
+  // R01: v2 is additive-tolerant (done_when), but a v3 identity field is refused, not ignored.
+  if (reservedIdentityFieldsIn(o, TASK_ASSIGNMENT_V2_FIELDS).length > 0) return null;
 
   const requiredStrings = [
     "run_id",

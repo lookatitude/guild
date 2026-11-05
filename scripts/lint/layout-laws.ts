@@ -1898,6 +1898,9 @@ const SKILL_VERSIONS_DELETER = "src/domains/state/upgrade-steps.ts";
 const KTD29_DEEP_IMPORTS: ReadonlyMap<string, string> = new Map([
   ["scripts/lib/guild-root.ts", "state/guild-root"],
   ["scripts/lib/shared/config-defaults.ts", "config/config-defaults"],
+  // T01: the AT19/AT20 test drives the R01 records (lifecycle-internal) into the
+  // trace capture, which stays off the telemetry index until activation.
+  ["src/domains/lifecycle/trace-capture.test.ts", "telemetry/trace-capture-v3"],
 ]);
 
 const CHECKS: Check[] = [
