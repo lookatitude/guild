@@ -478,11 +478,12 @@ function parseSpan(raw: Record<string, unknown>, kind: SpanKind): Span | "mismat
   const start = traceInstantMicros(iv.start);
   let end = iv.end === null ? null : traceInstantMicros(iv.end as string);
   if (end !== null && end < start) return null;
+  // An open span (end null) is open: a duration cannot close it.
+  if (d !== null && end === null) return null;
   if (d !== null) {
     const dMicros = decimalScaled(d, 3);
     if (dMicros === null) return null;
-    if (end === null) end = start + dMicros;
-    else if (end - start - dMicros > 1000n || dMicros - (end - start) > 1000n) return "mismatch";
+    if (end - start - dMicros > 1000n || dMicros - (end - start) > 1000n) return "mismatch";
   }
   return { id: raw.span_id, kind, start, end, clock, agent: agent as string | null, reason: reason as string | null };
 }
@@ -526,13 +527,14 @@ function normalizeTime(rawSpansOrNull: readonly unknown[] | null, asOf: string |
   const byId = new Map<string, { sig: string; span: Span | null; kind: SpanKind }>();
   const conflicted = new Set<string>();
   const mismatched = new Set<string>();
-  const groups = new Map<string, { kind: SpanKind; sig: string; parsed: Span | "mismatch" | null }[]>();
+  const groups = new Map<string, { kind: SpanKind | null; sig: string; parsed: Span | "mismatch" | null }[]>();
   let anonymous = 0;
   for (const raw of rawSpans) {
     const kind = isObj(raw) && (raw.kind === "run" || raw.kind === "active" || raw.kind === "wait") ? (raw.kind as SpanKind) : null;
-    if (!kind) { losses.add("invalid_span", "span is malformed"); continue; }
+    // A bad kind under a real span id still joins that id's group, where it conflicts.
+    if (!kind && !(isObj(raw) && isId(raw.span_id))) { losses.add("invalid_span", "span is malformed"); continue; }
     const rec = raw as Record<string, unknown>;
-    const parsed = parseSpan(rec, kind);
+    const parsed = kind ? parseSpan(rec, kind) : null;
     const id = isId(rec.span_id) ? rec.span_id : `\u0000anon-${anonymous++}`;
     // A malformed copy gets a unique signature: next to any other copy it is a conflict.
     const sig = parsed === null ? `\u0000invalid-${anonymous++}` : canonical(rec);
@@ -540,10 +542,11 @@ function normalizeTime(rawSpansOrNull: readonly unknown[] | null, asOf: string |
     push(groups, id, { kind, sig, parsed });
   }
   for (const [id, cs] of groups) {
-    for (const c of cs) eligible[c.kind].add(id);
+    for (const c of cs) if (c.kind) eligible[c.kind].add(id);
     if (new Set(cs.map((c) => c.sig)).size > 1) { conflicted.add(id); losses.add("span_conflict", "one span id carries two intervals; all copies are excluded"); continue; }
     if (cs.length > 1) losses.add("duplicate_span", "identical span counted once", cs.length - 1);
     const { kind, sig, parsed } = cs[0]!;
+    if (!kind) continue;
     if (parsed === "mismatch") mismatched.add(id);
     byId.set(id, { sig, span: parsed === "mismatch" ? null : parsed, kind });
   }
@@ -633,7 +636,7 @@ function normalizeTime(rawSpansOrNull: readonly unknown[] | null, asOf: string |
   return {
     elapsed_ms: elapsed, active_union_ms: activeV, agent_work_ms: agentV, raw_wait_ms: rawWaitV, exclusive_wait_ms: exclusiveV, wait_by_reason,
     active_latency_ms: { n: durations.length, p50: nearestRank(durations, 0.5), p95: nearestRank(durations, 0.95), excluded: nA - durations.length },
-    clock: { domain: anchor?.domain ?? null, basis: anchor?.basis ?? null, skew_bound_ms: skews.length && skews.every((x) => x !== null) ? Math.max(...(skews as number[])) : null },
+    clock: { domain: anchor?.domain ?? null, basis: anchor?.basis ?? null, skew_bound_ms: skews.length && skews.every((x) => x !== null) ? (skews as number[]).reduce((a, b) => (b > a ? b : a), 0) : null },
     losses: losses.list(),
   };
 }

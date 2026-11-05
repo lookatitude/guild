@@ -846,3 +846,30 @@ describe("review round 3 regressions", () => {
     }
   });
 });
+
+describe("review round 4 regressions (fixed after the last full round)", () => {
+  it("R4-F14: a bad-kind copy of a span id makes that span unresolved", () => {
+    const a = { span_id: "a", kind: "active", interval: iv(0, 10), agent_instance_id: null, reason: null };
+    const t = normalizeRunLedger(base({ spans: [gf2Spans()[0], a, { ...a, kind: "bogus" }] })).time;
+    expect(t.active_union_ms.exact_total).toBeNull();
+    expect(t.losses.find((x) => x.code === "span_conflict")!.count).toBe(1);
+  });
+
+  it("R4-F15: a duration cannot close an open run or span", () => {
+    const run = { span_id: "run", kind: "run", interval: { ...iv(0, null), duration_ms: 5 }, agent_instance_id: null, reason: null };
+    const t = normalizeRunLedger(base({ spans: [run], as_of: new Date(Date.UTC(2026, 9, 26) + 12).toISOString() })).time;
+    expect(t.elapsed_ms.exact_total).toBeNull();
+    const open = { span_id: "run", kind: "run", interval: iv(0, null), agent_instance_id: null, reason: null };
+    const o = normalizeRunLedger(base({ spans: [open], as_of: new Date(Date.UTC(2026, 9, 26) + 12).toISOString() })).time;
+    expect(o.elapsed_ms.value).toBe(12);
+  });
+
+  it("R4-F16: 150k spans do not overflow the call stack", () => {
+    const spans: unknown[] = [{ span_id: "run", kind: "run", interval: iv(0, 10), agent_instance_id: null, reason: null }];
+    for (let i = 0; i < 150_000; i++) spans.push({ span_id: `a${i}`, kind: "active", interval: iv(0, 10), agent_instance_id: "agent-1", reason: null });
+    const t = normalizeRunLedger(base({ spans })).time;
+    expect(t.active_union_ms.exact_total).toBe(10);
+    expect(t.agent_work_ms.exact_total).toBe(10);
+    expect(t.clock.skew_bound_ms).toBe(0);
+  });
+});
