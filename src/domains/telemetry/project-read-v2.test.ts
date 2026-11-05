@@ -154,7 +154,7 @@ function pythonSemanticErrors(cases: Array<[string, unknown]>): string[][] {
 
 function gf3Facts(tasks: TaskFact[]): FactSet {
   const snapshot = { input_manifest_digest: H, source_ids: ["source-a"], source_generations: [{ source_id: "source-a", generation: H }], as_of: "2026-10-26T00:00:20Z" };
-  return { snapshot, sources: [{ source_id: "source-a", generation: H, state: "available", reason: null, runs: [], outcomes: "collected", tasks }], pricing: null };
+  return { snapshot, sources: [{ source_id: "source-a", generation: H, state: "available", reason: null, runs: [], unenumerated_runs: 0, outcomes: "collected", tasks }], pricing: null };
 }
 function gf3Query(metric: string, basis: QueryIdentity["window"]["basis"] = "accepted_outcome_cohort"): QueryIdentity {
   const m = ATOMIC_METRICS.find((x) => x.id === metric)!;
@@ -456,6 +456,44 @@ describe("AT29 · query snapshot", () => {
     expect(pt(series(e, "M01.run_count"))).toMatchObject({ value: 0, exact_total: 0, coverage: { state: "complete" } });
   });
 
+  it("records without usage still name their executions and tasks; record-level filters decide run membership", () => {
+    const dispatch = { ...ev("source-a", "run-1", 1, use("req-1", 1, 1), { task: "task-d" }), event_class: "dispatch" as const, usage: null };
+    dispatch.lineage = { ...dispatch.lineage, execution_id: "exec-d", request_id: null };
+    put("source-a", "runs/run-1/trace.jsonl", jsonl([dispatch]));
+    put("source-b", "runs/run-1/trace.jsonl", jsonl([ev("source-b", "run-1", 1, use("req-1", 2, 3), { task: "task-b" })]));
+    put("source-b", "runs/run-old/logs/v1.4-events.jsonl", `{"event":"llm_call"}\n`);
+    const snap = open();
+    expect(pt(series(snap, "M01.execution_count", { group_by: "source" }), "source-a")).toMatchObject({ value: 1, exact_total: 1 });
+    expect(pt(series(snap, "M01.task_count", { group_by: "source" }), "source-a")).toMatchObject({ value: 1, exact_total: 1 });
+    // A task that no record names selects no run; a run without a trace is unknown, not counted.
+    const none = pt(series(snap, "M01.run_count", { filters: [{ dimension: "task", values: ["task-none"] }] }));
+    expect(none).toMatchObject({ value: null, exact_total: null, coverage: { state: "unavailable", covered: 0, eligible: null } });
+    expect(none.coverage.reason).toContain("source-b:run-old");
+    expect(pt(series(snap, "M01.run_count", { filters: [{ dimension: "task", values: ["task-d"] }] }))).toMatchObject({ value: 1, exact_total: null });
+    fs.rmSync(path.join(rootOf("source-b"), ".guild/runs/run-old"), { recursive: true });
+    const clean = open();
+    expect(pt(series(clean, "M01.run_count", { filters: [{ dimension: "task", values: ["task-none"] }] }))).toMatchObject({ value: 0, exact_total: 0, coverage: { state: "complete" } });
+    expect(pt(series(clean, "M01.run_count", { filters: [{ dimension: "task", values: ["task-b"] }] }))).toMatchObject({ value: 1, exact_total: 1 });
+  });
+
+  it("ids containing ':' never merge two runs into one point", () => {
+    put("a", "runs/c/trace.jsonl", jsonl([ev("a", "c", 1, use("req-1", 1, 1))]));
+    put("a:b", "runs/c/trace.jsonl", jsonl([ev("a:b", "c", 1, use("req-1", 1, 1))]));
+    const snap = openProjectSnapshot([{ source_id: "a", root: rootOf("a") }, { source_id: "a:b", root: rootOf("a:b") }], { as_of: AS_OF });
+    expect(pt(series(snap, "M01.run_count")).value).toBe(2);
+    // Engine facts where ("a", "b:c") and ("a:b", "c") would both key as "a:b:c".
+    const facts: FactSet = JSON.parse(JSON.stringify(snap.facts));
+    facts.sources.find((x) => x.source_id === "a")!.runs[0]!.run_id = "b:c";
+    const q = projectQuery(snap, { metric_id: "M01.run_count" });
+    expect(() => computeMetricSeries(facts, q, { group_by: "run" })).toThrow(/would merge distinct identities/);
+    expect(pt(computeMetricSeries(facts, q).series).value).toBe(2);
+    // The reader cannot name a run directory with ':' in a contract path: the enumeration is unknown, not short.
+    fs.mkdirSync(path.join(rootOf("a"), ".guild/runs/b:c"));
+    const withColon = openProjectSnapshot([{ source_id: "a", root: rootOf("a") }], { as_of: AS_OF });
+    expect(pt(series(withColon, "M01.run_count"))).toMatchObject({ value: 1, exact_total: null, coverage: { state: "partial" } });
+    expect(withColon.diagnostics[0]!.run_errors).toEqual([{ run_id: "b:c", reason: "run directory name is not a contract path segment" }]);
+  });
+
   it("request and cursor binding: unbound hash, altered cursor and wrong operation refuse", () => {
     at28Sources();
     const snap = open();
@@ -469,6 +507,15 @@ describe("AT29 · query snapshot", () => {
     const flipped = cursor.slice(0, -1) + (cursor.endsWith("0") ? "1" : "0");
     const dd = readRequest(q, "metric_drilldown", { request_id: "q-8", session_id: "s-1", cursor: flipped });
     expect((readMetricDrilldown(snap, dd) as RefusalV2).code).toBe("invalid_request");
+    // A relabelled version pin with a recomputed hash is not the query this service computes.
+    const relabelled = { ...q, versions: { ...q.versions, pricing: "p2@sha256:0" } };
+    expect((readMetricSeries(snap, readRequest(relabelled, "metric_series", { request_id: "q-10", session_id: "s-1" })) as RefusalV2).code).toBe("unsupported_capability");
+    const recohort = { ...q, cohort_hash: H };
+    expect((readMetricSeries(snap, readRequest(recohort, "metric_series", { request_id: "q-11", session_id: "s-1" })) as RefusalV2).code).toBe("unsupported_capability");
+    // A cursor cut under one grouping cannot page another grouping's point of the same name.
+    const allCursor = pt(s).drilldown.cursor!;
+    const regroup = readMetricDrilldown(snap, readRequest(q, "metric_drilldown", { request_id: "q-12", session_id: "s-1", cursor: allCursor }), { group_by: "source" }) as RefusalV2;
+    expect(regroup.code).toBe("invalid_request");
     // A filter dimension the service cannot answer refuses rather than being ignored.
     expect(() => projectQuery(snap, { metric_id: "M07.output_tokens", filters: [{ dimension: "host", values: ["h"] }] })).toThrow(/not served/);
   });

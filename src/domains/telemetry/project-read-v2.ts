@@ -42,6 +42,7 @@ import {
   type GroupBy,
   type MetricDrilldownV2,
   type MetricSeriesV2,
+  type ObservationFact,
   type QueryFilter,
   type QueryIdentity,
   type ReadRequestV2,
@@ -79,7 +80,7 @@ function readRun(root: string, sourceId: string, runId: string, asOf: string, pr
   const evidence = runEvidence(sourceId, runId, inputs, asOf);
   if (!inputs.traceUsable || !inputs.trace) {
     return {
-      run: { source_id: sourceId, run_id: runId, evidence, usage_state: "unavailable", usage_reason: evidence.reason ?? "no normalized trace", extra_missing: null, invalid_count: null, duplicate_count: 0, attachments: [], leaves: [] },
+      run: { source_id: sourceId, run_id: runId, evidence, usage_state: "unavailable", usage_reason: evidence.reason ?? "no normalized trace", extra_missing: null, invalid_count: null, duplicate_count: 0, attachments: [], leaves: [], observations: [], trace_complete: false },
       generation, pending: null, duplicates: 0, invalid: 0,
     };
   }
@@ -89,6 +90,11 @@ function readRun(root: string, sourceId: string, runId: string, asOf: string, pr
   const events = inputs.trace.events.filter((e) => e.lineage.source_id === sourceId);
   const foreign = inputs.trace.events.length - events.length;
   const ledger = normalizeRunLedger({ source_id: sourceId, run_id: runId, events, capture: inputs.trace.coverage, spans: [], pricing, budget: null, as_of: null });
+  const recordEvidence = (e: TraceAnalysisV3): Evidence => ({ source_id: sourceId, path: `runs/${runId}/trace.jsonl`, sha256: sha256(canonicalJson(e)), schema_version: TRACE_SCHEMA, observed_at: e.at, availability: "available", reason: null });
+  const observations: ObservationFact[] = events.map((e) => ({
+    at: e.at, execution_id: e.lineage.execution_id, logical_task_id: e.lineage.logical_task_id, attempt_id: e.lineage.attempt_id, agent_instance_id: e.lineage.agent_instance_id,
+    requested_model: e.requested_model, observed_model: e.observed_identity.status === "observed" ? e.observed_identity.model : null, evidence: recordEvidence(e),
+  }));
   const byObservation = new Map<string, TraceAnalysisV3>();
   for (const e of events) if (e.usage) byObservation.set(`${e.usage.accounting_identity}\u0000${e.usage.observation_id}\u0000${e.usage.revision}`, e);
   const attachments = new Map<string, { kind: "initiative" | "goal"; id: string }>();
@@ -110,7 +116,7 @@ function readRun(root: string, sourceId: string, runId: string, asOf: string, pr
       measured_usd: leaf.measured_usd, derived_usd: leaf.derived_estimate_usd, covered: leaf.covered, allocated: leaf.allocation === "allocated",
       usage_semantics: u.usage_semantics,
       evidence: ev
-        ? { source_id: sourceId, path: `runs/${runId}/trace.jsonl`, sha256: sha256(canonicalJson(ev)), schema_version: TRACE_SCHEMA, observed_at: ev.at, availability: "available", reason: null }
+        ? recordEvidence(ev)
         : { ...evidence, reason: evidence.reason ?? `leaf ${leaf.accounting_identity} has no selected observation` },
     };
   });
@@ -122,7 +128,8 @@ function readRun(root: string, sourceId: string, runId: string, asOf: string, pr
       invalid_count: ledger.coverage.invalid_events + inputs.trace.invalid_lines + foreign,
       duplicate_count: ledger.coverage.duplicates,
       attachments: [...attachments.values()].sort((a, b) => (a.kind + a.id < b.kind + b.id ? -1 : 1)),
-      leaves,
+      leaves, observations,
+      trace_complete: inputs.trace.coverage.state === "complete" && inputs.trace.invalid_lines === 0 && foreign === 0,
     },
     generation, pending, duplicates: ledger.coverage.duplicates, invalid: ledger.coverage.invalid_events + inputs.trace.invalid_lines + foreign,
   };
@@ -130,7 +137,7 @@ function readRun(root: string, sourceId: string, runId: string, asOf: string, pr
 
 function unavailableSource(s: ProjectSource, reason: string): { facts: SourceFacts; diag: SourceDiagnostics } {
   return {
-    facts: { source_id: s.source_id, generation: sha256(canonicalJson({ source_id: s.source_id, state: "unavailable", reason })), state: "unavailable", reason, runs: [], outcomes: "not_collected", tasks: [] },
+    facts: { source_id: s.source_id, generation: sha256(canonicalJson({ source_id: s.source_id, state: "unavailable", reason })), state: "unavailable", reason, runs: [], unenumerated_runs: 0, outcomes: "not_collected", tasks: [] },
     diag: { source_id: s.source_id, state: "unavailable", reason, runs: 0, runs_without_trace: 0, invalid_events: 0, pending_requests: null, duplicates: 0, run_errors: [] },
   };
 }
@@ -149,7 +156,10 @@ function readSource(s: ProjectSource, asOf: string, pricing: PriceTable | null):
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") return unavailableSource(s, ".guild/runs is unreadable");
     names = [];
   }
-  const runDirs = names.filter((n) => { try { return fs.lstatSync(path.join(runsDir, n)).isDirectory(); } catch { return false; } });
+  const dirs = names.filter((n) => { try { return fs.lstatSync(path.join(runsDir, n)).isDirectory(); } catch { return false; } });
+  // A ':' cannot appear in a contract evidence path, so such a directory is a run the service cannot name.
+  const unsupported = dirs.filter((n) => n.includes(":"));
+  const runDirs = dirs.filter((n) => !n.includes(":"));
   if (runDirs.length > PROJECT_READ_LIMITS.runs_per_source) return unavailableSource(s, `more than ${PROJECT_READ_LIMITS.runs_per_source} runs; enumeration bound exceeded`);
   const runs: RunFacts[] = [];
   const gens: { run_id: string; generation: string }[] = [];
@@ -162,7 +172,7 @@ function readSource(s: ProjectSource, asOf: string, pricing: PriceTable | null):
       const reason = (err as Error).message.slice(0, 400);
       diag.run_errors.push({ run_id: runId, reason });
       const evidence: Evidence = { source_id: s.source_id, path: `runs/${runId}`, sha256: sha256(""), schema_version: "guild.run_dir.v1", observed_at: asOf, availability: "missing", reason };
-      runs.push({ source_id: s.source_id, run_id: runId, evidence, usage_state: "unavailable", usage_reason: reason, extra_missing: null, invalid_count: null, duplicate_count: 0, attachments: [], leaves: [] });
+      runs.push({ source_id: s.source_id, run_id: runId, evidence, usage_state: "unavailable", usage_reason: reason, extra_missing: null, invalid_count: null, duplicate_count: 0, attachments: [], leaves: [], observations: [], trace_complete: false });
       gens.push({ run_id: runId, generation: sha256(canonicalJson({ run_id: runId, error: reason })) });
       continue;
     }
@@ -174,8 +184,9 @@ function readSource(s: ProjectSource, asOf: string, pricing: PriceTable | null):
     diag.duplicates += r.duplicates;
     diag.pending_requests = diag.pending_requests === null || r.pending === null ? (r.run.usage_state === "available" ? null : diag.pending_requests) : diag.pending_requests + r.pending;
   }
-  const generation = sha256(canonicalJson({ source_id: s.source_id, runs: gens }));
-  return { facts: { source_id: s.source_id, generation, state: "available", reason: null, runs, outcomes: "not_collected", tasks: [] }, diag };
+  for (const n of unsupported) diag.run_errors.push({ run_id: n, reason: "run directory name is not a contract path segment" });
+  const generation = sha256(canonicalJson({ source_id: s.source_id, runs: gens, unsupported }));
+  return { facts: { source_id: s.source_id, generation, state: "available", reason: null, runs, unenumerated_runs: unsupported.length, outcomes: "not_collected", tasks: [] }, diag };
 }
 
 /** Read every requested source into one immutable snapshot of facts. */
@@ -233,7 +244,7 @@ export function readRequest(q: QueryIdentity, op: "metric_series" | "metric_dril
 // ── Cursor ───────────────────────────────────────────────────────────────────
 
 /** The query hash binds the snapshot, so a cursor cannot outlive the generations it was cut from. */
-interface CursorBody { v: 1; q: string; m: string; p: string; o: number }
+interface CursorBody { v: 1; q: string; m: string; g: GroupBy; p: string; o: number }
 const CURSOR_PREFIX = "c9v2.";
 
 export function encodeCursor(b: Omit<CursorBody, "v">): string {
@@ -249,12 +260,21 @@ function decodeCursor(c: string): CursorBody | null {
   if (sha256(body).slice(7, 23) !== check) return null;
   try {
     const o = JSON.parse(body) as CursorBody;
-    if (canonicalJson(o) !== body || o.v !== 1 || typeof o.q !== "string" || typeof o.m !== "string" || typeof o.p !== "string" || !Number.isInteger(o.o) || o.o < 0) return null;
+    if (canonicalJson(o) !== body || o.v !== 1 || typeof o.q !== "string" || typeof o.g !== "string" || typeof o.m !== "string" || typeof o.p !== "string" || !Number.isInteger(o.o) || o.o < 0) return null;
     return o;
   } catch { return null; }
 }
 
 // ── Service ──────────────────────────────────────────────────────────────────
+
+/** The query this service pins for the request's own metric, grain, filters and window. */
+function pinnedQuery(snap: ProjectSnapshot, q: QueryIdentity): QueryIdentity {
+  const metric = metricOfQuery(q);
+  return projectQuery(snap, {
+    metric_id: metric.id, underlying_metric_id: q.underlying_scalar?.metric_id ?? null, grain: q.grain, filters: q.filters,
+    window: { from: q.window.from, to: q.window.to, basis: q.window.basis },
+  });
+}
 
 function checkRequest(snap: ProjectSnapshot, req: unknown, op: ReadRequestV2["operation"]): ReadRequestV2 | RefusalV2 {
   const rid = typeof (req as ReadRequestV2)?.request_id === "string" && TRACE_ID_RE.test((req as ReadRequestV2).request_id) ? (req as ReadRequestV2).request_id : "invalid-request";
@@ -266,6 +286,14 @@ function checkRequest(snap: ProjectSnapshot, req: unknown, op: ReadRequestV2["op
   if (canonicalJson(r.query.snapshot) !== canonicalJson(want)) {
     return refusal(rid, r.cursor === null ? "stale_source" : "stale_cursor", "the query snapshot is not the current source snapshot; restart from a new snapshot", true, r.query.snapshot.input_manifest_digest, want.input_manifest_digest);
   }
+  // Version pins, cohort hash and ordering must be the ones this service computes: a relabelled
+  // pricing, normalizer or aggregation version would otherwise be served over different inputs.
+  let pinned: QueryIdentity;
+  try { pinned = pinnedQuery(snap, r.query); } catch (err) {
+    if (err instanceof SeriesRefusal) return refusal(rid, err.code, err.message, err.retryable);
+    throw err;
+  }
+  if (canonicalJson(pinned) !== canonicalJson(r.query)) return refusal(rid, "unsupported_capability", "query versions, cohort hash or filter order differ from the pins this service computes; build the query with projectQuery", false);
   return r;
 }
 
@@ -285,7 +313,7 @@ export function readMetricSeries(snap: ProjectSnapshot, req: unknown, opts: { gr
   return run(r.request_id, () => {
     const metric = metricOfQuery(r.query);
     const hash = queryHash(r.query);
-    return computeMetricSeries(snap.facts, r.query, { group_by: opts.group_by, cursor: (p, o) => encodeCursor({ q: hash, m: metric.id, p, o }) }).series;
+    return computeMetricSeries(snap.facts, r.query, { group_by: opts.group_by, cursor: (p, o) => encodeCursor({ q: hash, m: metric.id, g: opts.group_by ?? "all", p, o }) }).series;
   });
 }
 
@@ -305,7 +333,7 @@ export function readMetricDrilldown(snap: ProjectSnapshot, req: unknown, opts: {
     if (r.cursor !== null) {
       const c = decodeCursor(r.cursor);
       if (!c) return refusal(r.request_id, "invalid_request", "cursor is malformed or altered", false);
-      if (c.q !== hash || c.m !== metric.id) return refusal(r.request_id, "invalid_request", "cursor belongs to another query or metric", false);
+      if (c.q !== hash || c.m !== metric.id || c.g !== (opts.group_by ?? "all")) return refusal(r.request_id, "invalid_request", "cursor belongs to another query, metric or grouping", false);
       if (opts.point_key !== undefined && opts.point_key !== c.p) return refusal(r.request_id, "invalid_request", "cursor names another series point", false);
       point = c.p;
       offset = c.o;
@@ -319,7 +347,7 @@ export function readMetricDrilldown(snap: ProjectSnapshot, req: unknown, opts: {
     return {
       schema_version: METRIC_DRILLDOWN_V2_SCHEMA, metric_id: metric.id, point_key: point, query_hash: hash,
       snapshot: snap.facts.snapshot, records: records.slice(offset, end), coverage: p.coverage,
-      next_cursor: end < records.length ? encodeCursor({ q: hash, m: metric.id, p: point, o: end }) : null,
+      next_cursor: end < records.length ? encodeCursor({ q: hash, m: metric.id, g: opts.group_by ?? "all", p: point, o: end }) : null,
     };
   });
 }

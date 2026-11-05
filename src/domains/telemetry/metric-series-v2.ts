@@ -89,6 +89,11 @@ export interface UsageFact {
   measured_usd: number | null; derived_usd: number | null; covered: boolean; allocated: boolean;
   usage_semantics: string; evidence: Evidence;
 }
+/** One valid trace record's lineage: what the run names even without usage (dispatch, phase, lifecycle). */
+export interface ObservationFact {
+  at: string; execution_id: string | null; logical_task_id: string | null; attempt_id: string | null; agent_instance_id: string | null;
+  requested_model: string | null; observed_model: string | null; evidence: Evidence;
+}
 export interface RunFacts {
   source_id: string; run_id: string; evidence: Evidence;
   /** `unavailable` when no normalized trace exists: request counts for the run are unknown. */
@@ -97,6 +102,8 @@ export interface RunFacts {
   extra_missing: number | null; invalid_count: number | null; duplicate_count: number;
   attachments: { kind: "initiative" | "goal"; id: string }[];
   leaves: UsageFact[];
+  /** Every valid record of the run; `trace_complete` is false when records may be missing or invalid. */
+  observations: ObservationFact[]; trace_complete: boolean;
 }
 export interface TaskFact {
   source_id: string; run_id: string; task_id: string; cohort: string | null;
@@ -108,6 +115,8 @@ export interface SourceFacts {
   /** `unavailable`: offline, unreadable or past an enumeration bound. Its facts are unknown, never zero. */
   source_id: string; generation: string; state: "available" | "unavailable"; reason: string | null;
   runs: RunFacts[];
+  /** Run directories that exist but cannot be read as contract runs (unsupported id); they make the enumeration unknown. */
+  unenumerated_runs: number;
   /** Whether a producer recorded task outcome axes; without one, outcome metrics are unknown, never zero. */
   outcomes: "collected" | "not_collected";
   tasks: TaskFact[];
@@ -171,11 +180,15 @@ export function makeCoverage(eligible: number | null, covered: number, exclusion
 const RUN_DIMENSIONS = new Set(["run", "initiative", "goal"]);
 const LEAF_DIMENSIONS = new Set(["execution", "task", "attempt", "agent", "observed_model", "requested_model"]);
 
-interface ScopedRun { run: RunFacts; leaves: UsageFact[] }
+interface ScopedRun { run: RunFacts; leaves: UsageFact[]; observations: ObservationFact[] }
 interface Scope {
   runs: ScopedRun[]; tasks: TaskFact[];
   /** Offline or unreadable sources in the snapshot; their facts are unknown, never zero. */
   unknownSources: string[];
+  /** Runs whose membership under a record-level filter cannot be decided (no or incomplete trace). */
+  unknownRuns: { source_id: string; run_id: string }[];
+  /** Per available source, run directories that could not be enumerated as runs. */
+  unenumerated: { source_id: string; count: number }[];
   /** Available sources with no outcome producer: their outcome facts are unknown too. */
   noOutcomeSources: string[];
   /** A leaf-level filter or activity window is active: unattributable extras make eligibility unknown. */
@@ -186,12 +199,13 @@ interface Scope {
 
 const inWindow = (at: string, w: QueryIdentity["window"]) => compareTraceInstants(at, w.from) >= 0 && compareTraceInstants(at, w.to) < 0;
 
-function leafMatches(l: UsageFact, f: QueryFilter): boolean {
+function leafMatches(l: UsageFact | ObservationFact, f: QueryFilter): boolean {
   const v = { execution: l.execution_id, task: l.logical_task_id, attempt: l.attempt_id, agent: l.agent_instance_id, observed_model: l.observed_model, requested_model: l.requested_model }[f.dimension as "task"];
   return v !== null && v !== undefined && f.values.includes(v);
 }
 function runMatches(r: RunFacts, f: QueryFilter): boolean {
-  if (f.dimension === "run") return f.values.includes(r.run_id) || f.values.includes(`${r.source_id}:${r.run_id}`);
+  // A run filter names local run ids; each snapshot source's run of that id stays a distinct run.
+  if (f.dimension === "run") return f.values.includes(r.run_id);
   return r.attachments.some((a) => a.kind === f.dimension && f.values.includes(a.id));
 }
 
@@ -209,6 +223,8 @@ function selectScope(facts: FactSet, q: QueryIdentity, outcomeMetric: boolean): 
   const exclusions: Record<string, number> = {};
   const taskExclusions: Record<string, number> = {};
   const unknownSources: string[] = [];
+  const unknownRuns: { source_id: string; run_id: string }[] = [];
+  const unenumerated: { source_id: string; count: number }[] = [];
   const noOutcomeSources: string[] = [];
   const runs: ScopedRun[] = [];
   const tasks: TaskFact[] = [];
@@ -218,6 +234,7 @@ function selectScope(facts: FactSet, q: QueryIdentity, outcomeMetric: boolean): 
     if (!s) throw new SeriesRefusal("source_unavailable", `snapshot source ${sid} has no facts`);
     if (s.state !== "available") { unknownSources.push(sid); continue; }
     if (s.outcomes !== "collected") noOutcomeSources.push(sid);
+    if (s.unenumerated_runs > 0) unenumerated.push({ source_id: sid, count: s.unenumerated_runs });
     // Cohort selection first: under accepted_outcome_cohort, usage follows the selected tasks across all attempts.
     const selected = new Set<string>();
     for (const t of s.tasks) {
@@ -231,6 +248,7 @@ function selectScope(facts: FactSet, q: QueryIdentity, outcomeMetric: boolean): 
       tasks.push(t);
       selected.add(`${t.run_id}\u0000${t.task_id}`);
     }
+    const recordLevel = leafFilters.length > 0 || w.basis === "activity_completed";
     for (const r of s.runs) {
       if (!runFilters.every((f) => runMatches(r, f))) continue;
       const leaves: UsageFact[] = [];
@@ -244,13 +262,18 @@ function selectScope(facts: FactSet, q: QueryIdentity, outcomeMetric: boolean): 
         }
         leaves.push(l);
       }
-      // An activity window counts a run only through observations completed inside it.
-      if (w.basis === "activity_completed" && leaves.length === 0 && r.usage_state === "available") continue;
-      if (w.basis === "accepted_outcome_cohort" && leaves.length === 0 && !tasks.some((t) => t.source_id === r.source_id && t.run_id === r.run_id)) continue;
-      runs.push({ run: r, leaves });
+      const observations = r.observations.filter((o) => leafFilters.every((f) => leafMatches(o, f)) && (w.basis !== "activity_completed" || inWindow(o.at, w))
+        && (w.basis !== "accepted_outcome_cohort" || (o.logical_task_id !== null && selected.has(`${r.run_id}\u0000${o.logical_task_id}`))));
+      if (recordLevel) {
+        // Membership is decided by the run's records; without a complete trace it is unknown, not absent.
+        if (r.usage_state !== "available" || !r.trace_complete) unknownRuns.push({ source_id: r.source_id, run_id: r.run_id });
+        if (leaves.length === 0 && observations.length === 0) continue;
+      }
+      if (w.basis === "accepted_outcome_cohort" && leaves.length === 0 && observations.length === 0 && !tasks.some((t) => t.source_id === r.source_id && t.run_id === r.run_id)) continue;
+      runs.push({ run: r, leaves, observations });
     }
   }
-  return { runs, tasks, unknownSources, noOutcomeSources, leafFiltered: leafFilters.length > 0 || w.basis !== "as_of_snapshot", exclusions, taskExclusions };
+  return { runs, tasks, unknownSources, unknownRuns, unenumerated, noOutcomeSources, leafFiltered: leafFilters.length > 0 || w.basis !== "as_of_snapshot", exclusions, taskExclusions };
 }
 
 // ── Point computation ────────────────────────────────────────────────────────
@@ -260,11 +283,19 @@ interface Calc {
   numerator: number | null; denominator: number | null; coverage: Coverage; cost_basis: CostBasis; reason: string | null; records: Evidence[];
 }
 
-const unknownReason = (s: Scope, extra: string[] = []) => [...s.unknownSources.map((x) => `source ${x} unavailable`), ...extra].join("; ") || null;
+const unknownReason = (s: Scope, extra: string[] = []) => [
+  ...s.unknownSources.map((x) => `source ${x} unavailable`),
+  ...s.unknownRuns.slice(0, 20).map((x) => `run ${x.source_id}:${x.run_id} membership unknown (no complete trace)`),
+  ...(s.unknownRuns.length > 20 ? [`${s.unknownRuns.length - 20} more runs with unknown membership`] : []),
+  ...s.unenumerated.map((x) => `source ${x.source_id} has ${x.count} run directories that are not contract runs`),
+  ...extra,
+].join("; ").slice(0, 4000) || null;
+/** The scope's run enumeration is fully known. */
+const enumKnown = (s: Scope) => s.unknownSources.length === 0 && s.unknownRuns.length === 0 && s.unenumerated.length === 0;
 
 /** Eligible leaf requests in scope: null when any part of the enumeration is unknown. */
 function leafEligibility(s: Scope): { eligible: number | null; reasons: string[] } {
-  let eligible: number | null = s.unknownSources.length ? null : 0;
+  let eligible: number | null = enumKnown(s) ? 0 : null;
   const reasons: string[] = [];
   for (const { run, leaves } of s.runs) {
     if (run.usage_state !== "available") { eligible = null; reasons.push(`run ${run.source_id}:${run.run_id} ${run.usage_reason ?? "has no normalized trace"}`); continue; }
@@ -353,24 +384,28 @@ function computeCalcInner(metric: AtomicMetric, s: Scope, facts: FactSet, grain:
     case "M01.run_count": {
       const m = new Map<string, Evidence>();
       for (const { run } of s.runs) m.set(`${run.source_id}\u0000${run.run_id}`, run.evidence);
-      return countCalc(s.unknownSources.length === 0, m, s, null);
+      return countCalc(enumKnown(s), m, s, null);
     }
     case "M01.execution_count":
     case "M01.task_count": {
+      // Every valid record names its execution and task, usage or not.
       const m = new Map<string, Evidence>();
-      const { eligible, reasons } = leafEligibility(s);
-      for (const { run, leaves } of s.runs) for (const l of leaves) {
-        const k = id === "M01.execution_count" ? l.execution_id && `${run.source_id}\u0000${run.run_id}\u0000${l.execution_id}` : l.logical_task_id && `${run.source_id}\u0000${l.logical_task_id}`;
-        if (k && !m.has(k)) m.set(k, l.evidence);
+      const partial: string[] = [];
+      for (const { run, observations } of s.runs) {
+        if (run.usage_state !== "available" || !run.trace_complete) partial.push(`run ${run.source_id}:${run.run_id} has no complete trace`);
+        for (const o of observations) {
+          const k = id === "M01.execution_count" ? o.execution_id && `${run.source_id}\u0000${run.run_id}\u0000${o.execution_id}` : o.logical_task_id && `${run.source_id}\u0000${o.logical_task_id}`;
+          if (k && !m.has(k)) m.set(k, o.evidence);
+        }
       }
       if (id === "M01.task_count") for (const t of s.tasks) if (!m.has(`${t.source_id}\u0000${t.task_id}`)) m.set(`${t.source_id}\u0000${t.task_id}`, t.evidence);
-      return countCalc(eligible !== null, m, s, unknownReason(s, reasons));
+      return countCalc(enumKnown(s) && partial.length === 0, m, s, unknownReason(s, partial));
     }
     case "M01.goal_count": {
       const m = new Map<string, Evidence>();
       for (const { run } of s.runs) for (const a of run.attachments) if (a.kind === "goal" && !m.has(`${run.source_id}\u0000${a.id}`)) m.set(`${run.source_id}\u0000${a.id}`, run.evidence);
-      const unknownRuns = s.runs.filter((r) => r.run.usage_state !== "available").map((r) => `run ${r.run.source_id}:${r.run.run_id} attachments unknown`);
-      return countCalc(s.unknownSources.length === 0 && unknownRuns.length === 0, m, s, unknownReason(s, unknownRuns));
+      const unknownRuns = s.runs.filter((r) => r.run.usage_state !== "available" || !r.run.trace_complete).map((r) => `run ${r.run.source_id}:${r.run.run_id} attachments unknown`);
+      return countCalc(enumKnown(s) && unknownRuns.length === 0, m, s, unknownReason(s, unknownRuns));
     }
     case "M06.input_tokens": return sumCalc(s, (l) => l.input, "not_applicable");
     case "M07.output_tokens": return sumCalc(s, (l) => l.output, "not_applicable");
@@ -421,7 +456,7 @@ function computeCalcInner(metric: AtomicMetric, s: Scope, facts: FactSet, grain:
     case "M12.invalid_count": {
       const m = new Map<string, Evidence>();
       let n = 0;
-      let known = s.unknownSources.length === 0 && !s.leafFiltered;
+      let known = enumKnown(s) && !s.leafFiltered;
       for (const { run } of s.runs) { if (run.invalid_count === null) known = false; else n += run.invalid_count; m.set(`${run.source_id}\u0000${run.run_id}`, run.evidence); }
       if (!known) return unavailableCalc(s.leafFiltered ? "invalid events cannot be attributed to a filtered scope" : unknownReason(s) ?? "invalid event count unknown", false);
       return { value: n, known_subtotal: n, exact_total: n, numerator: null, denominator: null, coverage: makeCoverage(s.runs.length, s.runs.length, {}, null), cost_basis: "not_applicable", reason: null, records: [...m.values()] };
@@ -433,13 +468,13 @@ function computeCalcInner(metric: AtomicMetric, s: Scope, facts: FactSet, grain:
         let observations = 0;
         for (const { run } of s.runs) { observations += Math.max(1, run.attachments.length); records.push(run.evidence); }
         const n = observations - s.runs.length;
-        const cov = makeCoverage(s.unknownSources.length ? null : observations, observations, {}, unknownReason(s));
+        const cov = makeCoverage(enumKnown(s) ? observations : null, observations, {}, unknownReason(s));
         return { value: n, known_subtotal: n, exact_total: cov.state === "complete" ? n : null, numerator: null, denominator: null, coverage: cov, cost_basis: "not_applicable", reason: cov.state === "complete" ? null : cov.reason, records };
       }
       if (s.leafFiltered) return unavailableCalc("suppressed request repeats cannot be attributed to a filtered scope", false);
       let n = 0;
       for (const { run } of s.runs) { n += run.duplicate_count; records.push(run.evidence); }
-      const cov = makeCoverage(s.unknownSources.length ? null : s.runs.length, s.runs.length, {}, unknownReason(s));
+      const cov = makeCoverage(enumKnown(s) ? s.runs.length : null, s.runs.length, {}, unknownReason(s));
       return { value: n, known_subtotal: n, exact_total: cov.state === "complete" ? n : null, numerator: null, denominator: null, coverage: cov, cost_basis: "not_applicable", reason: cov.state === "complete" ? null : cov.reason, records };
     }
     case "M13.allocated_tokens": return sumCalc(s, (l) => (l.covered && l.allocated && l.total !== null ? l.total : l.covered && !l.allocated ? 0 : null), "not_applicable");
@@ -491,46 +526,64 @@ function computeCalcInner(metric: AtomicMetric, s: Scope, facts: FactSet, grain:
 // ── Grouping ─────────────────────────────────────────────────────────────────
 
 const KEY_RE = TRACE_ID_RE;
+/**
+ * Group the scope into series points. Source, run and task keys are source-qualified
+ * (`source:run`, `source:task`); a key two different identities would share refuses,
+ * so ids containing ':' can never merge two runs. Cohort and model keys are
+ * cross-source by design.
+ */
 function groupKeys(s: Scope, by: GroupBy): Map<string, Scope> {
   const out = new Map<string, Scope>();
   if (by === "all") { out.set("all", s); return out; }
-  const put = (k: string | null, run: ScopedRun | null, task: TaskFact | null, leaf: UsageFact | null) => {
+  const owner = new Map<string, string>();
+  const own = by === "source" || by === "run";
+  const group = (k: string | null, identity: string | null, src: string, runId: string | null = null): Scope => {
     const key = k === null ? "unattributed" : k;
     if (!KEY_RE.test(key)) throw new SeriesRefusal("invalid_request", `group key ${JSON.stringify(key)} is not a contract id`);
+    const id = identity ?? key;
+    if (owner.has(key) && owner.get(key) !== id) throw new SeriesRefusal("invalid_request", `group key ${key} would merge distinct identities; ids are ambiguous under ':' joining`);
+    owner.set(key, id);
     let g = out.get(key);
-    // A leaf-level group cannot claim requests it cannot attribute, so unknown extras make it partial.
     if (!g) {
       // A source or run key names known facts; an unavailable source cannot hold them. Other keys may recur there.
-      const own = by === "source" || by === "run";
-      const src = run?.run.source_id ?? task?.source_id ?? "";
       g = { ...s, runs: [], tasks: [], leafFiltered: s.leafFiltered || !own,
-        unknownSources: own ? [] : s.unknownSources, noOutcomeSources: own ? s.noOutcomeSources.filter((x) => x === src) : s.noOutcomeSources };
+        unknownSources: own ? [] : s.unknownSources,
+        unknownRuns: by === "source" ? s.unknownRuns.filter((x) => x.source_id === src) : by === "run" ? s.unknownRuns.filter((x) => x.source_id === src && x.run_id === runId) : s.unknownRuns,
+        unenumerated: by === "source" ? s.unenumerated.filter((x) => x.source_id === src) : by === "run" ? [] : s.unenumerated,
+        noOutcomeSources: own ? s.noOutcomeSources.filter((x) => x === src) : s.noOutcomeSources };
       out.set(key, g);
     }
-    if (run) {
-      let r = g.runs.find((x) => x.run === run.run);
-      if (!r) { r = { run: run.run, leaves: leaf ? [] : run.leaves }; g.runs.push(r); }
-      if (leaf) r.leaves.push(leaf);
-    }
-    if (task) g.tasks.push(task);
+    return g;
+  };
+  const slot = (g: Scope, r: ScopedRun, whole: boolean): ScopedRun => {
+    let x = g.runs.find((y) => y.run === r.run);
+    if (!x) { x = { run: r.run, leaves: whole ? r.leaves : [], observations: whole ? r.observations : [] }; g.runs.push(x); }
+    return x;
   };
   const cohortOf = new Map(s.tasks.map((t) => [`${t.source_id}\u0000${t.run_id}\u0000${t.task_id}`, t.cohort]));
+  const keyOf = (r: RunFacts, rec: { logical_task_id: string | null; observed_model: string | null }): [string | null, string | null] => {
+    if (by === "task") return rec.logical_task_id === null ? [null, null] : [`${r.source_id}:${rec.logical_task_id}`, `${r.source_id}\u0000${rec.logical_task_id}`];
+    if (by === "observed_model") return [rec.observed_model, null];
+    const c = rec.logical_task_id === null ? null : cohortOf.get(`${r.source_id}\u0000${r.run_id}\u0000${rec.logical_task_id}`) ?? null;
+    return [c, null];
+  };
   for (const r of s.runs) {
-    if (by === "source") put(r.run.source_id, r, null, null);
-    else if (by === "run") put(`${r.run.source_id}:${r.run.run_id}`, r, null, null);
-    else for (const l of r.leaves) {
-      const k = by === "task" ? l.logical_task_id : by === "observed_model" ? l.observed_model : l.logical_task_id === null ? null : cohortOf.get(`${r.run.source_id}\u0000${r.run.run_id}\u0000${l.logical_task_id}`) ?? null;
-      put(k, r, null, l);
+    if (by === "source") slot(group(r.run.source_id, null, r.run.source_id), r, true);
+    else if (by === "run") slot(group(`${r.run.source_id}:${r.run.run_id}`, `${r.run.source_id}\u0000${r.run.run_id}`, r.run.source_id, r.run.run_id), r, true);
+    else {
+      for (const l of r.leaves) { const [k, id] = keyOf(r.run, l); slot(group(k, id, r.run.source_id), r, false).leaves.push(l); }
+      for (const o of r.observations) { const [k, id] = keyOf(r.run, o); slot(group(k, id, r.run.source_id), r, false).observations.push(o); }
     }
   }
   for (const t of s.tasks) {
-    if (by === "cohort") put(t.cohort, null, t, null);
-    else if (by === "source") put(t.source_id, null, t, null);
-    else if (by === "run") put(`${t.source_id}:${t.run_id}`, null, t, null);
-    else if (by === "task") put(t.task_id, null, t, null);
+    const g = by === "cohort" ? group(t.cohort, null, t.source_id)
+      : by === "source" ? group(t.source_id, null, t.source_id)
+      : by === "run" ? group(`${t.source_id}:${t.run_id}`, `${t.source_id}\u0000${t.run_id}`, t.source_id, t.run_id)
+      : by === "task" ? group(`${t.source_id}:${t.task_id}`, `${t.source_id}\u0000${t.task_id}`, t.source_id) : null;
+    g?.tasks.push(t);
   }
-  // Offline sources are unknown in every group, so per-source points still name them.
-  if (by === "source") for (const sid of s.unknownSources) if (!out.has(sid)) out.set(sid, { ...s, runs: [], tasks: [], unknownSources: [sid], noOutcomeSources: [] });
+  // Unavailable sources are unknown in every group, so per-source points still name them.
+  if (by === "source") for (const sid of s.unknownSources) if (!out.has(sid)) out.set(sid, { ...s, runs: [], tasks: [], unknownSources: [sid], unknownRuns: [], unenumerated: [], noOutcomeSources: [] });
   if (out.size > SERIES_LIMITS.points) throw new SeriesRefusal("invalid_request", `${out.size} groups exceed the ${SERIES_LIMITS.points}-point bound; narrow the filters`);
   return new Map([...out.entries()].sort((a, b) => cmp(a[0], b[0])));
 }
