@@ -132,6 +132,8 @@ export interface ControlReceipt {
 export interface CollectReport {
   accepted: Array<{ observation_id: string; execution_id: string; admission: "active" | "reconcile_only" }>;
   replayed: string[];
+  /** True when the per-call bound stopped the scan; the next call resumes after the last file examined. */
+  truncated: boolean;
   rejected: Array<{ observation_id: string; code: ObservationRejection }>;
 }
 export type ObservationRejection =
@@ -147,7 +149,7 @@ export interface JournalEntry {
   schema_version: typeof CONTROLLER_JOURNAL_SCHEMA;
   seq: number;
   prev_mac: string;
-  kind: "genesis" | "epoch_open" | "suspend" | "writer_grant" | "attempt_grant" | "admission" | "control" | "observation" | "artifact_bind";
+  kind: "genesis" | "epoch_open" | "suspend" | "writer_grant" | "attempt_grant" | "admission" | "control" | "observation" | "artifact_bind" | "void";
   epoch: number;
   at_ms: number;
   body: Record<string, unknown>;
@@ -182,6 +184,8 @@ export interface OpenControllerOptions {
   leaseMs?: number;
   pid?: number;
   pidAlive?: (pid: number) => boolean;
+  /** Upper bound of observation files examined per collect call; traversal resumes after the last one. */
+  maxObservationsPerCollect?: number;
 }
 
 // ── primitives ───────────────────────────────────────────────────────────────
@@ -250,7 +254,7 @@ function writeAll(fd: number, bytes: Buffer): void {
   }
 }
 /** fsync a private temp file, then link(2) it to `final`. Returns false when `final` already exists. */
-function linkOnce(final: string, bytes: Buffer, mode: number): boolean {
+function linkOnce(final: string, bytes: Buffer, mode: number, precommit?: () => void): boolean {
   const dir = path.dirname(final);
   const tmp = path.join(dir, `.${path.basename(final)}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`);
   let created = false;
@@ -262,6 +266,7 @@ function linkOnce(final: string, bytes: Buffer, mode: number): boolean {
     } finally {
       fs.closeSync(fd);
     }
+    precommit?.();
     try {
       fs.linkSync(tmp, final);
       created = true;
@@ -394,10 +399,25 @@ function foldEntry(view: ControllerJournalView, key: Buffer, raw: string, seq: n
   } else if (view.suspended) {
     corrupt(`entry ${seq} written after suspend`);
   }
+  if (e.kind === "suspend") view.suspended = true;
+  if (e.kind === "void") {
+    // A void only withdraws the immediately preceding effect entry of the same epoch.
+    const target = view.entries[seq - 1];
+    if (!target || b.target_seq !== seq - 1 || target.epoch !== e.epoch || ["genesis", "epoch_open", "suspend", "void"].includes(target.kind)) corrupt(`void ${seq} has no valid target`);
+  }
+  view.entries.push(e);
+}
+
+/** Recompute the effect maps from the verified entries, skipping voided ones. */
+function rebuildEffects(view: ControllerJournalView): void {
+  view.writerGrants.clear(); view.attemptGrants.clear(); view.attempts.clear(); view.admission.clear();
+  view.operations.clear(); view.observations.clear(); view.artifacts.clear();
+  const voided = new Set(view.entries.filter((x) => x.kind === "void").map((x) => Number(x.body.target_seq)));
+  for (const e of view.entries) {
+    if (voided.has(e.seq)) continue;
+    const b = e.body;
+    const seq = e.seq;
   switch (e.kind) {
-    case "suspend":
-      view.suspended = true;
-      break;
     case "writer_grant":
       view.writerGrants.set(String(b.grant_id), { epoch: e.epoch, nonce_hash: String(b.nonce_hash), scope_hash: String(b.scope_hash) });
       break;
@@ -425,7 +445,7 @@ function foldEntry(view: ControllerJournalView, key: Buffer, raw: string, seq: n
     default:
       break;
   }
-  view.entries.push(e);
+  }
 }
 
 function listSeqs(privateDir: string): number[] {
@@ -443,12 +463,15 @@ function listSeqs(privateDir: string): number[] {
 
 function loadJournal(privateDir: string, key: Buffer, into: ControllerJournalView = emptyView()): ControllerJournalView {
   const seqs = listSeqs(privateDir);
+  let changed = into.entries.length === 0;
   for (const seq of seqs) {
     if (seq < into.entries.length) continue;
     const raw = readNoFollow(entryFile(privateDir, seq), MAX_ENTRY_BYTES);
     if (raw === null) corrupt(`entry ${seq} unreadable`);
     foldEntry(into, key, raw, seq);
+    changed = true;
   }
+  if (changed) rebuildEffects(into);
   return into;
 }
 
@@ -463,13 +486,13 @@ export function readControllerJournal(opts: { privateDir: string }): ControllerJ
 
 // ── lease ────────────────────────────────────────────────────────────────────
 
-interface Lease { pid: number; host_id: string; token: string; heartbeat_ms: number }
+interface Lease { pid: number; host_id: string; token: string; heartbeat_ms: number; epoch: number }
 function readLease(privateDir: string): Lease | null {
   const raw = readNoFollow(path.join(privateDir, LEASE_FILE), 4096);
   if (raw === null) return null;
   try {
     const l = JSON.parse(raw) as Lease;
-    return isObj(l) && typeof l.pid === "number" && typeof l.token === "string" && typeof l.heartbeat_ms === "number" ? l : null;
+    return isObj(l) && typeof l.pid === "number" && typeof l.token === "string" && typeof l.heartbeat_ms === "number" && typeof l.epoch === "number" ? l : null;
   } catch {
     return null;
   }
@@ -542,21 +565,23 @@ export function openRunController(opts: OpenControllerOptions): RunController {
   }
   const token = crypto.randomBytes(16).toString("hex");
   let heartbeatAt = now();
-  writeLease(privateDir, { pid, host_id, token, heartbeat_ms: heartbeatAt });
+  const maxPerCollect = opts.maxObservationsPerCollect ?? MAX_OBSERVATIONS_PER_COLLECT;
+  let collectCursor = "";
 
   const k = key;
   let epoch = 0;
   let closed = false;
   let suspended = false;
 
-  const append = (kind: JournalEntry["kind"], body: Record<string, unknown>, atEpoch: number): JournalEntry => {
+  const append = (kind: JournalEntry["kind"], body: Record<string, unknown>, atEpoch: number, precommit?: () => void): JournalEntry => {
     const seq = view.entries.length;
     const prev = view.entries[seq - 1];
     const unsigned = { schema_version: CONTROLLER_JOURNAL_SCHEMA, seq, prev_mac: prev ? prev.mac : "", kind, epoch: atEpoch, at_ms: now(), body };
     const entry: JournalEntry = { ...unsigned, mac: macOf(k, unsigned) };
     const raw = JSON.stringify(entry);
-    if (!linkOnce(entryFile(privateDir, seq), Buffer.from(raw, "utf8"), 0o600)) return null as unknown as JournalEntry;
+    if (!linkOnce(entryFile(privateDir, seq), Buffer.from(raw, "utf8"), 0o600, precommit)) return null as unknown as JournalEntry;
     foldEntry(view, k, raw, seq);
+    rebuildEffects(view);
     return entry;
   };
 
@@ -574,6 +599,9 @@ export function openRunController(opts: OpenControllerOptions): RunController {
       break;
     }
   }
+  heartbeatAt = now();
+  writeLease(privateDir, { pid, host_id, token, heartbeat_ms: heartbeatAt, epoch });
+  const expired = () => now() - heartbeatAt > leaseMs;
 
   /** Every authoritative write goes through here first. */
   const assertLive = (): void => {
@@ -585,13 +613,24 @@ export function openRunController(opts: OpenControllerOptions): RunController {
     loadJournal(privateDir, k, view);
     if (view.epoch !== epoch) throw new ControllerRefusal("controller_fenced", `epoch ${epoch} superseded by ${view.epoch}`);
     if (suspended || view.suspended) throw new ControllerRefusal("controller_unavailable", "controller suspended");
+    if (expired()) throw new ControllerRefusal("controller_unavailable", "lease expired");
+    // The journal decides authority; the lease only signals liveness. A lease
+    // removed or overwritten by an older epoch (a stale heartbeat or close) is
+    // restored by the current epoch instead of wedging it.
     const lease = readLease(privateDir);
-    if (!lease || lease.token !== token) throw new ControllerRefusal("controller_unavailable", "lease lost");
-    if (now() - heartbeatAt > leaseMs) throw new ControllerRefusal("controller_unavailable", "lease expired");
+    if (lease && lease.epoch > epoch) throw new ControllerRefusal("controller_fenced", `lease held by epoch ${lease.epoch}`);
+    if (lease && lease.epoch === epoch && lease.token !== token) throw new ControllerRefusal("controller_unavailable", "lease lost");
+    if (!lease || lease.epoch < epoch) writeLease(privateDir, { pid, host_id, token, heartbeat_ms: heartbeatAt, epoch });
   };
   const write = (kind: JournalEntry["kind"], body: Record<string, unknown>): JournalEntry => {
     assertLive();
-    const e = append(kind, body, epoch);
+    // Lease validity is re-checked after fsync, immediately before link(2), and
+    // again after it: an entry that lands past the deadline is voided.
+    const e = append(kind, body, epoch, () => { if (expired()) throw new ControllerRefusal("controller_unavailable", "lease expired before commit"); });
+    if (e && expired()) {
+      if (!append("void", { target_seq: e.seq }, epoch)) throw new ControllerRefusal("controller_fenced", "a newer epoch ordered after a late commit");
+      throw new ControllerRefusal("controller_unavailable", "lease expired during commit; entry voided");
+    }
     if (!e) {
       loadJournal(privateDir, k, view);
       if (view.epoch !== epoch) throw new ControllerRefusal("controller_fenced", `epoch ${epoch} superseded by ${view.epoch}`);
@@ -637,7 +676,9 @@ export function openRunController(opts: OpenControllerOptions): RunController {
     heartbeat() {
       assertLive();
       heartbeatAt = now();
-      writeLease(privateDir, { pid, host_id, token, heartbeat_ms: heartbeatAt });
+      writeLease(privateDir, { pid, host_id, token, heartbeat_ms: heartbeatAt, epoch });
+      // A newer epoch may have opened during the write; it restores its own lease.
+      assertLive();
     },
 
     suspend() {
@@ -668,13 +709,22 @@ export function openRunController(opts: OpenControllerOptions): RunController {
       const execution_id = requireId(req.execution_id, "execution_id");
       const attempt_id = requireId(req.attempt_id, "attempt_id");
       if (!Number.isSafeInteger(req.expires_at_ms) || req.expires_at_ms <= now()) throw new ControllerRefusal("request_invalid", "expires_at_ms must be a future instant");
-      if (view.attempts.has(attempt_id)) throw new ControllerRefusal("attempt_grant_exists", `attempt ${attempt_id} already holds its immutable grant`);
       const adm = view.admission.get(execution_id);
       if (adm === "revoked" || adm === "sealed") throw new ControllerRefusal("admission_closed", `execution ${execution_id} is ${adm}`);
+      const scope_hash = sha256(canonical({ scope: requireId(req.scope, "scope") }));
+      if (view.attempts.has(attempt_id)) {
+        // Immutable: an identical request re-delivers the committed grant (crash before delivery); anything else refuses.
+        const prior = [...view.attemptGrants.values()].find((g) => g.attempt_id === attempt_id);
+        if (!prior || prior.execution_id !== execution_id || prior.scope_hash !== scope_hash || prior.expires_at_ms !== req.expires_at_ms) {
+          throw new ControllerRefusal("attempt_grant_exists", `attempt ${attempt_id} already holds its immutable grant`);
+        }
+        const { claims_hash: _h, ...claims } = prior;
+        return { kind: "attempt", grant_id: claims.grant_id, claims, secret: workerSecret(claims) };
+      }
       const claims: AttemptGrantClaims = {
         grant_id: `ag-${epoch}-${crypto.randomBytes(8).toString("hex")}`,
         source_id, run_id, execution_id, attempt_id,
-        scope_hash: sha256(canonical({ scope: requireId(req.scope, "scope") })),
+        scope_hash,
         issued_controller_epoch: epoch,
         expires_at_ms: req.expires_at_ms,
         nonce_hash: sha256(crypto.randomBytes(32)),
@@ -719,19 +769,29 @@ export function openRunController(opts: OpenControllerOptions): RunController {
 
     collectObservations() {
       assertLive();
-      const report: CollectReport = { accepted: [], replayed: [], rejected: [] };
+      const report: CollectReport = { accepted: [], replayed: [], truncated: false, rejected: [] };
       const execRoot = durablePath("runs", run_id, "executions");
       const execAbs = checkContained(durableRoot, execRoot, { policy: "physical" });
       if (isRefused(execAbs) || !fs.existsSync(execAbs.realPath)) return report;
-      let seen = 0;
+      const all: Array<{ key: string; obsRel: string; execution_id: string; file: string }> = [];
       const execs = fs.readdirSync(execAbs.realPath, { withFileTypes: true }).filter((d) => d.isDirectory() && ID_RE.test(d.name)).map((d) => d.name).sort();
       for (const execution_id of execs) {
         const obsRel = path.join(execRoot, execution_id, "observations");
         const obsAbs = checkContained(durableRoot, obsRel, { policy: "physical" });
         if (isRefused(obsAbs) || !fs.existsSync(obsAbs.realPath)) continue;
-        const files = fs.readdirSync(obsAbs.realPath).filter((n) => n.endsWith(".json") && !n.startsWith(".")).sort();
-        for (const file of files) {
-          if (++seen > MAX_OBSERVATIONS_PER_COLLECT) return report;
+        for (const file of fs.readdirSync(obsAbs.realPath).filter((n) => n.endsWith(".json") && !n.startsWith(".")).sort()) {
+          all.push({ key: `${execution_id}/${file}`, obsRel, execution_id, file });
+        }
+      }
+      // Fair traversal: resume after the last file examined, wrapping around, so a
+      // prefix of retained or junk files cannot starve later observations.
+      const start = all.findIndex((c) => c.key > collectCursor);
+      const order = start <= 0 ? all : [...all.slice(start), ...all.slice(0, start)];
+      const batch = order.slice(0, maxPerCollect);
+      report.truncated = order.length > batch.length;
+      collectCursor = report.truncated ? batch[batch.length - 1]!.key : "";
+      for (const { obsRel, execution_id, file } of batch) {
+        {
           const observation_id = file.slice(0, -5);
           const reject = (c: ObservationRejection) => { report.rejected.push({ observation_id, code: c }); };
           const raw = ID_RE.test(observation_id) ? readDurable(durableRoot, path.join(obsRel, file), MAX_OBSERVATION_BYTES) : null;

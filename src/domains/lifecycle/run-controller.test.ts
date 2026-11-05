@@ -15,7 +15,7 @@
  * W02 carry-over: the assurance ledger is controller-bound, so a rewritten
  * ledger with a recomputed ledger_hash is detected.
  */
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -321,6 +321,78 @@ describe("AT11 · controller outage", () => {
     open().close();
     expect(code(() => open({ run_id: "run-other" }))).toBe("journal_identity_mismatch");
     expect(code(() => open({ source_id: "source-b" }))).toBe("journal_identity_mismatch");
+  });
+});
+
+describe("R02 · codex r1 regressions", () => {
+  it("F1: lease expiring between fsync and link commits nothing", () => {
+    const c = open();
+    const w = c.issueWriterGrant("s");
+    const n = readControllerJournal({ privateDir }).entries.length;
+    const real = fs.fsyncSync;
+    const spy = spyOn(fs, "fsyncSync").mockImplementation((fd: number) => { clock += LEASE + 1; real(fd); });
+    try {
+      expect(code(() => c.control(w, { operation_id: "op-late", action: "release", subject: "run" }))).toBe("controller_unavailable");
+    } finally { spy.mockRestore(); }
+    expect(readControllerJournal({ privateDir }).entries.length).toBe(n);
+    expect(readControllerJournal({ privateDir }).operations.has("op-late")).toBe(false);
+  });
+
+  it("F1: an entry linked after the lease deadline is voided and has no effect", () => {
+    const c = open();
+    const w = c.issueWriterGrant("s");
+    const real = fs.linkSync;
+    const spy = spyOn(fs, "linkSync").mockImplementation((a: fs.PathLike, b: fs.PathLike) => { real(a, b); if (String(b).includes(`${path.sep}journal${path.sep}`)) clock += LEASE + 1; });
+    try {
+      expect(code(() => c.control(w, { operation_id: "op-late", action: "release", subject: "run" }))).toBe("controller_unavailable");
+    } finally { spy.mockRestore(); }
+    const v = readControllerJournal({ privateDir });
+    expect(v.entries[v.entries.length - 1]!.kind).toBe("void");
+    expect(v.operations.has("op-late")).toBe(false);
+    expect(fs.existsSync(path.join(durableRoot, ".guild", "runs", RUN, "controller", "receipts", "op-late.json"))).toBe(false);
+  });
+
+  it("F2: a stale epoch's lease write or removal does not wedge the current epoch", () => {
+    const c1 = open();
+    clock += LEASE + 1;
+    const c2 = open();
+    const w = c2.issueWriterGrant("s");
+    const leaseFile = path.join(privateDir, "lease.json");
+    fs.writeFileSync(leaseFile, JSON.stringify({ pid: 4242, host_id: "host-1", token: "old", heartbeat_ms: clock, epoch: c1.epoch }));
+    expect(c2.control(w, { operation_id: "op-1", action: "accept", subject: "a" }).controller_epoch).toBe(c2.epoch);
+    expect(JSON.parse(fs.readFileSync(leaseFile, "utf8")).epoch).toBe(c2.epoch);
+    fs.rmSync(leaseFile);
+    expect(c2.control(w, { operation_id: "op-2", action: "accept", subject: "a" }).controller_epoch).toBe(c2.epoch);
+    expect(code(() => c1.heartbeat())).toBe("controller_fenced");
+  });
+
+  it("F3: an attempt grant lost before delivery is re-delivered by an identical request", () => {
+    const c1 = open();
+    const req = { execution_id: "exec-a", attempt_id: "att-1", scope: "scope:a", expires_at_ms: clock + 100_000 };
+    const g1 = c1.issueAttemptGrant(req);
+    c1.close();
+    const c2 = open();
+    const g2 = c2.issueAttemptGrant(req);
+    expect(g2).toEqual(g1);
+    expect(code(() => c2.issueAttemptGrant({ ...req, scope: "scope:b" }))).toBe("attempt_grant_exists");
+    writeWorkerObservation(durableRoot, RUN, g2, { observation_id: "obs-1", body: {} });
+    expect(c2.collectObservations().accepted.map((a) => a.observation_id)).toEqual(["obs-1"]);
+  });
+
+  it("F4: a prefix of junk files cannot starve a later observation", () => {
+    const c = open({ maxObservationsPerCollect: 3 });
+    const g = c.issueAttemptGrant({ execution_id: "zzz", attempt_id: "att-1", scope: "s", expires_at_ms: clock + 100_000 });
+    const junk = path.join(durableRoot, ".guild", "runs", RUN, "executions", "aaa", "observations");
+    fs.mkdirSync(junk, { recursive: true });
+    for (let i = 0; i < 7; i++) fs.writeFileSync(path.join(junk, `j${i}.json`), "{}");
+    writeWorkerObservation(durableRoot, RUN, g, { observation_id: "obs-1", body: {} });
+    const accepted: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const r = c.collectObservations();
+      accepted.push(...r.accepted.map((a) => a.observation_id));
+      expect(r.rejected.length + r.accepted.length + r.replayed.length).toBeLessThanOrEqual(3);
+    }
+    expect(accepted).toEqual(["obs-1"]);
   });
 });
 
