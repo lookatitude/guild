@@ -2,9 +2,9 @@ import { describe, expect, it } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
-import { ORACLE_URI_PATTERN, stackReaderValidator as stackValidator } from "../../../scripts/lib/stack-contract-reader-validator";
-import { stackContractBundle } from "./index";
-import stackContractBundleV2 from "./stack-contracts.v2.generated.json";
+import { ORACLE_URI_PATTERN, stackReaderValidator as stackValidator } from "./stack-contract-reader-validator";
+import { stackContractBundle } from "../../src/domains/lifecycle";
+import stackContractBundleV2 from "../../src/domains/lifecycle/stack-contracts.v2.generated.json";
 import {
   createStackContractReader,
   stackContractDigest,
@@ -13,9 +13,9 @@ import {
   stackReaderVersions,
   stackV1SemanticErrors,
   stackV2SemanticErrors,
-} from "./stack-contract-reader";
+} from "../../src/domains/lifecycle/stack-contract-reader";
 
-const FIXTURE = path.resolve(__dirname, "../../../tests/fixtures/stack-contract-reader/parity.generated.json");
+const FIXTURE = path.resolve(__dirname, "../../tests/fixtures/stack-contract-reader/parity.generated.json");
 const parity = JSON.parse(fs.readFileSync(FIXTURE, "utf8"));
 const check = stackValidator();
 const reader = createStackContractReader({ check });

@@ -1914,6 +1914,7 @@ const KTD29_DEEP_IMPORTS: ReadonlyMap<string, readonly string[]> = new Map<strin
   // JSON; the lifecycle barrel is whole-required by other bundles, so it must not export them.
   ["scripts/stack-operations.ts", ["lifecycle/stack-contract-reader"]],
   ["scripts/lib/stack-contract-reader-validator.ts", ["lifecycle/stack-contracts.v2.generated.json"]],
+  ["scripts/lib/stack-contract-reader.test.ts", ["lifecycle/stack-contract-reader", "lifecycle/stack-contracts.v2.generated.json"]],
 ]);
 
 const CHECKS: Check[] = [
