@@ -3,13 +3,14 @@ import * as path from "node:path";
 import { randomUUID, createHmac, timingSafeEqual } from "node:crypto";
 import { StackError, stackHash, stackId, stackRead, stackContained, parseYaml, type StackSource } from "../state";
 import { redactTokenShapes, redactKeyValueSecrets } from "../security";
+import { sealSet } from "../kernel";
 import { validateInitiativeManifest, validateDefinitionItem, ledgerReady, deriveInitiativeStatus, d8CloseGate, DEFINITION_STATUS, EXECUTION_STATUS, RELEASE_STATUS, DOCUMENTATION_STATUS } from "./initiative";
 import { validateWorkItem, populateReleaseDocsWorkItems } from "./initiative-workitems";
 import { updateRunAttachment } from './run-lifecycle';
 import { buildD8Input, checkInitiativeEvidenceRefs } from "./initiative-evidence";
 type R = Record<string, any>;
-export const P05_READS = /* @__PURE__ */ new Set(["initiative.list", "initiative.inspect", "initiative.close_check", "decision.list", "decision.inspect", "run.list", "run.inspect", "run.trace", "run.artifacts"]);
-export const P05_WRITES = /* @__PURE__ */ new Set(["initiative.create", "initiative.revise", "initiative.link", "initiative.unlink", "initiative.pause", "initiative.close", "initiative.archive", "initiative.restore", "decision.propose", "decision.approve", "decision.reject", "decision.supersede"]);
+export const P05_READS = sealSet(["initiative.list", "initiative.inspect", "initiative.close_check", "decision.list", "decision.inspect", "run.list", "run.inspect", "run.trace", "run.artifacts"], "P05_READS");
+export const P05_WRITES = sealSet(["initiative.create", "initiative.revise", "initiative.link", "initiative.unlink", "initiative.pause", "initiative.close", "initiative.archive", "initiative.restore", "decision.propose", "decision.approve", "decision.reject", "decision.supersede"], "P05_WRITES");
 const EMPTY = /* @__PURE__ */ stackHash("");
 const json = (v: any) => JSON.stringify(v, null, 2) + "\n";
 const issue = (code: string, message: string) => ({ code, message, evidence: [] });
@@ -244,7 +245,7 @@ export class StackP05 {
         closeErrors.push(issue('unresolved_dependencies', 'Blocking definition or work remains')); if (issues.length)
         closeErrors.push(...issues); const inputs = buildD8Input(m ?? {}, execVerified).input; const result = d8CloseGate(inputs); const revision = this.digest([...files, ...this.attachmentFiles(), ...evidencePaths]); const ref = this.entity('initiative', id, revision); const close = { schema_version: 'guild.stack.initiative_close_check.v1', initiative: ref, inputs, result, evidence: [...evidencePaths].map(p => this.evidence(p)), evidence_errors: closeErrors, pass: compatibility === 'canonical' && result.canClose && closeErrors.length === 0, required_work_items: populateReleaseDocsWorkItems(id, result, inputs.documentation_status) }; const page = (total: number) => ({ next_cursor: null, total, partial: false }); return { ref, data: p05Redact({ schema_version: 'guild.stack.initiative_view.v1', path: rel.slice(7), title: typeof m?.title==='string'?m.title:id, manifest: m&&typeof m==='object'&&!Array.isArray(m)?m:null, close_gate: validCloseGate ? closeGate : null, bucket: rel.split('/')[2], compatibility, axes, derived_status: compatibility === 'canonical' ? deriveInitiativeStatus(m, { paused: life?.paused ?? false, archived: rel.includes('/archived/') }) : null, definition_items: defs, work_items: works, dependencies, linked_runs: linked.map(r => r.ref), decisions: decisions.map(d => d.ref), lifecycle: life, close_check: close, evidence: files.map(p => this.evidence(p)), issues, sections: { definition: page(defs.length), work_items: page(works.length), runs: page(linked.length), decisions: page(decisions.length) } }) }; }
     verifyRunPass(id: string, bytes: string): boolean { const lines = bytes.split(/\r?\n/).filter(l => l.trim() !== ''); if (lines[0] !== '# Verify — ' + id || lines[1] !== 'Overall status: pass' || bytes.includes('✗') || /^Overall status: (?!pass$)/m.test(bytes))
-        return false; return [1, 2, 3, 4, 5, 6].every(n => lines.some(l => new RegExp('^' + n + '\\. ').test(l) && (/\bpass\b/.test(l) || l.includes('✓')))); }
+        return false; return [1, 2, 3, 4, 5, 6].every(n => lines.some(l => l.startsWith(n + '. ') && (/\bpass\b/.test(l) || l.includes('✓')))); }
     dependencies(works: any[]): any[] { const ids = new Set(works.map(w => w.id)); if (ids.size !== works.length)
         throw new StackError('invalid_dependencies', 'Duplicate work item IDs', 422); const out: any[] = []; const visit = (id: string, stack: string[]): boolean => { if (stack.includes(id))
         return true; const w = works.find(w => w.id === id); return (w?.depends_on ?? []).some((to: string) => visit(to, [...stack, id])); }; for (const w of works) {

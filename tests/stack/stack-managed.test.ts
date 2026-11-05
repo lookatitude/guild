@@ -4,10 +4,10 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { execFileSync } from "node:child_process";
 import { buildOne, targets } from "../../scripts/compile";
-import * as managedAdapter from "./managed-node-process";
-import { launchManagedWorker } from "./managed-node-process";
-import { StackFacade } from "../domains/lifecycle";
-import { stackHash } from "../domains/state";
+import * as managedAdapter from "../../src/adapters/managed-node-process";
+import { launchManagedWorker } from "../../src/adapters/managed-node-process";
+import { StackFacade } from "../../src/domains/lifecycle";
+import { stackHash } from "../../src/domains/state";
 import { stackValidator } from "../../scripts/lib/stack-contract-validator";
 function fixture(real:boolean|"killed"|"failed"|"pending"=false){
  const home=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),"guild-managed-c4-"))),root=path.join(home,"project");fs.mkdirSync(root);execFileSync("git",["init","--quiet",root]);fs.mkdirSync(path.join(root,".guild/config"),{recursive:true});fs.mkdirSync(path.join(root,".guild/runs"),{recursive:true});fs.writeFileSync(path.join(root,".guild/guild.yaml"),"schema_version: guild.root.v1\nkind: project\n");fs.writeFileSync(path.join(root,".guild/storage-layout.json"),JSON.stringify({storage_layout_version:2}));fs.writeFileSync(path.join(root,".guild/runs/current-run-id"),"parent-sentinel\n");

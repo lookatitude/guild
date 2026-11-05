@@ -1,8 +1,7 @@
 /**
  * A04 installed old/new reader matrix (AT02) and reader rollback (AT47, reader half).
  * Both packages are assembled outside the checkout and run with plain `node`.
- * OLD_PACKAGE_COMMIT is the last package without the A04 reader (E00 head);
- * re-pin it to the E00 merge commit when this branch is rebased onto next.
+ * OLD_PACKAGE_COMMIT is the last package without the A04 reader (the E00 merge on next).
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import * as fs from "node:fs";
@@ -12,7 +11,7 @@ import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createRealEnv, createRunLifecycle, type StartRunOpts } from "../../src/domains/lifecycle";
 
-const OLD_PACKAGE_COMMIT = "d2c35f1f";
+const OLD_PACKAGE_COMMIT = "0f8858fc";
 const PLUGIN = path.resolve(__dirname, "../..");
 const PACKAGE_PATHS = [".claude-plugin/plugin.json", "guild.inventory.json", "runtime/scripts/stack-operations.js"];
 const parity = JSON.parse(fs.readFileSync(path.join(PLUGIN, "tests/fixtures/stack-contract-reader/parity.generated.json"), "utf8"));
