@@ -1890,14 +1890,26 @@ const SKILL_VERSIONS_DELETER = "src/domains/state/upgrade-steps.ts";
 
 // ---------------------------------------------------------------- the checks
 /**
- * KTD29 outranks KTD27 for these two imports only (T16, lead decision D1 after the
- * R43 cycle cut). Through the domain index, guild-root pulls upgrade steps and
+ * KTD29 outranks KTD27 for these imports only. T16 (lead decision D1 after the
+ * R43 cycle cut): through the domain index, guild-root pulls upgrade steps and
  * js-yaml into the SessionStart bundle, and config-defaults drags telemetry past the
- * blocking status require-graph allowlist. Key: importer -> "<domain>/<file>".
+ * blocking status require-graph allowlist. K01: learn scripts import the source
+ * basis directly, because the knowledge index would pull recall/harvest into the
+ * learn runtime bundles. Key: importer -> ["<domain>/<file>"].
  */
-const KTD29_DEEP_IMPORTS: ReadonlyMap<string, string> = new Map([
-  ["scripts/lib/guild-root.ts", "state/guild-root"],
-  ["scripts/lib/shared/config-defaults.ts", "config/config-defaults"],
+const LEARN_SOURCE_BASIS = ["knowledge/source-basis"] as const;
+const KTD29_DEEP_IMPORTS: ReadonlyMap<string, readonly string[]> = new Map<string, readonly string[]>([
+  ["scripts/lib/guild-root.ts", ["state/guild-root"]],
+  ["scripts/lib/shared/config-defaults.ts", ["config/config-defaults"]],
+  // K01 (CW-13): avoids pulling recall/harvest into learn runtime bundles.
+  ["scripts/learn/k-stage-staleness.ts", LEARN_SOURCE_BASIS],
+  ["scripts/learn/lib/ignore.ts", LEARN_SOURCE_BASIS],
+  ["scripts/learn/lib/paths.ts", LEARN_SOURCE_BASIS],
+  ["scripts/learn/lib/resolve-calls-ts.ts", LEARN_SOURCE_BASIS],
+  ["scripts/learn/lib/tsconfig-chain.ts", LEARN_SOURCE_BASIS],
+  ["scripts/learn/scan.ts", LEARN_SOURCE_BASIS],
+  ["scripts/learn/staleness.ts", LEARN_SOURCE_BASIS],
+  ["scripts/learn/lib/source-basis.test.ts", ["knowledge/source-basis", "knowledge/working-set"]],
 ]);
 
 const CHECKS: Check[] = [
@@ -2013,7 +2025,7 @@ const CHECKS: Check[] = [
           if (self && self.name === target.name && self.tree === target.tree) continue;
           const tail = resolved.slice(`src/${target.tree}/${target.name}/`.length);
           if (tail === "index" || tail === "") continue;
-          if (KTD29_DEEP_IMPORTS.get(f) === `${target.name}/${tail}`) continue;
+          if (KTD29_DEEP_IMPORTS.get(f)?.includes(`${target.name}/${tail}`)) continue;
           v.push({
             check: "index-only-domain-imports",
             path: f,
