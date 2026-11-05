@@ -10174,6 +10174,17 @@ var init_ingest_pause = __esm({
   }
 });
 
+// src/domains/security/privileged-actions.ts
+var RELEASE_LIKE_ROOTS, RELEASE_LIKE_TOKENS, PRIVILEGED_ROOTS, PRIVILEGED_TOKENS;
+var init_privileged_actions = __esm({
+  "src/domains/security/privileged-actions.ts"() {
+    RELEASE_LIKE_ROOTS = Object.freeze(["release", "publish", "deploy", "rollout"]);
+    RELEASE_LIKE_TOKENS = Object.freeze(["ship", "merge", "promote"]);
+    PRIVILEGED_ROOTS = Object.freeze(["permission", "credential", "secret", "privilege", "sudo"]);
+    PRIVILEGED_TOKENS = Object.freeze(["grant", "grants", "admin"]);
+  }
+});
+
 // src/domains/security/index.ts
 var init_security = __esm({
   "src/domains/security/index.ts"() {
@@ -10188,6 +10199,7 @@ var init_security = __esm({
     init_events();
     init_d5_permission_content();
     init_ingest_pause();
+    init_privileged_actions();
     init_config();
     init_secrets();
   }
@@ -38960,6 +38972,86 @@ var init_workflow_graph_overlay = __esm({
   }
 });
 
+// src/domains/lifecycle/workflow-protected-paths.ts
+var PROTECTED_PATHS_VERSION, GATE_ORDER, CLASS_REQUIRED_GATE_ROLES, RELEASE_CLASS_GATE_ROLES, QA_ASSURANCE_KINDS;
+var init_workflow_protected_paths = __esm({
+  "src/domains/lifecycle/workflow-protected-paths.ts"() {
+    init_security();
+    init_workflow_graph_overlay();
+    PROTECTED_PATHS_VERSION = "guild.protected_paths.v1";
+    GATE_ORDER = Object.freeze(["d5", "qa", "ops", "d8"]);
+    CLASS_REQUIRED_GATE_ROLES = Object.freeze({ product: ["d5", "qa", "d8"] });
+    RELEASE_CLASS_GATE_ROLES = Object.freeze({ ops: ["ops"] });
+    QA_ASSURANCE_KINDS = Object.freeze(["security", "adversarial_security", "ui", "ux"]);
+  }
+});
+
+// src/domains/lifecycle/workflow-component-compiler.ts
+function canonicalJson2(value) {
+  if (value === null || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error("non-finite number in canonical JSON");
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) return `[${value.map(canonicalJson2).join(",")}]`;
+  if (isPlain(value)) {
+    const keys = Object.keys(value).filter((k) => value[k] !== void 0).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson2(value[k])}`).join(",")}}`;
+  }
+  throw new Error(`value of type ${typeof value} is not canonical JSON`);
+}
+function sha256Of2(value) {
+  return `sha256:${crypto20.createHash("sha256").update(canonicalJson2(value), "utf8").digest("hex")}`;
+}
+function isPlain(v) {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
+}
+var crypto20, WORKFLOW_COMPILER_ID, WORKFLOW_COMPILER_VERSION, COMPILER_LIMITS, COMPONENT_EFFECTS, COMPONENT_GATE_ROLES, COMPONENT_CONDITION_KINDS, COMPONENT_STEP_KINDS, CLASS_REQUIRED_GATE_ROLES2, RELEASE_CLASS_GATE_ROLES2, COMPILER_HASH;
+var init_workflow_component_compiler = __esm({
+  "src/domains/lifecycle/workflow-component-compiler.ts"() {
+    crypto20 = __toESM(require("node:crypto"));
+    init_kernel();
+    init_state();
+    init_workflow_graph_overlay();
+    init_workflow_protected_paths();
+    WORKFLOW_COMPILER_ID = "guild.workflow_compiler";
+    WORKFLOW_COMPILER_VERSION = "1";
+    COMPILER_LIMITS = Object.freeze({
+      maxNodes: 1e3,
+      maxEdges: 5e3,
+      maxComponents: 100,
+      maxProtectedGates: 10,
+      maxCallDepth: 8,
+      maxStepNesting: 16,
+      maxSteps: 100,
+      maxRepeatRounds: 10,
+      maxTotalRounds: 100,
+      maxPorts: 50,
+      maxCapabilities: 50,
+      maxConditionTerms: 8,
+      maxPathStates: 1e4
+    });
+    COMPONENT_EFFECTS = Object.freeze(["read", "write", "review", "gate", "privileged_operation", "release"]);
+    COMPONENT_GATE_ROLES = Object.freeze(["d5", "qa", "ops", "d8"]);
+    COMPONENT_CONDITION_KINDS = Object.freeze(["outcome", "no_unresolved_questions", "obligations_accepted", "artifact_present", "all_of", "any_of"]);
+    COMPONENT_STEP_KINDS = Object.freeze(["task", "sequence", "repeat", "call"]);
+    CLASS_REQUIRED_GATE_ROLES2 = Object.freeze({ product: ["d5", "qa", "d8"] });
+    RELEASE_CLASS_GATE_ROLES2 = Object.freeze({ ops: ["ops"] });
+    COMPILER_HASH = sha256Of2({
+      id: WORKFLOW_COMPILER_ID,
+      version: WORKFLOW_COMPILER_VERSION,
+      limits: COMPILER_LIMITS,
+      step_kinds: COMPONENT_STEP_KINDS,
+      condition_kinds: COMPONENT_CONDITION_KINDS,
+      edge_outcomes: ["next", "repeat"],
+      protected_paths: PROTECTED_PATHS_VERSION
+    });
+  }
+});
+
 // src/domains/lifecycle/learning-checkpoint-5.ts
 var CHECKPOINT_VERDICTS, VERDICT_ROUTE;
 var init_learning_checkpoint_5 = __esm({
@@ -48696,6 +48788,8 @@ var init_lifecycle = __esm({
     init_write_run_manifest();
     init_write_task_run();
     init_workflow_graph_overlay();
+    init_workflow_component_compiler();
+    init_workflow_protected_paths();
     init_stable_lock();
     init_learning_checkpoint_5();
     init_workflow_graph_load();
@@ -48740,7 +48834,7 @@ var init_lifecycle = __esm({
 
 // src/domains/distribution/release-distribution-contract.ts
 function sha2566(value) {
-  return crypto20.createHash("sha256").update(value).digest("hex");
+  return crypto21.createHash("sha256").update(value).digest("hex");
 }
 function stableJson(value) {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
@@ -48782,10 +48876,10 @@ function verifyReleaseClaim(claim, archive) {
   if (claim.host_support.supported !== false) errors.push("unsupported host cannot be promoted");
   return errors;
 }
-var crypto20, RELEASE_CLAIM_SCHEMA, OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS;
+var crypto21, RELEASE_CLAIM_SCHEMA, OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS;
 var init_release_distribution_contract = __esm({
   "src/domains/distribution/release-distribution-contract.ts"() {
-    crypto20 = __toESM(require("node:crypto"));
+    crypto21 = __toESM(require("node:crypto"));
     RELEASE_CLAIM_SCHEMA = "guild.release_claim.v1";
     OPERATION_KINDS = Object.freeze(["render", "install", "activate", "update", "uninstall", "verify"]);
     ACCEPTED_CONFORMANCE_ARTIFACTS = Object.freeze([
@@ -52555,6 +52649,9 @@ var BACKEND_SET = new Set(ADVISORY_BACKENDS);
 var CONFIDENCE_SET = new Set(ADVISORY_CONFIDENCE);
 var SUBSTRATE_SET = new Set(ADVISORY_SUBSTRATES);
 
+// src/domains/review/assurance-ledger.ts
+var ASSURANCE_KINDS = Object.freeze(["security", "adversarial_security", "ui", "ux", "quality", "project_specific"]);
+
 // scripts/lib/host-adapters/app-host.ts
 var APP_HOSTS = Object.freeze([
   "claude-code-app",
@@ -55014,24 +55111,24 @@ var CAPABILITY_READERS = {
   "host.structured_output.native_json": (entry) => entry.capabilities.structured_output.native_json
 };
 var UNKNOWN_HOST_VERSION = "unknown";
-function canonicalJson2(value) {
+function canonicalJson3(value) {
   if (value === null) return "null";
   const kind = typeof value;
   if (kind === "number") return Number.isFinite(value) ? JSON.stringify(value) : "null";
   if (kind === "boolean" || kind === "string") return JSON.stringify(value);
   if (kind === "undefined" || kind === "function" || kind === "symbol") return "null";
-  if (Array.isArray(value)) return `[${value.map((item) => canonicalJson2(item)).join(",")}]`;
+  if (Array.isArray(value)) return `[${value.map((item) => canonicalJson3(item)).join(",")}]`;
   const record = value;
   const parts = [];
   for (const key of Object.keys(record).sort()) {
     if (record[key] === void 0) continue;
-    parts.push(`${JSON.stringify(key)}:${canonicalJson2(record[key])}`);
+    parts.push(`${JSON.stringify(key)}:${canonicalJson3(record[key])}`);
   }
   return `{${parts.join(",")}}`;
 }
 function snapshotHash(hostId, hostVersion, facts) {
   const digest = (0, import_node_crypto3.createHash)("sha256").update(
-    canonicalJson2({
+    canonicalJson3({
       schema_version: HOST_CAPABILITY_SNAPSHOT_SCHEMA,
       host_id: hostId,
       host_version: hostVersion,
@@ -55089,7 +55186,7 @@ function createHostCapabilitySnapshotStore() {
       if (!hostId || !entry) return unsupportedResult(request);
       const hostVersion = request.hostVersion ?? UNKNOWN_HOST_VERSION;
       const observation = request.authentication ?? "not_observed";
-      const inputHash = canonicalJson2({ host_id: hostId, host_version: hostVersion, authentication: observation });
+      const inputHash = canonicalJson3({ host_id: hostId, host_version: hostVersion, authentication: observation });
       const key = keyFor(request.runId, hostId);
       const existing = minted.get(key);
       if (existing !== void 0) {

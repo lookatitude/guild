@@ -25,6 +25,7 @@ import * as path from "node:path";
 import { loadYamlApi } from "../kernel";
 import { createGuildStorage, type GuildStorage } from "../state";
 import { WORKFLOW_CLASSES, type WorkflowClass } from "./workflow-graph-overlay";
+import { PROTECTED_PATHS_VERSION, verifyProtectedPaths, type ProtectedPathRule } from "./workflow-protected-paths";
 
 export const WORKFLOW_COMPONENT_SCHEMA_VERSION = "guild.workflow_component.v1" as const;
 export const WORKFLOW_COMPILE_MANIFEST_SCHEMA_VERSION = "guild.workflow_compile_manifest.v1" as const;
@@ -129,7 +130,7 @@ export type CompileRule =
   | "class-gate-missing"
   | "gate-not-protected"
   | "invalid-gate-scope"
-  | "release-bypasses-gate";
+  | ProtectedPathRule;
 
 export interface CompileViolation { rule: CompileRule; detail: string }
 
@@ -228,6 +229,7 @@ const COMPILER_HASH = sha256Of({
   step_kinds: COMPONENT_STEP_KINDS,
   condition_kinds: COMPONENT_CONDITION_KINDS,
   edge_outcomes: ["next", "repeat"],
+  protected_paths: PROTECTED_PATHS_VERSION,
 });
 
 // ---------------------------------------------------------------- shape validation
@@ -243,6 +245,9 @@ function exactKeys(v: Record<string, unknown>, required: string[], optional: str
   for (const k of Object.keys(v)) if (!required.includes(k) && !optional.includes(k)) return `unknown key '${k}'`;
   return null;
 }
+
+/** Format an untrusted value for a message without invoking its coercion hooks. */
+const show = (v: unknown): string => (typeof v === "string" ? v.slice(0, 80) : typeof v === "number" || typeof v === "boolean" || v === null ? `${v}` : typeof v);
 
 class Abort extends Error {
   constructor(readonly violation: CompileViolation) {
@@ -304,8 +309,8 @@ function checkPorts(v: unknown, where: string): void {
   const names = new Set<string>();
   for (const p of v) {
     if (!isPlain(p) || exactKeys(p, ["name", "type"]) !== null) fail("invalid-component", `${where} port must be exactly {name, type}`);
-    if (typeof p.name !== "string" || !ID.test(p.name)) fail("invalid-component", `${where} port name '${String(p.name)}' is not an id`);
-    if (typeof p.type !== "string" || !PORT_TYPE.test(p.type)) fail("invalid-component", `${where} port type '${String(p.type)}' is not a typed artifact`);
+    if (typeof p.name !== "string" || !ID.test(p.name)) fail("invalid-component", `${where} port name '${show(p.name)}' is not an id`);
+    if (typeof p.type !== "string" || !PORT_TYPE.test(p.type)) fail("invalid-component", `${where} port type '${show(p.type)}' is not a typed artifact`);
     if (names.has(p.name)) fail("invalid-component", `${where} declares port '${p.name}' twice`);
     names.add(p.name);
   }
@@ -314,11 +319,11 @@ function checkPorts(v: unknown, where: string): void {
 function checkIdList(v: unknown, max: number, where: string): void {
   if (!Array.isArray(v) || v.length > max) fail("invalid-component", `${where} must be an array of at most ${max} ids`);
   if (new Set(v).size !== v.length) fail("invalid-component", `${where} repeats an entry`);
-  for (const x of v) if (typeof x !== "string" || !ID.test(x)) fail("invalid-component", `${where} entry '${String(x)}' is not an id`);
+  for (const x of v) if (typeof x !== "string" || !ID.test(x)) fail("invalid-component", `${where} entry '${show(x)}' is not an id`);
 }
 
 function checkGateRole(v: unknown, where: string): void {
-  if (v !== undefined && v !== null && !(COMPONENT_GATE_ROLES as readonly unknown[]).includes(v)) fail("invalid-component", `${where} '${String(v)}' is not a gate role`);
+  if (v !== undefined && v !== null && !(COMPONENT_GATE_ROLES as readonly unknown[]).includes(v)) fail("invalid-component", `${where} '${show(v)}' is not a gate role`);
 }
 
 function checkCondition(c: unknown, depth: number, where: string): void {
@@ -356,7 +361,7 @@ function checkStep(s: unknown, depth: number, ids: Set<string>, where: string): 
   if (!isPlain(s) || typeof s.kind !== "string") fail("invalid-component", `${where} step must be an object with a kind`);
   if (s.kind === "parallel") fail("parallel-join-unsupported", `${where}: parallel joins are excluded from the first release`);
   if (!(COMPONENT_STEP_KINDS as readonly string[]).includes(s.kind)) fail("unknown-step-kind", `${where}: step kind '${s.kind}' is not one of ${COMPONENT_STEP_KINDS.join(", ")}`);
-  if (typeof s.id !== "string" || !STEP_ID.test(s.id)) fail("invalid-component", `${where}: step id '${String(s.id)}' must match ${STEP_ID}`);
+  if (typeof s.id !== "string" || !STEP_ID.test(s.id)) fail("invalid-component", `${where}: step id '${show(s.id)}' must match ${STEP_ID}`);
   if (ids.has(s.id)) fail("duplicate-step-id", `${where}: step id '${s.id}' is declared twice in one component`);
   ids.add(s.id);
   const at = `${where}/${s.id}`;
@@ -364,7 +369,7 @@ function checkStep(s: unknown, depth: number, ids: Set<string>, where: string): 
     case "task": {
       const k = exactKeys(s, ["kind", "id", "effect", "role", "capabilities", "inputs", "outputs"], ["required", "gate_role", "within_gate"]);
       if (k) fail("invalid-component", `${at}: ${k}`);
-      if (!(COMPONENT_EFFECTS as readonly unknown[]).includes(s.effect)) fail("invalid-component", `${at}: effect '${String(s.effect)}' is not one of ${COMPONENT_EFFECTS.join(", ")}`);
+      if (!(COMPONENT_EFFECTS as readonly unknown[]).includes(s.effect)) fail("invalid-component", `${at}: effect '${show(s.effect)}' is not one of ${COMPONENT_EFFECTS.join(", ")}`);
       if (typeof s.role !== "string" || !ID.test(s.role)) fail("invalid-component", `${at}: role must be an id`);
       checkIdList(s.capabilities, COMPILER_LIMITS.maxCapabilities, `${at} capabilities`);
       checkPorts(s.inputs, `${at} inputs`);
@@ -386,7 +391,7 @@ function checkStep(s: unknown, depth: number, ids: Set<string>, where: string): 
       if (k) fail("invalid-component", `${at}: ${k}`);
       const m = s.max_rounds;
       if (typeof m !== "number" || !Number.isInteger(m) || m < 1 || m > COMPILER_LIMITS.maxRepeatRounds) {
-        fail("unbounded-repeat", `${at}: max_rounds must be an integer in 1..${COMPILER_LIMITS.maxRepeatRounds}, got ${String(m)}`);
+        fail("unbounded-repeat", `${at}: max_rounds must be an integer in 1..${COMPILER_LIMITS.maxRepeatRounds}, got ${show(m)}`);
       }
       if (s.until === undefined) fail("bad-condition", `${at}: repeat needs an 'until' condition`);
       checkCondition(s.until, 0, `${at} until`);
@@ -416,9 +421,9 @@ function checkComponent(raw: unknown): { doc?: ComponentDocument; violations: Co
     if (!isPlain(doc)) fail("invalid-component", "component is not a mapping");
     const k = exactKeys(doc, ["schema_version", "id", "version", "effects", "inputs", "outputs", "body"]);
     if (k) fail("invalid-component", `component: ${k}`);
-    if (doc.schema_version !== WORKFLOW_COMPONENT_SCHEMA_VERSION) fail("invalid-component", `schema_version '${String(doc.schema_version)}' is not ${WORKFLOW_COMPONENT_SCHEMA_VERSION}`);
-    if (typeof doc.id !== "string" || !ID.test(doc.id)) fail("invalid-component", `component id '${String(doc.id)}' is not an id`);
-    if (typeof doc.version !== "string" || !VERSION.test(doc.version)) fail("invalid-component", `component version '${String(doc.version)}' is invalid`);
+    if (doc.schema_version !== WORKFLOW_COMPONENT_SCHEMA_VERSION) fail("invalid-component", `schema_version '${show(doc.schema_version)}' is not ${WORKFLOW_COMPONENT_SCHEMA_VERSION}`);
+    if (typeof doc.id !== "string" || !ID.test(doc.id)) fail("invalid-component", `component id '${show(doc.id)}' is not an id`);
+    if (typeof doc.version !== "string" || !VERSION.test(doc.version)) fail("invalid-component", `component version '${show(doc.version)}' is invalid`);
     const where = `${doc.id}@${doc.version}`;
     if (!Array.isArray(doc.effects) || doc.effects.length === 0 || new Set(doc.effects).size !== doc.effects.length || !doc.effects.every((e) => (COMPONENT_EFFECTS as readonly unknown[]).includes(e))) {
       fail("invalid-component", `${where}: effects must be a non-empty unique subset of ${COMPONENT_EFFECTS.join(", ")}`);
@@ -793,7 +798,7 @@ export function compileWorkflow(registry: WorkflowComponentRegistry, rawRequest:
     const entries = registryEntries(registry);
     const request = detach(rawRequest, "invalid-request", "request") as CompileRequest;
     if (!isPlain(request)) fail("invalid-request", "request is not a mapping");
-    if (!(WORKFLOW_CLASSES as readonly unknown[]).includes(request.class)) fail("unknown-class", `'${String(request.class)}' is not one of the five classes`);
+    if (!(WORKFLOW_CLASSES as readonly unknown[]).includes(request.class)) fail("unknown-class", `'${show(request.class)}' is not one of the five classes`);
     const wf = request.workflow;
     if (!isPlain(wf) || typeof wf.source_id !== "string" || !ID.test(wf.source_id) || typeof wf.id !== "string" || !ID.test(wf.id)) {
       fail("invalid-request", "workflow must be {source_id, id} ids");
@@ -833,6 +838,9 @@ export function compileWorkflow(registry: WorkflowComponentRegistry, rawRequest:
       obligations: [],
       invocations: [],
     };
+    // W02: post-expansion dominance, gate order, scope and disguise checks on the emitted graph.
+    const verified = verifyProtectedPaths(projection);
+    if (!verified.ok) return { ok: false, violations: verified.violations };
     const manifest: CompileManifest = {
       schema_version: WORKFLOW_COMPILE_MANIFEST_SCHEMA_VERSION,
       compiler: { id: WORKFLOW_COMPILER_ID, version: WORKFLOW_COMPILER_VERSION, hash: COMPILER_HASH },

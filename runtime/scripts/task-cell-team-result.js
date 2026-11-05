@@ -16642,6 +16642,17 @@ var init_ingest_pause = __esm({
   }
 });
 
+// src/domains/security/privileged-actions.ts
+var RELEASE_LIKE_ROOTS, RELEASE_LIKE_TOKENS, PRIVILEGED_ROOTS, PRIVILEGED_TOKENS;
+var init_privileged_actions = __esm({
+  "src/domains/security/privileged-actions.ts"() {
+    RELEASE_LIKE_ROOTS = Object.freeze(["release", "publish", "deploy", "rollout"]);
+    RELEASE_LIKE_TOKENS = Object.freeze(["ship", "merge", "promote"]);
+    PRIVILEGED_ROOTS = Object.freeze(["permission", "credential", "secret", "privilege", "sudo"]);
+    PRIVILEGED_TOKENS = Object.freeze(["grant", "grants", "admin"]);
+  }
+});
+
 // src/domains/security/index.ts
 var init_security = __esm({
   "src/domains/security/index.ts"() {
@@ -16656,6 +16667,7 @@ var init_security = __esm({
     init_events();
     init_d5_permission_content();
     init_ingest_pause();
+    init_privileged_actions();
     init_config();
     init_secrets();
   }
@@ -33030,6 +33042,86 @@ var init_workflow_graph_overlay = __esm({
   }
 });
 
+// src/domains/lifecycle/workflow-protected-paths.ts
+var PROTECTED_PATHS_VERSION, GATE_ORDER, CLASS_REQUIRED_GATE_ROLES, RELEASE_CLASS_GATE_ROLES, QA_ASSURANCE_KINDS;
+var init_workflow_protected_paths = __esm({
+  "src/domains/lifecycle/workflow-protected-paths.ts"() {
+    init_security();
+    init_workflow_graph_overlay();
+    PROTECTED_PATHS_VERSION = "guild.protected_paths.v1";
+    GATE_ORDER = Object.freeze(["d5", "qa", "ops", "d8"]);
+    CLASS_REQUIRED_GATE_ROLES = Object.freeze({ product: ["d5", "qa", "d8"] });
+    RELEASE_CLASS_GATE_ROLES = Object.freeze({ ops: ["ops"] });
+    QA_ASSURANCE_KINDS = Object.freeze(["security", "adversarial_security", "ui", "ux"]);
+  }
+});
+
+// src/domains/lifecycle/workflow-component-compiler.ts
+function canonicalJson2(value) {
+  if (value === null || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error("non-finite number in canonical JSON");
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) return `[${value.map(canonicalJson2).join(",")}]`;
+  if (isPlain(value)) {
+    const keys = Object.keys(value).filter((k) => value[k] !== void 0).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson2(value[k])}`).join(",")}}`;
+  }
+  throw new Error(`value of type ${typeof value} is not canonical JSON`);
+}
+function sha256Of2(value) {
+  return `sha256:${crypto14.createHash("sha256").update(canonicalJson2(value), "utf8").digest("hex")}`;
+}
+function isPlain(v) {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
+}
+var crypto14, WORKFLOW_COMPILER_ID, WORKFLOW_COMPILER_VERSION, COMPILER_LIMITS, COMPONENT_EFFECTS, COMPONENT_GATE_ROLES, COMPONENT_CONDITION_KINDS, COMPONENT_STEP_KINDS, CLASS_REQUIRED_GATE_ROLES2, RELEASE_CLASS_GATE_ROLES2, COMPILER_HASH;
+var init_workflow_component_compiler = __esm({
+  "src/domains/lifecycle/workflow-component-compiler.ts"() {
+    crypto14 = __toESM(require("node:crypto"));
+    init_kernel();
+    init_state();
+    init_workflow_graph_overlay();
+    init_workflow_protected_paths();
+    WORKFLOW_COMPILER_ID = "guild.workflow_compiler";
+    WORKFLOW_COMPILER_VERSION = "1";
+    COMPILER_LIMITS = Object.freeze({
+      maxNodes: 1e3,
+      maxEdges: 5e3,
+      maxComponents: 100,
+      maxProtectedGates: 10,
+      maxCallDepth: 8,
+      maxStepNesting: 16,
+      maxSteps: 100,
+      maxRepeatRounds: 10,
+      maxTotalRounds: 100,
+      maxPorts: 50,
+      maxCapabilities: 50,
+      maxConditionTerms: 8,
+      maxPathStates: 1e4
+    });
+    COMPONENT_EFFECTS = Object.freeze(["read", "write", "review", "gate", "privileged_operation", "release"]);
+    COMPONENT_GATE_ROLES = Object.freeze(["d5", "qa", "ops", "d8"]);
+    COMPONENT_CONDITION_KINDS = Object.freeze(["outcome", "no_unresolved_questions", "obligations_accepted", "artifact_present", "all_of", "any_of"]);
+    COMPONENT_STEP_KINDS = Object.freeze(["task", "sequence", "repeat", "call"]);
+    CLASS_REQUIRED_GATE_ROLES2 = Object.freeze({ product: ["d5", "qa", "d8"] });
+    RELEASE_CLASS_GATE_ROLES2 = Object.freeze({ ops: ["ops"] });
+    COMPILER_HASH = sha256Of2({
+      id: WORKFLOW_COMPILER_ID,
+      version: WORKFLOW_COMPILER_VERSION,
+      limits: COMPILER_LIMITS,
+      step_kinds: COMPONENT_STEP_KINDS,
+      condition_kinds: COMPONENT_CONDITION_KINDS,
+      edge_outcomes: ["next", "repeat"],
+      protected_paths: PROTECTED_PATHS_VERSION
+    });
+  }
+});
+
 // src/domains/lifecycle/learning-checkpoint-5.ts
 var CHECKPOINT_VERDICTS, VERDICT_ROUTE;
 var init_learning_checkpoint_5 = __esm({
@@ -34009,7 +34101,7 @@ var init_per_host_packaging = __esm({
 
 // src/domains/distribution/release-distribution-contract.ts
 function sha2563(value) {
-  return crypto14.createHash("sha256").update(value).digest("hex");
+  return crypto15.createHash("sha256").update(value).digest("hex");
 }
 function stableJson(value) {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
@@ -34051,10 +34143,10 @@ function verifyReleaseClaim(claim, archive) {
   if (claim.host_support.supported !== false) errors.push("unsupported host cannot be promoted");
   return errors;
 }
-var crypto14, RELEASE_CLAIM_SCHEMA, OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS;
+var crypto15, RELEASE_CLAIM_SCHEMA, OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS;
 var init_release_distribution_contract = __esm({
   "src/domains/distribution/release-distribution-contract.ts"() {
-    crypto14 = __toESM(require("node:crypto"));
+    crypto15 = __toESM(require("node:crypto"));
     RELEASE_CLAIM_SCHEMA = "guild.release_claim.v1";
     OPERATION_KINDS = Object.freeze(["render", "install", "activate", "update", "uninstall", "verify"]);
     ACCEPTED_CONFORMANCE_ARTIFACTS = Object.freeze([
@@ -37103,7 +37195,7 @@ function indexOne(root, rel2) {
     title: titleOf(rel2, body),
     tokens: tokenize(`${titleOf(rel2, body)}
 ${body}`),
-    hash: crypto15.createHash("sha256").update(body, "utf8").digest("hex").slice(0, 16),
+    hash: crypto16.createHash("sha256").update(body, "utf8").digest("hex").slice(0, 16),
     mtime
   };
 }
@@ -37174,10 +37266,10 @@ function searchWiki(query, opts = {}) {
   if (kept.length === 0) return failOpen("reranker returned no known documents; served BM25");
   return { hits: kept, backend: "hybrid", built_index: built };
 }
-var crypto15, fs49, path60, WIKI_INDEX_SCHEMA, DEFAULT_MAX_HITS, DEFAULT_MIN_SCORE;
+var crypto16, fs49, path60, WIKI_INDEX_SCHEMA, DEFAULT_MAX_HITS, DEFAULT_MIN_SCORE;
 var init_wiki_index = __esm({
   "src/domains/knowledge/wiki-index.ts"() {
-    crypto15 = __toESM(require("node:crypto"));
+    crypto16 = __toESM(require("node:crypto"));
     fs49 = __toESM(require("node:fs"));
     path60 = __toESM(require("node:path"));
     init_bm25();
@@ -37262,7 +37354,7 @@ function readGitHead(root) {
 }
 function hashOpenQuestions(ids) {
   const sorted = [...ids].filter((s) => typeof s === "string").sort();
-  return crypto16.createHash("sha256").update(sorted.join("\n"), "utf8").digest("hex").slice(0, 32);
+  return crypto17.createHash("sha256").update(sorted.join("\n"), "utf8").digest("hex").slice(0, 32);
 }
 function storageFor2(opts) {
   return opts.storage ?? createGuildStorage(opts.cwd ?? process.cwd());
@@ -37336,10 +37428,10 @@ function buildWorkingSetCard(input) {
   }
   return card;
 }
-var crypto16, fs50, path61, WORKING_SET_SCHEMA, WORKING_SET_TOKEN_CAP;
+var crypto17, fs50, path61, WORKING_SET_SCHEMA, WORKING_SET_TOKEN_CAP;
 var init_working_set = __esm({
   "src/domains/knowledge/working-set.ts"() {
-    crypto16 = __toESM(require("node:crypto"));
+    crypto17 = __toESM(require("node:crypto"));
     fs50 = __toESM(require("node:fs"));
     path61 = __toESM(require("node:path"));
     init_state();
@@ -37350,12 +37442,12 @@ var init_working_set = __esm({
 
 // src/domains/knowledge/lane-bundle.ts
 function bundleId(cellId, fingerprint2) {
-  return crypto17.createHash("sha256").update(`${cellId}
+  return crypto18.createHash("sha256").update(`${cellId}
 ${fingerprint2}`, "utf8").digest("hex").slice(0, 16);
 }
 function fingerprintOf(ws) {
   const f = ws.fingerprint;
-  return crypto17.createHash("sha256").update(`${f.wiki_mtime}
+  return crypto18.createHash("sha256").update(`${f.wiki_mtime}
 ${f.git_head}
 ${f.open_questions_hash}`, "utf8").digest("hex").slice(0, 16);
 }
@@ -37384,10 +37476,10 @@ function buildLaneBundle(input) {
   }
   return bundle;
 }
-var crypto17, LANE_BUNDLE_SCHEMA, LANE_BUNDLE_TOKEN_CAP;
+var crypto18, LANE_BUNDLE_SCHEMA, LANE_BUNDLE_TOKEN_CAP;
 var init_lane_bundle = __esm({
   "src/domains/knowledge/lane-bundle.ts"() {
-    crypto17 = __toESM(require("node:crypto"));
+    crypto18 = __toESM(require("node:crypto"));
     init_glossary();
     init_working_set();
     LANE_BUNDLE_SCHEMA = "guild.lane_bundle.v1";
@@ -38218,7 +38310,7 @@ function resolveRecallBeforeRead(cwd) {
   return true;
 }
 function hashQuery(query) {
-  return crypto18.createHash("sha256").update(query).digest("hex").slice(0, 16);
+  return crypto19.createHash("sha256").update(query).digest("hex").slice(0, 16);
 }
 function rankWikiDocs(docs, wikiBase, limit, composite) {
   const scoring = docs.filter((d) => d.score > 0);
@@ -38551,7 +38643,7 @@ function recall(query, opts) {
   const _traceBranch = allChunks.length === 0 ? "empty" : source === "combined" ? "combined" : source === "structural" ? "structural" : source;
   try {
     const _analysisTs = (/* @__PURE__ */ new Date()).toISOString();
-    const _spanId = crypto18.createHash("sha256").update(`${runId ?? ""}|recall|${_analysisTs}|${_laneId}`).digest("hex").slice(0, 16);
+    const _spanId = crypto19.createHash("sha256").update(`${runId ?? ""}|recall|${_analysisTs}|${_laneId}`).digest("hex").slice(0, 16);
     emitTraceEvent(
       makeAnalysisTraceEvent({
         ts: new Date(_traceStart).toISOString(),
@@ -38717,12 +38809,12 @@ function runRecallCli() {
   }
   process.stdout.write(JSON.stringify(result2) + "\n");
 }
-var fs56, path67, crypto18, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
+var fs56, path67, crypto19, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
 var init_recall = __esm({
   "src/domains/knowledge/recall.ts"() {
     fs56 = __toESM(require("node:fs"));
     path67 = __toESM(require("node:path"));
-    crypto18 = __toESM(require("node:crypto"));
+    crypto19 = __toESM(require("node:crypto"));
     init_state();
     init_wiki_recall();
     init_fs_scanner();
@@ -50255,6 +50347,8 @@ var init_lifecycle = __esm({
     init_write_run_manifest();
     init_write_task_run();
     init_workflow_graph_overlay();
+    init_workflow_component_compiler();
+    init_workflow_protected_paths();
     init_stable_lock();
     init_learning_checkpoint_5();
     init_workflow_graph_load();
