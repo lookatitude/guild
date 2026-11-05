@@ -809,17 +809,29 @@ export function transferCloseBlocker(sourceRoot: string, run_id: string, work: E
   const root = path.resolve(sourceRoot);
   const view = readWorkDisposition(root, run_id, work);
   const head = view.entries[view.entries.length - 1];
-  if (!head || head.state === "open" || head.state === "released" || head.state === "closed") return null;
-  const op = head.operation_id!;
-  if (head.state === "transfer_reserved") return { operation_id: op, state: "reserved" };
-  const found = readIntent(root, run_id, op);
-  if (!found || found.hash !== head.intent_hash) return corrupt(`${op} committed without its intent`);
-  const ctx: Ctx = { root, targetRoot: root, intent: found.intent, intentHash: found.hash, ports: undefined as unknown as TransferPorts, now: Date.now };
-  const latest = latestStage(ctx);
-  if (!latest || latest.state !== "acknowledged" || !disclosed(latest.target_ack)) return { operation_id: op, state: latest?.state ?? "source_committed" };
+  if (!head) return null;
   const journal = readControllerJournal({ privateDir: controllerPrivateDir });
-  const auth = journal.run_id === run_id && journal.source_id === found.intent.source_id ? journal.operations.get(`${op}.ack`) : undefined;
-  if (!auth || auth.action !== "accept" || auth.subject !== `xfer.${found.hash.slice(7, 47)}`) return { operation_id: op, state: "acknowledged" };
+  const ours = journal.run_id === run_id && journal.source_id === work.source_id;
+  const authorized = (op: string, action: ControlAction, subject: string) => {
+    const r = ours ? journal.operations.get(op) : undefined;
+    return !!r && r.action === action && r.subject === subject;
+  };
+  // A `closed` tail is a work-closure write; it must be the controller's.
+  if (head.state === "closed" && !authorized(head.operation_id!, "close", `close.${head.intent_hash!.slice(7, 47)}`)) {
+    corrupt(`closed disposition ${head.operation_id} is not bound by the run controller`);
+  }
+  if (head.state === "transfer_reserved") return { operation_id: head.operation_id!, state: "reserved" };
+  // Every committed transfer, even beneath a later entry, needs a verified, controller-authorized ack.
+  for (const e of view.entries) {
+    if (e.state !== "transferred") continue;
+    const op = e.operation_id!;
+    const found = readIntent(root, run_id, op);
+    if (!found || found.hash !== e.intent_hash) return corrupt(`${op} committed without its intent`);
+    const ctx: Ctx = { root, targetRoot: root, intent: found.intent, intentHash: found.hash, ports: undefined as unknown as TransferPorts, now: Date.now };
+    const latest = latestStage(ctx);
+    if (!latest || latest.state !== "acknowledged" || !disclosed(latest.target_ack)) return { operation_id: op, state: latest?.state ?? "source_committed" };
+    if (!authorized(`${op}.ack`, "accept", `xfer.${found.hash.slice(7, 47)}`)) return { operation_id: op, state: "acknowledged" };
+  }
   return null;
 }
 
@@ -859,10 +871,9 @@ export function isFollowupExecutable(opts: { sourceRoot: string; targetRoot: str
     const aRaw = readOnce(targetRoot, path.join(inbound, "activated.json"));
     if (pRaw === null || aRaw === null) return false;
     const p = JSON.parse(pRaw) as InboundPrepared;
-    const a = JSON.parse(aRaw) as InboundActivated;
-    if (pRaw !== inboundBytes(p).toString("utf8") || aRaw !== inboundBytes(a).toString("utf8")) return false;
+    if (pRaw !== inboundBytes(p).toString("utf8")) return false;
     if (p.stage !== "prepared" || p.operation_id !== op || p.source_id !== source_id || p.source_run_id !== run_id || p.executable !== false) return false;
-    if (a.stage !== "activated" || a.operation_id !== op || a.source_id !== source_id || a.executable !== true || a.prepared_sha256 !== hashOf(pRaw)) return false;
+
     const found = readIntent(root, run_id, op);
     if (!found || found.intent.source_id !== source_id || found.hash !== p.intent_hash) return false;
     if (found.intent.target_root_digest !== targetRootDigest(targetRoot)) return false;
@@ -871,8 +882,9 @@ export function isFollowupExecutable(opts: { sourceRoot: string; targetRoot: str
     const ti = view.entries.findIndex((e) => e.state === "transferred" && e.operation_id === op);
     if (ti < 0) return false;
     const e = view.entries[ti]!;
-    return view.revisions[ti] === a.source_commit_sha256 && e.prepared_sha256 === hashOf(pRaw)
-      && e.intent_hash === found.hash && e.target_root_digest === found.intent.target_root_digest;
+    // The activation must be exactly the bytes the committed source determines.
+    return e.prepared_sha256 === hashOf(pRaw) && e.intent_hash === found.hash && e.target_root_digest === found.intent.target_root_digest
+      && aRaw === activatedBytesFor(found.intent, e.prepared_sha256, view.revisions[ti]!).toString("utf8");
   } catch {
     return false;
   }

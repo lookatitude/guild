@@ -291,6 +291,23 @@ describe("AT14 · recordWorkClose", () => {
     expect(fs.existsSync(path.join(target, ".guild"))).toBe(false);
   });
 
+  it("codex r2 F2: a crash between sealing and publication recovers on replay with a fresh timestamp", () => {
+    const d = evaluateTaskClose(input());
+    if (!d.ok) throw new Error("fixture");
+    const dir = path.join(durableRoot, ".guild", "runs", RUN, "closures", "logical_task");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.chmodSync(dir, 0o500);
+    const call = (closed_at: string) => recordWorkClose({ controller: ctl, grant, controllerPrivateDir: privateDir, durableRoot, subject: TASK, operation_id: "close-task-1", decision: d, request: { kind: "verified_success" }, closed_at });
+    try {
+      expect(() => call("2026-11-05T01:00:00.000Z")).toThrow();
+    } finally {
+      fs.chmodSync(dir, 0o755);
+    }
+    const rec = call("2026-11-05T02:00:00.000Z");
+    expect(rec.state.outcome).toBe("succeeded");
+    expect(readWorkClosure(durableRoot, RUN, TASK, privateDir)).toEqual(rec);
+  });
+
   it("a worker (attempt) grant cannot record a close", () => {
     const d = evaluateTaskClose(input());
     if (!d.ok) throw new Error("fixture");

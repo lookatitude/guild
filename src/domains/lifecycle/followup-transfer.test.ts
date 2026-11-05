@@ -20,6 +20,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { openRunController, type RunController, type WriterGrant } from "./run-controller";
 import type { Entity } from "./execution-identity";
+import { canonicalJson, hashOf } from "./durable-once";
 import {
   FOLLOWUP_TRANSFER_SCHEMA,
   TRANSFER_POINTS,
@@ -397,6 +398,28 @@ describe("AT16 · transfer crash matrix", () => {
     expect(exec(targetA, "xfer-a")).toBe(false);
     // Resume refuses to adopt the foreign activation: the target is in conflict, never committed.
     expect(runTransfer(req("xfer-a", rev), ports(targetA)).state).toBe("recovery_needed");
+  });
+
+  it("codex r2 F1: an unauthenticated closed tail does not hide an unacknowledged transfer", () => {
+    const rev = openWorkDisposition(sourceRoot, RUN, WORK);
+    expect(code(() => runTransfer(req("xfer-a", rev), ports(targetA, (p) => { if (p === "source_committed_record") throw new Error("crash"); })))).toBe("other:crash");
+    const dir = path.join(sourceRoot, ".guild", "runs", RUN, "work", "logical_task", "task-1", "disposition");
+    const prev = fs.readFileSync(path.join(dir, "000002.json"), "utf8");
+    const forged = { schema_version: "guild.work_disposition.v1", source_id: SRC, run_id: RUN, work: WORK, seq: 3, prev_revision: hashOf(prev), state: "closed",
+      operation_id: "close-forged", intent_hash: H("6"), destination_work: null, target_root_digest: null, prepared_sha256: null };
+    fs.writeFileSync(path.join(dir, "000003.json"), `${canonicalJson(forged)}\n`);
+    expect(code(() => transferCloseBlocker(sourceRoot, RUN, WORK, path.join(tmp, "state")))).toBe("journal_corrupt");
+  });
+
+  it("codex r2 F3: a reshaped activation is not executable", () => {
+    const rev = openWorkDisposition(sourceRoot, RUN, WORK);
+    runTransfer(req("xfer-a", rev), ports(targetA));
+    expect(exec(targetA, "xfer-a")).toBe(true);
+    const f = path.join(targetA, ".guild", "transfers", "inbound", SRC, "xfer-a", "activated.json");
+    const a = JSON.parse(fs.readFileSync(f, "utf8"));
+    delete a.schema_version;
+    fs.writeFileSync(f, `${canonicalJson(a)}\n`);
+    expect(exec(targetA, "xfer-a")).toBe(false);
   });
 
   it("shareable bytes carry no absolute root path and no secret", () => {

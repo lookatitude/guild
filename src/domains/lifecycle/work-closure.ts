@@ -223,8 +223,12 @@ export interface WorkClosureRecord {
 }
 
 const closurePath = (run_id: string, subject: Entity) => path.join(".guild", "runs", run_id, "closures", subject.kind, `${subject.id}.json`);
-/** Everything but the epoch, which is checked against the controller receipt instead. */
-const closureDigest = (r: WorkClosureRecord) => hashOf(canonicalJson({ ...r, controller_epoch: null }));
+/**
+ * Everything but the epoch (checked against the controller receipt) and
+ * `closed_at` (caller-reported time, not authority), so a replay after a crash
+ * between authorization and publication carries the same digest.
+ */
+const closureDigest = (r: WorkClosureRecord) => hashOf(canonicalJson({ ...r, controller_epoch: null, closed_at: null }));
 const closeSubject = (digest: Hash) => `close.${digest.slice(7, 47)}`;
 const CLOSURE_KEYS = ["schema_version", "source_id", "run_id", "subject", "operation_id", "request", "state", "final_attempt_id", "surfaced", "controller_epoch", "closed_at"];
 const AXES: Record<keyof StateAxes, readonly string[]> = {
