@@ -6825,7 +6825,7 @@ function parseEvent(bytes, seq, prev) {
   if (fc != null && (typeof fc.path !== "string" || typeof fc.revision !== "string" || !SHA.test(fc.revision))) throw new DecisionLedgerError(`event ${seq} has an invalid candidate ref`);
   return ev;
 }
-function readDecisionLedger(guildDir) {
+function readDecisionLedger(guildDir, allowMissingCheckpoint = false) {
   const dir = path21.join(decisionsHome(guildDir), "events");
   const c = checkContained(guildDir, dir, { policy: "physical" });
   const ledger = { head: null, events: [], decisions: /* @__PURE__ */ new Map(), tombstones: /* @__PURE__ */ new Map() };
@@ -6836,16 +6836,32 @@ function readDecisionLedger(guildDir) {
   if (!fs17.existsSync(c.realPath)) return ledger;
   const seqs = fs17.readdirSync(c.realPath).map((n) => EVENT_FILE.exec(n)).filter((m) => m !== null).map((m) => Number(m[1])).sort((a, b) => a - b);
   let prev = null;
+  const chainShas = [];
   for (let i = 0; i < seqs.length; i++) {
     if (seqs[i] !== i + 1) throw new DecisionLedgerError(`event sequence has a gap at ${i + 1}`);
     const bytes = readInside(guildDir, path21.join(c.realPath, eventName(i + 1)));
     if (!bytes) throw new DecisionLedgerError(`event ${i + 1} vanished`);
     const ev = parseEvent(bytes, i + 1, prev);
     prev = sha2(bytes);
+    chainShas.push(prev);
     ledger.events.push(ev);
     apply(ledger, ev);
   }
   if (prev) ledger.head = { seq: seqs.length, sha256: prev };
+  const ckBytes = readInside(guildDir, path21.join(decisionsHome(guildDir), "head.json"));
+  if (ckBytes) {
+    let ck;
+    try {
+      ck = JSON.parse(ckBytes.toString("utf8"));
+    } catch {
+      throw new DecisionLedgerError("head checkpoint is not JSON");
+    }
+    if (typeof ck.seq !== "number" || typeof ck.sha256 !== "string") throw new DecisionLedgerError("head checkpoint is invalid");
+    if (ck.seq > seqs.length) throw new DecisionLedgerError(`ledger truncated: checkpoint names seq ${ck.seq}, chain ends at ${seqs.length}`);
+    if (ck.seq > 0 && chainShas[ck.seq - 1] !== ck.sha256) throw new DecisionLedgerError(`ledger forked: event ${ck.seq} does not match the checkpoint`);
+  } else if (seqs.length > 0 && !allowMissingCheckpoint) {
+    throw new DecisionLedgerError("events exist without a head checkpoint");
+  }
   return ledger;
 }
 function apply(ledger, ev) {

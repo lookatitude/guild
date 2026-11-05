@@ -525,5 +525,51 @@ describe("K04 R1 regressions", () => {
     const pin = pinDependent({ guildDir: r.guildDir, kind: "plan", name: "p", path: plan, decisions: [{ id: "decision:legacy", revision: sha(fs.readFileSync(legacy)) }] });
     expect(pin.status === "refused" && pin.reason).toBe("unapproved");
   });
-});
 
+  it("R3-F1: a lost final event is detected as truncation, not a valid shorter chain", () => {
+    const { r } = at37Fixture();
+    harvest(r, "retry-policy-v2", { replaces: "decision:retry-policy-v1" });
+    fs.rmSync(path.join(decisionsHome(r.guildDir), "events", "000000000002.json"));
+    expect(() => readDecisionLedger(r.guildDir)).toThrow(/truncated/);
+    expect(propagateDecisions({ guildDir: r.guildDir }).status).toBe("refused");
+    expect(() => decisionPublicationRefs(r.guildDir)).toThrow(/truncated/);
+  });
+
+  it("R3-F2: a crash after replan_queued resumes with the replan signal intact", () => {
+    const { r } = at37Fixture();
+    const first = harvest(r, "retry-policy-v2", { replaces: "decision:retry-policy-v1" });
+    upsertOp(RUN_ID, { ...first.op, status: "replan_queued" }, { storage: r.storage });
+    const resumed = harvest(r, "retry-policy-v2", { op_id: first.op.op_id });
+    expect(resumed.op.status).toBe("reported");
+    expect(resumed.replan_queued).toBe(true);
+    expect(resumed.replan_required?.map((e) => e.id)).toEqual(["plan:lane-a"]);
+    expect(readDecisionLedger(r.guildDir).events).toHaveLength(2);
+  });
+
+  it("R3-F3: an invalid superseded id is refused before it reaches the ledger", () => {
+    const r = mkRoot("repo");
+    harvest(r, "d1");
+    const page = write(path.join(r.guildDir, "wiki", "decisions", "d9.md"), "---\ntype: decision\nschema_version: guild.decision.v1\nid: decision:d9\nstatus: canonical\nreplaces: ../d1\n---\n# d9\n");
+    const res = recordAcceptedDecision({ guildDir: r.guildDir, pagePath: page });
+    expect(res.status).toBe("refused");
+    expect(readDecisionLedger(r.guildDir).events).toHaveLength(1);
+    expect(propagateDecisions({ guildDir: r.guildDir }).status).toBe("ok");
+  });
+
+  it("R3-F5: a restored candidate is a new occurrence an old promotion does not explain", () => {
+    const r = mkRoot("repo");
+    harvest(r, "d1");
+    const a = harvest(r, "d1", { autopromote: false, body: "Proposal A." });
+    const bytes = fs.readFileSync(a.candidate_path!);
+    const page = path.join(r.guildDir, "wiki", "decisions", "d1.md");
+    harvest(r, "d1", { body: "Proposal A.", expect_before_hash: sha(fs.readFileSync(page)).slice(7), from_candidate: { path: a.candidate_path!, sha256: sha(bytes) } });
+    fs.rmSync(a.candidate_path!);
+    const gone = publishDecisionCandidates({ guildDir: r.guildDir, autopromote: false });
+    expect(gone.status === "ok" && gone.missing).toEqual([]);
+    fs.writeFileSync(a.candidate_path!, bytes);
+    expect(publishDecisionCandidates({ guildDir: r.guildDir, autopromote: false }).status).toBe("ok");
+    fs.rmSync(a.candidate_path!);
+    const again = publishDecisionCandidates({ guildDir: r.guildDir, autopromote: false });
+    expect(again.status === "ok" && again.missing).toHaveLength(1);
+  });
+});

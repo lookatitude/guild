@@ -592,7 +592,9 @@ export function harvestDecision(input: HarvestInput): HarvestResult {
   // its page is a journal that outlived its compact history: nothing here can say
   // what those bytes are, so nothing here may report a promotion. The operator
   // decides (R54 / KTD39).
-  if (existing && (existing.status === "written" || existing.status === "indexed")) {
+  // `replan_queued` re-enters too: the replan signal is rebuilt from the durable
+  // accepted event and pins, never by repeating the write (K04).
+  if (existing && (existing.status === "written" || existing.status === "indexed" || existing.status === "replan_queued")) {
     const pageEntry = readInverse(input.run_id, op.op_id, storeOpts)?.files.find(
       (f) => f.path === wikiAbs,
     );

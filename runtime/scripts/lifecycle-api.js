@@ -38875,7 +38875,7 @@ function parseEvent(bytes, seq, prev) {
   if (fc != null && (typeof fc.path !== "string" || typeof fc.revision !== "string" || !SHA.test(fc.revision))) throw new DecisionLedgerError(`event ${seq} has an invalid candidate ref`);
   return ev;
 }
-function readDecisionLedger(guildDir) {
+function readDecisionLedger(guildDir, allowMissingCheckpoint = false) {
   const dir = path67.join(decisionsHome(guildDir), "events");
   const c = checkContained(guildDir, dir, { policy: "physical" });
   const ledger = { head: null, events: [], decisions: /* @__PURE__ */ new Map(), tombstones: /* @__PURE__ */ new Map() };
@@ -38886,16 +38886,32 @@ function readDecisionLedger(guildDir) {
   if (!fs57.existsSync(c.realPath)) return ledger;
   const seqs = fs57.readdirSync(c.realPath).map((n) => EVENT_FILE.exec(n)).filter((m) => m !== null).map((m) => Number(m[1])).sort((a, b) => a - b);
   let prev = null;
+  const chainShas = [];
   for (let i = 0; i < seqs.length; i++) {
     if (seqs[i] !== i + 1) throw new DecisionLedgerError(`event sequence has a gap at ${i + 1}`);
     const bytes = readInside(guildDir, path67.join(c.realPath, eventName(i + 1)));
     if (!bytes) throw new DecisionLedgerError(`event ${i + 1} vanished`);
     const ev = parseEvent(bytes, i + 1, prev);
     prev = sha2(bytes);
+    chainShas.push(prev);
     ledger.events.push(ev);
     apply(ledger, ev);
   }
   if (prev) ledger.head = { seq: seqs.length, sha256: prev };
+  const ckBytes = readInside(guildDir, path67.join(decisionsHome(guildDir), "head.json"));
+  if (ckBytes) {
+    let ck;
+    try {
+      ck = JSON.parse(ckBytes.toString("utf8"));
+    } catch {
+      throw new DecisionLedgerError("head checkpoint is not JSON");
+    }
+    if (typeof ck.seq !== "number" || typeof ck.sha256 !== "string") throw new DecisionLedgerError("head checkpoint is invalid");
+    if (ck.seq > seqs.length) throw new DecisionLedgerError(`ledger truncated: checkpoint names seq ${ck.seq}, chain ends at ${seqs.length}`);
+    if (ck.seq > 0 && chainShas[ck.seq - 1] !== ck.sha256) throw new DecisionLedgerError(`ledger forked: event ${ck.seq} does not match the checkpoint`);
+  } else if (seqs.length > 0 && !allowMissingCheckpoint) {
+    throw new DecisionLedgerError("events exist without a head checkpoint");
+  }
   return ledger;
 }
 function apply(ledger, ev) {
@@ -38922,6 +38938,11 @@ function apply(ledger, ev) {
     ledger.tombstones.set(id, ev.decision);
   }
 }
+function cloneLedger(l) {
+  const decisions = /* @__PURE__ */ new Map();
+  for (const [k, v] of l.decisions) decisions.set(k, { ...v, revisions: [...v.revisions] });
+  return { head: l.head, events: [...l.events], decisions, tombstones: new Map(l.tombstones) };
+}
 function eventName(seq) {
   return `${String(seq).padStart(12, "0")}.json`;
 }
@@ -38939,6 +38960,12 @@ function createExclusive2(guildDir, final, content) {
   }
   try {
     fs57.linkSync(tmp, path67.join(real, path67.basename(final)));
+    const dfd = fs57.openSync(real, "r");
+    try {
+      fs57.fsyncSync(dfd);
+    } finally {
+      fs57.closeSync(dfd);
+    }
     return true;
   } catch (err) {
     if (err.code === "EEXIST") return false;
@@ -38967,6 +38994,8 @@ function recordAcceptedDecision(input) {
   const replaces = typeof fm["replaces"] === "string" ? [fm["replaces"]] : [];
   const wanted = [.../* @__PURE__ */ new Set([...replaces, ...input.supersededIds ?? []])].sort();
   if (wanted.includes(id)) return { status: "refused", reason: "cycle", detail: `${id} cannot supersede itself` };
+  const badId = wanted.find((w) => !ENTITY_ID.test(w));
+  if (badId !== void 0) return { status: "refused", reason: "not_canonical", detail: `superseded id ${JSON.stringify(badId)} is not a valid entity id` };
   let fromCandidate = null;
   if (input.fromCandidate) {
     const home = path67.join(guildDir, "knowledge", "candidates", "decisions");
@@ -38980,7 +39009,8 @@ function recordAcceptedDecision(input) {
   try {
     return withLock(guildDir, () => {
       for (let attempt = 0; attempt < 8; attempt++) {
-        const ledger = readDecisionLedger(guildDir);
+        const ledger = readDecisionLedger(guildDir, true);
+        if (ledger.head) writeInside(guildDir, path67.join(decisionsHome(guildDir), "head.json"), JSON.stringify(ledger.head) + "\n");
         const cur = ledger.decisions.get(id);
         const tomb = ledger.tombstones.get(id);
         if (cur?.status === "superseded" || tomb) {
@@ -39010,8 +39040,13 @@ function recordAcceptedDecision(input) {
           op_id: input.opId ?? null,
           from_candidate: fromCandidate
         };
+        const bytesOut = JSON.stringify(ev, null, 2) + "\n";
+        apply(cloneLedger(ledger), parseEvent(Buffer.from(bytesOut), ev.seq, ev.prev_event_sha256));
         const target = path67.join(decisionsHome(guildDir), "events", eventName(ev.seq));
-        if (createExclusive2(guildDir, target, JSON.stringify(ev, null, 2) + "\n")) return { status: "recorded", event: ev };
+        if (createExclusive2(guildDir, target, bytesOut)) {
+          writeInside(guildDir, path67.join(decisionsHome(guildDir), "head.json"), JSON.stringify({ seq: ev.seq, sha256: sha2(bytesOut) }) + "\n");
+          return { status: "recorded", event: ev };
+        }
       }
       return { status: "refused", reason: "contention", detail: "the ledger head kept moving" };
     });
@@ -39228,70 +39263,77 @@ function publishDecisionCandidates(input) {
       return { status: "refused", reason: "scope", detail: `conflict root ${r} overlaps the owner root` };
     }
   }
-  const owner = ownerSourceId(guildDir);
-  const dir = candidateDir(guildDir);
-  const entries = [];
   try {
-    const c = checkContained(guildDir, dir, { policy: "physical" });
-    if (isRefused(c) && !absent(c.code)) return { status: "refused", reason: "scope", detail: `candidates dir: ${c.code}` };
-    const names = !isRefused(c) && fs57.existsSync(c.realPath) ? fs57.readdirSync(c.realPath).filter((n) => n.endsWith(".md")).sort() : [];
-    for (const n of names) {
-      const abs = path67.join(dir, n);
-      const b = readInside(guildDir, abs);
-      if (!b) continue;
-      const fm = parseFrontmatter(b.toString("utf8"));
-      const decisionId = typeof fm?.["id"] === "string" && ENTITY_ID.test(fm["id"]) ? fm["id"] : null;
-      const stem = n.slice(0, -3);
-      const candId = `candidate:${stem}`.slice(0, 128);
-      const conflicts = [];
-      if (decisionId) {
-        const own = canonicalPageRef(guildDir, decisionId);
-        if (own) conflicts.push(own);
-        for (const r of input.conflictRoots ?? []) {
-          const other = canonicalPageRef(path67.resolve(r), decisionId);
-          if (other) conflicts.push(other);
-        }
-      }
-      entries.push({
-        candidate: { source_id: owner, kind: "candidate", id: ENTITY_ID.test(candId) ? candId : `candidate:${sha2(stem).slice(7, 39)}`, revision: sha2(b) },
-        decision_id: decisionId,
-        path: rel2(guildDir, abs),
-        state: "pending_human_ingest",
-        promotion_gate: "guild:wiki-ingest",
-        conflicts
-      });
-    }
-    const manifestPath = path67.join(guildDir, "knowledge", "candidates", "manifest.json");
-    const prevBytes = readInside(guildDir, manifestPath);
-    const missing = [];
-    const ledger = readDecisionLedger(guildDir);
-    if (prevBytes) {
-      const prev = JSON.parse(prevBytes.toString("utf8"));
-      const since = typeof prev.ledger_seq === "number" ? prev.ledger_seq : Number.MAX_SAFE_INTEGER;
-      const present2 = new Set(entries.map((e) => e.path));
-      for (const p of prev.candidates ?? []) {
-        if (present2.has(p.path)) continue;
-        const listedAt = p.state === "missing" && typeof p.listed_at_seq === "number" ? p.listed_at_seq : since;
-        const promoted = ledger.events.some((e) => e.from_candidate?.path === p.path && e.from_candidate.revision === p.candidate.revision);
-        if (promoted) continue;
-        entries.push({ ...p, state: "missing", listed_at_seq: listedAt });
-        missing.push(p.path);
-      }
-    }
-    const manifest = {
-      schema_version: DECISION_CANDIDATES_SCHEMA,
-      owner_source_id: owner,
-      autopromote: input.autopromote,
-      generated_at: input.now ?? (/* @__PURE__ */ new Date()).toISOString(),
-      ledger_seq: ledger.head?.seq ?? 0,
-      candidates: entries.sort((a, b) => a.path.localeCompare(b.path))
-    };
-    writeInside(guildDir, manifestPath, JSON.stringify(manifest, null, 2) + "\n");
-    return { status: "ok", manifest, missing };
+    return withLock(guildDir, () => buildCandidateManifest(guildDir, input));
   } catch (err) {
     if (err instanceof DecisionLedgerError || err instanceof SyntaxError) return { status: "refused", reason: "ledger_corrupt", detail: err.message };
     throw err;
   }
+}
+function buildCandidateManifest(guildDir, input) {
+  const owner = ownerSourceId(guildDir);
+  const dir = candidateDir(guildDir);
+  const ledger = readDecisionLedger(guildDir);
+  const seqNow = ledger.head?.seq ?? 0;
+  const manifestPath = path67.join(guildDir, "knowledge", "candidates", "manifest.json");
+  const prevBytes = readInside(guildDir, manifestPath);
+  const prev = prevBytes ? JSON.parse(prevBytes.toString("utf8")) : null;
+  const prevByOccurrence = new Map((prev?.candidates ?? []).map((p) => [`${p.path}\0${p.candidate.revision}`, p]));
+  const c = checkContained(guildDir, dir, { policy: "physical" });
+  if (isRefused(c) && !absent(c.code)) return { status: "refused", reason: "scope", detail: `candidates dir: ${c.code}` };
+  const names = !isRefused(c) && fs57.existsSync(c.realPath) ? fs57.readdirSync(c.realPath).filter((n) => n.endsWith(".md")).sort() : [];
+  const entries = [];
+  for (const n of names) {
+    const abs = path67.join(dir, n);
+    const b = readInside(guildDir, abs);
+    if (!b) continue;
+    const fm = parseFrontmatter(b.toString("utf8"));
+    const decisionId = typeof fm?.["id"] === "string" && ENTITY_ID.test(fm["id"]) ? fm["id"] : null;
+    const stem = n.slice(0, -3);
+    const candId = `candidate:${stem}`.slice(0, 128);
+    const conflicts = [];
+    if (decisionId) {
+      const own = canonicalPageRef(guildDir, decisionId);
+      if (own) conflicts.push(own);
+      for (const r of input.conflictRoots ?? []) {
+        const other = canonicalPageRef(path67.resolve(r), decisionId);
+        if (other) conflicts.push(other);
+      }
+    }
+    const revision = sha2(b);
+    const relPath = rel2(guildDir, abs);
+    const seen = prevByOccurrence.get(`${relPath}\0${revision}`);
+    entries.push({
+      candidate: { source_id: owner, kind: "candidate", id: ENTITY_ID.test(candId) ? candId : `candidate:${sha2(stem).slice(7, 39)}`, revision },
+      decision_id: decisionId,
+      path: relPath,
+      state: "pending_human_ingest",
+      promotion_gate: "guild:wiki-ingest",
+      conflicts,
+      // The same bytes at the same path keep their first-listed seq across refreshes.
+      listed_at_seq: seen && seen.state !== "missing" && typeof seen.listed_at_seq === "number" ? seen.listed_at_seq : seqNow
+    });
+  }
+  const missing = [];
+  const present2 = new Set(entries.map((e) => `${e.path}\0${e.candidate.revision}`));
+  for (const p of prev?.candidates ?? []) {
+    if (present2.has(`${p.path}\0${p.candidate.revision}`)) continue;
+    const listedAt = typeof p.listed_at_seq === "number" ? p.listed_at_seq : 0;
+    const promoted = ledger.events.some((e) => e.seq > listedAt && e.from_candidate?.path === p.path && e.from_candidate.revision === p.candidate.revision);
+    if (promoted && p.state !== "missing") continue;
+    entries.push({ ...p, state: "missing", listed_at_seq: listedAt });
+    missing.push(p.path);
+  }
+  const manifest = {
+    schema_version: DECISION_CANDIDATES_SCHEMA,
+    owner_source_id: owner,
+    autopromote: input.autopromote,
+    generated_at: input.now ?? (/* @__PURE__ */ new Date()).toISOString(),
+    ledger_seq: seqNow,
+    candidates: entries.sort((a, b) => a.path.localeCompare(b.path) || a.candidate.revision.localeCompare(b.candidate.revision))
+  };
+  writeInside(guildDir, manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+  return { status: "ok", manifest, missing };
 }
 function federatedCandidateView(children, opts = {}) {
   return children.map((ch) => {
@@ -39590,7 +39632,7 @@ function harvestDecision(input) {
       return refuse5(input, op, "probe", `permissions are proposal-only (D5): ${d5.detail}`, storeOpts);
     }
   }
-  if (existing && (existing.status === "written" || existing.status === "indexed")) {
+  if (existing && (existing.status === "written" || existing.status === "indexed" || existing.status === "replan_queued")) {
     const pageEntry = readInverse(input.run_id, op.op_id, storeOpts)?.files.find(
       (f) => f.path === wikiAbs
     );
