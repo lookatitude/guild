@@ -48073,6 +48073,10 @@ var init_task_cell_controller = __esm({
         if (owner === void 0) return outcome("refused", null, "lane_absent_from_oracle_plan");
         if (owner !== spec.worker_role) return outcome("refused", null, "lane_role_mismatch");
         if (this.planRel === null) return outcome("refused", null, "team_plan_not_written");
+        const hostId = spec.host?.host_id;
+        const registryFamily = typeof hostId === "string" && Object.prototype.hasOwnProperty.call(HOST_REGISTRY_ROWS, hostId) ? HOST_REGISTRY_ROWS[hostId].family : null;
+        const modelFamily = registryFamily === null ? null : modelFamilyForHostFamily(registryFamily);
+        if (modelFamily === null || spec.host.host_family !== modelFamily) return outcome("refused", null, "host_family_mismatch");
         const station = this.phaseStation();
         const bindingRel = path87.relative(this.cwd, runBindingPath(this.cwd, this.claim.run_id));
         if (spec.scope_paths.some((s) => bindingRel === s || bindingRel.startsWith(`${s.replace(/\/$/, "")}/`) || s === "." || s === "")) {

@@ -86,6 +86,8 @@ interface LaneOpts {
   decideLead?: boolean;
   /** Replace the private CD17a preflight (source runs are mechanics_only at P6). */
   stubPreflight?: boolean;
+  /** The lane's declared review family (CW-10 F6); defaults to the host's real family. */
+  hostFamily?: string;
 }
 
 async function runLane(opts: LaneOpts = {}): Promise<Lane> {
@@ -138,14 +140,15 @@ async function runLane(opts: LaneOpts = {}): Promise<Lane> {
     const out = await controller.runLane({
       logical_task_id: "T1", worker_role: "backend",
       specialist: { type_id: "backend", type_version: "1", type_hash: "sha256:type", profile_id: "backend", profile_hash: "sha256:profile" },
-      host: { host_id: "claude-code-cli", adapter_id: "claude-code-cli@1", host_capabilities_hash: "sha256:caps", host_family: "anthropic" },
+      host: { host_id: "claude-code-cli", adapter_id: "claude-code-cli@1", host_capabilities_hash: "sha256:caps", host_family: opts.hostFamily ?? "anthropic" },
       model: { tier: "mid", model_id: "fixture-model" }, context_bundle_id: contextRel, objective: "implement T1", non_goals: [],
       scope_paths: ["src"], acceptance_tests: ["fixture"], dependencies: [],
       projection: { tools: ["read", "write"], permissions: [], recorded_losses: [] },
       budgets: { tokens: null, wall_clock_ms: null, cost_usd: null }, autonomy_policy: "supervised", deadline: null,
       ready_timeout_ms: 0, ack_timeout_ms: 0, receipt_timeout_ms: 0, review_timeout_ms: opts.decideLead ? 60_000 : 0,
     });
-    const handle = controller.instances[0].handle;
+    const handle = controller.instances[0]?.handle;
+    if (!handle) return { root, controller, port, out } as Lane;
     const ids = { run_id: RUN, logical_task_id: "T1", attempt: handle.attempt, instance_id: handle.instance_id };
     return { root, controller, port, out, ids, paths: taskCellPaths(ids) };
   } finally {
@@ -173,6 +176,16 @@ function plantNextMarker(root: string, iid: string, nth: number, name: string) {
   const seq = markerCount(root, iid) + nth;
   fs.writeFileSync(path.join(dir, `${iid}.${String(seq).padStart(6, "0")}.${name}`), "planted by test\n", { flag: "wx" });
 }
+
+// ── CW-10 F6: the declared review family is the registry host's model family ──
+
+describe("CW-10 F6 · runLane refuses a lane whose host_family is not its host's model family", () => {
+  it("a claude-code-cli lane labelled openai is refused before any spawn", async () => {
+    const l = await runLane({ hostFamily: "openai" });
+    expect(l.out).toMatchObject({ state: "refused", instance_id: null, failure_reason: "host_family_mismatch" });
+    expect(l.controller.instances.length).toBe(0);
+  });
+});
 
 // ── C-r2-F1: validation post-state after the event step ──────────────────────
 

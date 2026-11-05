@@ -94,7 +94,7 @@ import {
   validateReviewResultV1Strict,
   type GatePassConditions,
 } from "../distribution";
-import { validateSecretsPolicy } from "../config";
+import { HOST_REGISTRY_ROWS, modelFamilyForHostFamily, validateSecretsPolicy } from "../config";
 import { checkContained, isRefused, prepareContainedWrite } from "../kernel";
 import { loadRunBinding, runBindingPath, verifyRunBinding } from "../lifecycle";
 import { applySecretsPolicy, parseSecurityConfig, securityDefaults, type SecretsPolicy } from "../security";
@@ -2582,6 +2582,12 @@ export class TaskCellController {
     if (owner === undefined) return outcome("refused", null, "lane_absent_from_oracle_plan");
     if (owner !== spec.worker_role) return outcome("refused", null, "lane_role_mismatch");
     if (this.planRel === null) return outcome("refused", null, "team_plan_not_written");
+    // Review independence compares spec.host.host_family: it must be the model family of the registry host, never a free label.
+    const hostId = spec.host?.host_id;
+    const registryFamily = typeof hostId === "string" && Object.prototype.hasOwnProperty.call(HOST_REGISTRY_ROWS, hostId)
+      ? (HOST_REGISTRY_ROWS as Record<string, { family: string }>)[hostId]!.family : null;
+    const modelFamily = registryFamily === null ? null : modelFamilyForHostFamily(registryFamily);
+    if (modelFamily === null || spec.host.host_family !== modelFamily) return outcome("refused", null, "host_family_mismatch");
     const station = this.phaseStation();
     // Admission (CD9/CD21): binding.json outside every scope path, typed oracles valid.
     const bindingRel = path.relative(this.cwd, runBindingPath(this.cwd, this.claim.run_id));
