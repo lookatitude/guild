@@ -1,0 +1,1934 @@
+{
+  "schema_version": "guild.r01.a02_fixture_subset.v1",
+  "note": "Derived subset of the frozen A02 contract fixtures for the six R01 identity schemas. Do not hand-edit; execution-identity.test.ts re-derives it from contracts/guild-stack/v2 when that checkout is present.",
+  "source": {
+    "bundle": "contracts/guild-stack/v2/contract-bundle.json",
+    "bundle_sha256": "sha256:05833d374acb729cad021bb7a54141d67f1429fcaaca112b6fa29a10d3ec7d94",
+    "cases_sha256": "sha256:6bcdb72135d90e9e18dfed1ed720bc80c50c344428a3046a594a9501a72c7763",
+    "regressions_sha256": "sha256:18ef72473b5101bddb3f1263ad086b951509dfbf8d57e9807ee55d0f1374b69c"
+  },
+  "schemas": [
+    "logical-run",
+    "execution-segment",
+    "task-assignment",
+    "task-attempt",
+    "run-binding",
+    "execution-lineage"
+  ],
+  "cases": [
+    {
+      "id": "execution-lineage-valid",
+      "origin": "cases",
+      "schema": "execution-lineage",
+      "valid": true,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.stack.execution-lineage.v1",
+        "lineage": {
+          "source_id": "source-a",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": null,
+          "attempt_id": null,
+          "agent_instance_id": null,
+          "request_id": null
+        },
+        "run_schema": "guild.logical_run.v2",
+        "pins": {
+          "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "requested_host": "codex",
+        "observed_host": "codex",
+        "requested_model": "requested-model",
+        "observed_identity": {
+          "provider": "provider",
+          "model": "observed-model",
+          "status": "observed",
+          "reason": null
+        },
+        "adapter_capability_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "authority": {
+          "controller_source_id": "source-a",
+          "controller_epoch": 1,
+          "execution_id": "exec-1",
+          "attempt_id": null,
+          "writer_scope_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_disposition_revision": null
+        },
+        "attempt_grant_ref": null,
+        "admission": "active",
+        "state": {
+          "lifecycle": "active",
+          "outcome": "pending",
+          "acceptance": "pending",
+          "observability": "complete"
+        },
+        "interval": {
+          "start": "2026-10-26T00:00:00Z",
+          "end": "2026-10-26T00:00:20Z",
+          "duration_ms": 20000,
+          "clock": {
+            "domain": "controller-a",
+            "basis": "controller",
+            "comparable": true,
+            "skew_bound_ms": 0
+          }
+        },
+        "handoffs": [],
+        "evidence": [
+          {
+            "source_id": "source-a",
+            "path": "runs/run-20261026-000000-demo/evidence.json",
+            "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "guild.evidence.v1",
+            "observed_at": "2026-10-26T00:00:00Z",
+            "availability": "available",
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "execution-lineage-unknown-field",
+      "origin": "cases",
+      "schema": "execution-lineage",
+      "valid": false,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.stack.execution-lineage.v1",
+        "lineage": {
+          "source_id": "source-a",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": null,
+          "attempt_id": null,
+          "agent_instance_id": null,
+          "request_id": null
+        },
+        "run_schema": "guild.logical_run.v2",
+        "pins": {
+          "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "requested_host": "codex",
+        "observed_host": "codex",
+        "requested_model": "requested-model",
+        "observed_identity": {
+          "provider": "provider",
+          "model": "observed-model",
+          "status": "observed",
+          "reason": null
+        },
+        "adapter_capability_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "authority": {
+          "controller_source_id": "source-a",
+          "controller_epoch": 1,
+          "execution_id": "exec-1",
+          "attempt_id": null,
+          "writer_scope_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_disposition_revision": null
+        },
+        "attempt_grant_ref": null,
+        "admission": "active",
+        "state": {
+          "lifecycle": "active",
+          "outcome": "pending",
+          "acceptance": "pending",
+          "observability": "complete"
+        },
+        "interval": {
+          "start": "2026-10-26T00:00:00Z",
+          "end": "2026-10-26T00:00:20Z",
+          "duration_ms": 20000,
+          "clock": {
+            "domain": "controller-a",
+            "basis": "controller",
+            "comparable": true,
+            "skew_bound_ms": 0
+          }
+        },
+        "handoffs": [],
+        "evidence": [
+          {
+            "source_id": "source-a",
+            "path": "runs/run-20261026-000000-demo/evidence.json",
+            "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "guild.evidence.v1",
+            "observed_at": "2026-10-26T00:00:00Z",
+            "availability": "available",
+            "reason": null
+          }
+        ],
+        "undeclared_secret": "must refuse"
+      }
+    },
+    {
+      "id": "logical-run-valid",
+      "origin": "cases",
+      "schema": "logical-run",
+      "valid": true,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.logical_run.v2",
+        "source_id": "source-a",
+        "run_id": "run-20261026-000000-demo",
+        "initiative_id": null,
+        "parent_run": null,
+        "created_at": "2026-10-26T00:00:00Z",
+        "phase": "build",
+        "initial_command": "/guild:build",
+        "initial_prompt_ref": {
+          "source_id": "source-a",
+          "path": "runs/run-20261026-000000-demo/evidence.json",
+          "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema_version": "guild.evidence.v1",
+          "observed_at": "2026-10-26T00:00:00Z",
+          "availability": "available",
+          "reason": null
+        },
+        "controller": {
+          "source_id": "source-a",
+          "host_id": "controller-host",
+          "epoch": 1,
+          "state": "active",
+          "failover": "manual_new_run_only"
+        },
+        "workflow_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "execution_refs": [
+          {
+            "source_id": "source-a",
+            "kind": "execution",
+            "id": "exec-1",
+            "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "goal_refs": [],
+        "state": {
+          "lifecycle": "active",
+          "outcome": "pending",
+          "acceptance": "pending",
+          "observability": "complete"
+        }
+      }
+    },
+    {
+      "id": "logical-run-unknown-field",
+      "origin": "cases",
+      "schema": "logical-run",
+      "valid": false,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.logical_run.v2",
+        "source_id": "source-a",
+        "run_id": "run-20261026-000000-demo",
+        "initiative_id": null,
+        "parent_run": null,
+        "created_at": "2026-10-26T00:00:00Z",
+        "phase": "build",
+        "initial_command": "/guild:build",
+        "initial_prompt_ref": {
+          "source_id": "source-a",
+          "path": "runs/run-20261026-000000-demo/evidence.json",
+          "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema_version": "guild.evidence.v1",
+          "observed_at": "2026-10-26T00:00:00Z",
+          "availability": "available",
+          "reason": null
+        },
+        "controller": {
+          "source_id": "source-a",
+          "host_id": "controller-host",
+          "epoch": 1,
+          "state": "active",
+          "failover": "manual_new_run_only"
+        },
+        "workflow_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "execution_refs": [
+          {
+            "source_id": "source-a",
+            "kind": "execution",
+            "id": "exec-1",
+            "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "goal_refs": [],
+        "state": {
+          "lifecycle": "active",
+          "outcome": "pending",
+          "acceptance": "pending",
+          "observability": "complete"
+        },
+        "undeclared_secret": "must refuse"
+      }
+    },
+    {
+      "id": "execution-segment-valid",
+      "origin": "cases",
+      "schema": "execution-segment",
+      "valid": true,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.execution_segment.v1",
+        "lineage": {
+          "source_id": "source-a",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": null,
+          "attempt_id": null,
+          "agent_instance_id": null,
+          "request_id": null
+        },
+        "original_host_id": "codex",
+        "host_session_id": "host-session-1",
+        "issued_controller_epoch": 1,
+        "adapter_capability_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pins": {
+          "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "admission": "sealed",
+        "interval": {
+          "start": "2026-10-26T00:00:00Z",
+          "end": "2026-10-26T00:00:20Z",
+          "duration_ms": 20000,
+          "clock": {
+            "domain": "controller-a",
+            "basis": "controller",
+            "comparable": true,
+            "skew_bound_ms": 0
+          }
+        },
+        "observation_manifest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "seal_evidence": {
+          "source_id": "source-a",
+          "path": "runs/run-20261026-000000-demo/evidence.json",
+          "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema_version": "guild.evidence.v1",
+          "observed_at": "2026-10-26T00:00:00Z",
+          "availability": "available",
+          "reason": null
+        }
+      }
+    },
+    {
+      "id": "execution-segment-unknown-field",
+      "origin": "cases",
+      "schema": "execution-segment",
+      "valid": false,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.execution_segment.v1",
+        "lineage": {
+          "source_id": "source-a",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": null,
+          "attempt_id": null,
+          "agent_instance_id": null,
+          "request_id": null
+        },
+        "original_host_id": "codex",
+        "host_session_id": "host-session-1",
+        "issued_controller_epoch": 1,
+        "adapter_capability_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pins": {
+          "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "admission": "sealed",
+        "interval": {
+          "start": "2026-10-26T00:00:00Z",
+          "end": "2026-10-26T00:00:20Z",
+          "duration_ms": 20000,
+          "clock": {
+            "domain": "controller-a",
+            "basis": "controller",
+            "comparable": true,
+            "skew_bound_ms": 0
+          }
+        },
+        "observation_manifest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "seal_evidence": {
+          "source_id": "source-a",
+          "path": "runs/run-20261026-000000-demo/evidence.json",
+          "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema_version": "guild.evidence.v1",
+          "observed_at": "2026-10-26T00:00:00Z",
+          "availability": "available",
+          "reason": null
+        },
+        "undeclared_secret": "must refuse"
+      }
+    },
+    {
+      "id": "task-assignment-valid",
+      "origin": "cases",
+      "schema": "task-assignment",
+      "valid": true,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.task_assignment.v3",
+        "lineage": {
+          "source_id": "source-a",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": "task-1",
+          "attempt_id": "attempt-1",
+          "agent_instance_id": "agent-1",
+          "request_id": null
+        },
+        "original_host_id": "codex",
+        "issued_controller_epoch": 1,
+        "assignment_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pins": {
+          "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "result_scope_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "grant_id": "grant-1",
+        "created_at": "2026-10-26T00:00:00Z",
+        "goal_contributions": [],
+        "input_refs": [
+          {
+            "source_id": "source-a",
+            "path": "runs/run-20261026-000000-demo/evidence.json",
+            "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "guild.evidence.v1",
+            "observed_at": "2026-10-26T00:00:00Z",
+            "availability": "available",
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "task-assignment-unknown-field",
+      "origin": "cases",
+      "schema": "task-assignment",
+      "valid": false,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.task_assignment.v3",
+        "lineage": {
+          "source_id": "source-a",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": "task-1",
+          "attempt_id": "attempt-1",
+          "agent_instance_id": "agent-1",
+          "request_id": null
+        },
+        "original_host_id": "codex",
+        "issued_controller_epoch": 1,
+        "assignment_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pins": {
+          "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "result_scope_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "grant_id": "grant-1",
+        "created_at": "2026-10-26T00:00:00Z",
+        "goal_contributions": [],
+        "input_refs": [
+          {
+            "source_id": "source-a",
+            "path": "runs/run-20261026-000000-demo/evidence.json",
+            "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "guild.evidence.v1",
+            "observed_at": "2026-10-26T00:00:00Z",
+            "availability": "available",
+            "reason": null
+          }
+        ],
+        "undeclared_secret": "must refuse"
+      }
+    },
+    {
+      "id": "task-attempt-valid",
+      "origin": "cases",
+      "schema": "task-attempt",
+      "valid": true,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.task_attempt.v1",
+        "lineage": {
+          "source_id": "source-a",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": "task-1",
+          "attempt_id": "attempt-1",
+          "agent_instance_id": "agent-1",
+          "request_id": null
+        },
+        "assignment_ref": {
+          "source_id": "source-a",
+          "path": "runs/run-20261026-000000-demo/evidence.json",
+          "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema_version": "guild.evidence.v1",
+          "observed_at": "2026-10-26T00:00:00Z",
+          "availability": "available",
+          "reason": null
+        },
+        "ordinal": 1,
+        "state": {
+          "lifecycle": "active",
+          "outcome": "pending",
+          "acceptance": "pending",
+          "observability": "complete"
+        },
+        "result_refs": [],
+        "acceptance_subject_hash": null,
+        "accepted_by_controller_epoch": null,
+        "receipt_loss_reconciled": true,
+        "uncertain_effects": false
+      }
+    },
+    {
+      "id": "task-attempt-unknown-field",
+      "origin": "cases",
+      "schema": "task-attempt",
+      "valid": false,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.task_attempt.v1",
+        "lineage": {
+          "source_id": "source-a",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": "task-1",
+          "attempt_id": "attempt-1",
+          "agent_instance_id": "agent-1",
+          "request_id": null
+        },
+        "assignment_ref": {
+          "source_id": "source-a",
+          "path": "runs/run-20261026-000000-demo/evidence.json",
+          "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema_version": "guild.evidence.v1",
+          "observed_at": "2026-10-26T00:00:00Z",
+          "availability": "available",
+          "reason": null
+        },
+        "ordinal": 1,
+        "state": {
+          "lifecycle": "active",
+          "outcome": "pending",
+          "acceptance": "pending",
+          "observability": "complete"
+        },
+        "result_refs": [],
+        "acceptance_subject_hash": null,
+        "accepted_by_controller_epoch": null,
+        "receipt_loss_reconciled": true,
+        "uncertain_effects": false,
+        "undeclared_secret": "must refuse"
+      }
+    },
+    {
+      "id": "run-binding-valid",
+      "origin": "cases",
+      "schema": "run-binding",
+      "valid": true,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.run_binding.v2",
+        "source_id": "source-a",
+        "run_id": "run-20261026-000000-demo",
+        "controller_source_id": "source-a",
+        "controller_host_id": "controller-host",
+        "controller_epoch": 1,
+        "writer_grant_id": "grant-1",
+        "writer_scope_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "open",
+        "logical_run_manifest_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "run-binding-unknown-field",
+      "origin": "cases",
+      "schema": "run-binding",
+      "valid": false,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.run_binding.v2",
+        "source_id": "source-a",
+        "run_id": "run-20261026-000000-demo",
+        "controller_source_id": "source-a",
+        "controller_host_id": "controller-host",
+        "controller_epoch": 1,
+        "writer_grant_id": "grant-1",
+        "writer_scope_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "open",
+        "logical_run_manifest_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "undeclared_secret": "must refuse"
+      }
+    },
+    {
+      "id": "P06",
+      "origin": "regressions",
+      "schema": "execution-lineage",
+      "valid": false,
+      "expected_errors": [
+        "lineage/authority mismatch"
+      ],
+      "instance": {
+        "schema_version": "guild.stack.execution-lineage.v1",
+        "lineage": {
+          "source_id": "source-a",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": "task-1",
+          "attempt_id": "attempt-1",
+          "agent_instance_id": null,
+          "request_id": null
+        },
+        "run_schema": "guild.logical_run.v2",
+        "pins": {
+          "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "requested_host": "codex",
+        "observed_host": "codex",
+        "requested_model": "requested-model",
+        "observed_identity": {
+          "provider": "provider",
+          "model": "observed-model",
+          "status": "observed",
+          "reason": null
+        },
+        "adapter_capability_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "authority": {
+          "controller_source_id": "source-a",
+          "controller_epoch": 1,
+          "execution_id": "exec-1",
+          "attempt_id": "attempt-2",
+          "writer_scope_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_disposition_revision": null
+        },
+        "attempt_grant_ref": null,
+        "admission": "active",
+        "state": {
+          "lifecycle": "active",
+          "outcome": "pending",
+          "acceptance": "pending",
+          "observability": "complete"
+        },
+        "interval": {
+          "start": "2026-10-26T00:00:00Z",
+          "end": "2026-10-26T00:00:20Z",
+          "duration_ms": 20000,
+          "clock": {
+            "domain": "controller-a",
+            "basis": "controller",
+            "comparable": true,
+            "skew_bound_ms": 0
+          }
+        },
+        "handoffs": [],
+        "evidence": [
+          {
+            "source_id": "source-a",
+            "path": "runs/run-20261026-000000-demo/evidence.json",
+            "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "guild.evidence.v1",
+            "observed_at": "2026-10-26T00:00:00Z",
+            "availability": "available",
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "P06-null-vs-attempt",
+      "origin": "regressions",
+      "schema": "execution-lineage",
+      "valid": false,
+      "expected_errors": [
+        "lineage/authority mismatch"
+      ],
+      "instance": {
+        "schema_version": "guild.stack.execution-lineage.v1",
+        "lineage": {
+          "source_id": "source-a",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": "task-1",
+          "attempt_id": "attempt-1",
+          "agent_instance_id": null,
+          "request_id": null
+        },
+        "run_schema": "guild.logical_run.v2",
+        "pins": {
+          "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "requested_host": "codex",
+        "observed_host": "codex",
+        "requested_model": "requested-model",
+        "observed_identity": {
+          "provider": "provider",
+          "model": "observed-model",
+          "status": "observed",
+          "reason": null
+        },
+        "adapter_capability_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "authority": {
+          "controller_source_id": "source-a",
+          "controller_epoch": 1,
+          "execution_id": "exec-1",
+          "attempt_id": null,
+          "writer_scope_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_disposition_revision": null
+        },
+        "attempt_grant_ref": null,
+        "admission": "active",
+        "state": {
+          "lifecycle": "active",
+          "outcome": "pending",
+          "acceptance": "pending",
+          "observability": "complete"
+        },
+        "interval": {
+          "start": "2026-10-26T00:00:00Z",
+          "end": "2026-10-26T00:00:20Z",
+          "duration_ms": 20000,
+          "clock": {
+            "domain": "controller-a",
+            "basis": "controller",
+            "comparable": true,
+            "skew_bound_ms": 0
+          }
+        },
+        "handoffs": [],
+        "evidence": [
+          {
+            "source_id": "source-a",
+            "path": "runs/run-20261026-000000-demo/evidence.json",
+            "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "guild.evidence.v1",
+            "observed_at": "2026-10-26T00:00:00Z",
+            "availability": "available",
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "G4-S-inventory:execution-lineage/lineage/source_id",
+      "origin": "regressions",
+      "schema": "execution-lineage",
+      "valid": false,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.stack.execution-lineage.v1",
+        "lineage": {
+          "source_id": "source-z",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": null,
+          "attempt_id": null,
+          "agent_instance_id": null,
+          "request_id": null
+        },
+        "run_schema": "guild.logical_run.v2",
+        "pins": {
+          "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "requested_host": "codex",
+        "observed_host": "codex",
+        "requested_model": "requested-model",
+        "observed_identity": {
+          "provider": "provider",
+          "model": "observed-model",
+          "status": "observed",
+          "reason": null
+        },
+        "adapter_capability_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "authority": {
+          "controller_source_id": "source-a",
+          "controller_epoch": 1,
+          "execution_id": "exec-1",
+          "attempt_id": null,
+          "writer_scope_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_disposition_revision": null
+        },
+        "attempt_grant_ref": null,
+        "admission": "active",
+        "state": {
+          "lifecycle": "active",
+          "outcome": "pending",
+          "acceptance": "pending",
+          "observability": "complete"
+        },
+        "interval": {
+          "start": "2026-10-26T00:00:00Z",
+          "end": "2026-10-26T00:00:20Z",
+          "duration_ms": 20000,
+          "clock": {
+            "domain": "controller-a",
+            "basis": "controller",
+            "comparable": true,
+            "skew_bound_ms": 0
+          }
+        },
+        "handoffs": [],
+        "evidence": [
+          {
+            "source_id": "source-a",
+            "path": "runs/run-20261026-000000-demo/evidence.json",
+            "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "guild.evidence.v1",
+            "observed_at": "2026-10-26T00:00:00Z",
+            "availability": "available",
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "G4-S-inventory:execution-lineage/authority/controller_source_id",
+      "origin": "regressions",
+      "schema": "execution-lineage",
+      "valid": false,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.stack.execution-lineage.v1",
+        "lineage": {
+          "source_id": "source-a",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": null,
+          "attempt_id": null,
+          "agent_instance_id": null,
+          "request_id": null
+        },
+        "run_schema": "guild.logical_run.v2",
+        "pins": {
+          "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "requested_host": "codex",
+        "observed_host": "codex",
+        "requested_model": "requested-model",
+        "observed_identity": {
+          "provider": "provider",
+          "model": "observed-model",
+          "status": "observed",
+          "reason": null
+        },
+        "adapter_capability_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "authority": {
+          "controller_source_id": "source-z",
+          "controller_epoch": 1,
+          "execution_id": "exec-1",
+          "attempt_id": null,
+          "writer_scope_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_disposition_revision": null
+        },
+        "attempt_grant_ref": null,
+        "admission": "active",
+        "state": {
+          "lifecycle": "active",
+          "outcome": "pending",
+          "acceptance": "pending",
+          "observability": "complete"
+        },
+        "interval": {
+          "start": "2026-10-26T00:00:00Z",
+          "end": "2026-10-26T00:00:20Z",
+          "duration_ms": 20000,
+          "clock": {
+            "domain": "controller-a",
+            "basis": "controller",
+            "comparable": true,
+            "skew_bound_ms": 0
+          }
+        },
+        "handoffs": [],
+        "evidence": [
+          {
+            "source_id": "source-a",
+            "path": "runs/run-20261026-000000-demo/evidence.json",
+            "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "guild.evidence.v1",
+            "observed_at": "2026-10-26T00:00:00Z",
+            "availability": "available",
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "G4-S-inventory:execution-lineage/evidence/*/source_id",
+      "origin": "regressions",
+      "schema": "execution-lineage",
+      "valid": false,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.stack.execution-lineage.v1",
+        "lineage": {
+          "source_id": "source-a",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": null,
+          "attempt_id": null,
+          "agent_instance_id": null,
+          "request_id": null
+        },
+        "run_schema": "guild.logical_run.v2",
+        "pins": {
+          "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "requested_host": "codex",
+        "observed_host": "codex",
+        "requested_model": "requested-model",
+        "observed_identity": {
+          "provider": "provider",
+          "model": "observed-model",
+          "status": "observed",
+          "reason": null
+        },
+        "adapter_capability_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "authority": {
+          "controller_source_id": "source-a",
+          "controller_epoch": 1,
+          "execution_id": "exec-1",
+          "attempt_id": null,
+          "writer_scope_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_disposition_revision": null
+        },
+        "attempt_grant_ref": null,
+        "admission": "active",
+        "state": {
+          "lifecycle": "active",
+          "outcome": "pending",
+          "acceptance": "pending",
+          "observability": "complete"
+        },
+        "interval": {
+          "start": "2026-10-26T00:00:00Z",
+          "end": "2026-10-26T00:00:20Z",
+          "duration_ms": 20000,
+          "clock": {
+            "domain": "controller-a",
+            "basis": "controller",
+            "comparable": true,
+            "skew_bound_ms": 0
+          }
+        },
+        "handoffs": [],
+        "evidence": [
+          {
+            "source_id": "source-z",
+            "path": "runs/run-20261026-000000-demo/evidence.json",
+            "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "guild.evidence.v1",
+            "observed_at": "2026-10-26T00:00:00Z",
+            "availability": "available",
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "G4-S-inventory:logical-run/source_id",
+      "origin": "regressions",
+      "schema": "logical-run",
+      "valid": false,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.logical_run.v2",
+        "source_id": "source-z",
+        "run_id": "run-20261026-000000-demo",
+        "initiative_id": null,
+        "parent_run": null,
+        "created_at": "2026-10-26T00:00:00Z",
+        "phase": "build",
+        "initial_command": "/guild:build",
+        "initial_prompt_ref": {
+          "source_id": "source-a",
+          "path": "runs/run-20261026-000000-demo/evidence.json",
+          "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema_version": "guild.evidence.v1",
+          "observed_at": "2026-10-26T00:00:00Z",
+          "availability": "available",
+          "reason": null
+        },
+        "controller": {
+          "source_id": "source-a",
+          "host_id": "controller-host",
+          "epoch": 1,
+          "state": "active",
+          "failover": "manual_new_run_only"
+        },
+        "workflow_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "execution_refs": [
+          {
+            "source_id": "source-a",
+            "kind": "execution",
+            "id": "exec-1",
+            "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "goal_refs": [],
+        "state": {
+          "lifecycle": "active",
+          "outcome": "pending",
+          "acceptance": "pending",
+          "observability": "complete"
+        }
+      }
+    },
+    {
+      "id": "G4-S-inventory:logical-run/initial_prompt_ref/source_id",
+      "origin": "regressions",
+      "schema": "logical-run",
+      "valid": false,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.logical_run.v2",
+        "source_id": "source-a",
+        "run_id": "run-20261026-000000-demo",
+        "initiative_id": null,
+        "parent_run": null,
+        "created_at": "2026-10-26T00:00:00Z",
+        "phase": "build",
+        "initial_command": "/guild:build",
+        "initial_prompt_ref": {
+          "source_id": "source-z",
+          "path": "runs/run-20261026-000000-demo/evidence.json",
+          "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema_version": "guild.evidence.v1",
+          "observed_at": "2026-10-26T00:00:00Z",
+          "availability": "available",
+          "reason": null
+        },
+        "controller": {
+          "source_id": "source-a",
+          "host_id": "controller-host",
+          "epoch": 1,
+          "state": "active",
+          "failover": "manual_new_run_only"
+        },
+        "workflow_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "execution_refs": [
+          {
+            "source_id": "source-a",
+            "kind": "execution",
+            "id": "exec-1",
+            "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "goal_refs": [],
+        "state": {
+          "lifecycle": "active",
+          "outcome": "pending",
+          "acceptance": "pending",
+          "observability": "complete"
+        }
+      }
+    },
+    {
+      "id": "G4-S-inventory:logical-run/controller/source_id",
+      "origin": "regressions",
+      "schema": "logical-run",
+      "valid": false,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.logical_run.v2",
+        "source_id": "source-a",
+        "run_id": "run-20261026-000000-demo",
+        "initiative_id": null,
+        "parent_run": null,
+        "created_at": "2026-10-26T00:00:00Z",
+        "phase": "build",
+        "initial_command": "/guild:build",
+        "initial_prompt_ref": {
+          "source_id": "source-a",
+          "path": "runs/run-20261026-000000-demo/evidence.json",
+          "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema_version": "guild.evidence.v1",
+          "observed_at": "2026-10-26T00:00:00Z",
+          "availability": "available",
+          "reason": null
+        },
+        "controller": {
+          "source_id": "source-z",
+          "host_id": "controller-host",
+          "epoch": 1,
+          "state": "active",
+          "failover": "manual_new_run_only"
+        },
+        "workflow_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "execution_refs": [
+          {
+            "source_id": "source-a",
+            "kind": "execution",
+            "id": "exec-1",
+            "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "goal_refs": [],
+        "state": {
+          "lifecycle": "active",
+          "outcome": "pending",
+          "acceptance": "pending",
+          "observability": "complete"
+        }
+      }
+    },
+    {
+      "id": "G4-S-inventory:logical-run/execution_refs/*/source_id",
+      "origin": "regressions",
+      "schema": "logical-run",
+      "valid": false,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.logical_run.v2",
+        "source_id": "source-a",
+        "run_id": "run-20261026-000000-demo",
+        "initiative_id": null,
+        "parent_run": null,
+        "created_at": "2026-10-26T00:00:00Z",
+        "phase": "build",
+        "initial_command": "/guild:build",
+        "initial_prompt_ref": {
+          "source_id": "source-a",
+          "path": "runs/run-20261026-000000-demo/evidence.json",
+          "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema_version": "guild.evidence.v1",
+          "observed_at": "2026-10-26T00:00:00Z",
+          "availability": "available",
+          "reason": null
+        },
+        "controller": {
+          "source_id": "source-a",
+          "host_id": "controller-host",
+          "epoch": 1,
+          "state": "active",
+          "failover": "manual_new_run_only"
+        },
+        "workflow_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "execution_refs": [
+          {
+            "source_id": "source-z",
+            "kind": "execution",
+            "id": "exec-1",
+            "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "goal_refs": [],
+        "state": {
+          "lifecycle": "active",
+          "outcome": "pending",
+          "acceptance": "pending",
+          "observability": "complete"
+        }
+      }
+    },
+    {
+      "id": "G4-S-inventory:execution-segment/lineage/source_id",
+      "origin": "regressions",
+      "schema": "execution-segment",
+      "valid": false,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.execution_segment.v1",
+        "lineage": {
+          "source_id": "source-z",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": null,
+          "attempt_id": null,
+          "agent_instance_id": null,
+          "request_id": null
+        },
+        "original_host_id": "codex",
+        "host_session_id": "host-session-1",
+        "issued_controller_epoch": 1,
+        "adapter_capability_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pins": {
+          "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "admission": "sealed",
+        "interval": {
+          "start": "2026-10-26T00:00:00Z",
+          "end": "2026-10-26T00:00:20Z",
+          "duration_ms": 20000,
+          "clock": {
+            "domain": "controller-a",
+            "basis": "controller",
+            "comparable": true,
+            "skew_bound_ms": 0
+          }
+        },
+        "observation_manifest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "seal_evidence": {
+          "source_id": "source-a",
+          "path": "runs/run-20261026-000000-demo/evidence.json",
+          "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema_version": "guild.evidence.v1",
+          "observed_at": "2026-10-26T00:00:00Z",
+          "availability": "available",
+          "reason": null
+        }
+      }
+    },
+    {
+      "id": "G4-S-inventory:execution-segment/seal_evidence/source_id",
+      "origin": "regressions",
+      "schema": "execution-segment",
+      "valid": false,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.execution_segment.v1",
+        "lineage": {
+          "source_id": "source-a",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": null,
+          "attempt_id": null,
+          "agent_instance_id": null,
+          "request_id": null
+        },
+        "original_host_id": "codex",
+        "host_session_id": "host-session-1",
+        "issued_controller_epoch": 1,
+        "adapter_capability_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pins": {
+          "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "admission": "sealed",
+        "interval": {
+          "start": "2026-10-26T00:00:00Z",
+          "end": "2026-10-26T00:00:20Z",
+          "duration_ms": 20000,
+          "clock": {
+            "domain": "controller-a",
+            "basis": "controller",
+            "comparable": true,
+            "skew_bound_ms": 0
+          }
+        },
+        "observation_manifest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "seal_evidence": {
+          "source_id": "source-z",
+          "path": "runs/run-20261026-000000-demo/evidence.json",
+          "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema_version": "guild.evidence.v1",
+          "observed_at": "2026-10-26T00:00:00Z",
+          "availability": "available",
+          "reason": null
+        }
+      }
+    },
+    {
+      "id": "G4-S-inventory:task-assignment/lineage/source_id",
+      "origin": "regressions",
+      "schema": "task-assignment",
+      "valid": true,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.task_assignment.v3",
+        "lineage": {
+          "source_id": "source-z",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": "task-1",
+          "attempt_id": "attempt-1",
+          "agent_instance_id": "agent-1",
+          "request_id": null
+        },
+        "original_host_id": "codex",
+        "issued_controller_epoch": 1,
+        "assignment_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pins": {
+          "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "result_scope_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "grant_id": "grant-1",
+        "created_at": "2026-10-26T00:00:00Z",
+        "goal_contributions": [],
+        "input_refs": [
+          {
+            "source_id": "source-a",
+            "path": "runs/run-20261026-000000-demo/evidence.json",
+            "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "guild.evidence.v1",
+            "observed_at": "2026-10-26T00:00:00Z",
+            "availability": "available",
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "G4-S-inventory:task-assignment/input_refs/*/source_id",
+      "origin": "regressions",
+      "schema": "task-assignment",
+      "valid": true,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.task_assignment.v3",
+        "lineage": {
+          "source_id": "source-a",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": "task-1",
+          "attempt_id": "attempt-1",
+          "agent_instance_id": "agent-1",
+          "request_id": null
+        },
+        "original_host_id": "codex",
+        "issued_controller_epoch": 1,
+        "assignment_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pins": {
+          "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "result_scope_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "grant_id": "grant-1",
+        "created_at": "2026-10-26T00:00:00Z",
+        "goal_contributions": [],
+        "input_refs": [
+          {
+            "source_id": "source-z",
+            "path": "runs/run-20261026-000000-demo/evidence.json",
+            "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "guild.evidence.v1",
+            "observed_at": "2026-10-26T00:00:00Z",
+            "availability": "available",
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "G4-S-inventory:task-attempt/lineage/source_id",
+      "origin": "regressions",
+      "schema": "task-attempt",
+      "valid": false,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.task_attempt.v1",
+        "lineage": {
+          "source_id": "source-z",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": "task-1",
+          "attempt_id": "attempt-1",
+          "agent_instance_id": "agent-1",
+          "request_id": null
+        },
+        "assignment_ref": {
+          "source_id": "source-a",
+          "path": "runs/run-20261026-000000-demo/evidence.json",
+          "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema_version": "guild.evidence.v1",
+          "observed_at": "2026-10-26T00:00:00Z",
+          "availability": "available",
+          "reason": null
+        },
+        "ordinal": 1,
+        "state": {
+          "lifecycle": "active",
+          "outcome": "pending",
+          "acceptance": "pending",
+          "observability": "complete"
+        },
+        "result_refs": [],
+        "acceptance_subject_hash": null,
+        "accepted_by_controller_epoch": null,
+        "receipt_loss_reconciled": true,
+        "uncertain_effects": false
+      }
+    },
+    {
+      "id": "G4-S-inventory:task-attempt/assignment_ref/source_id",
+      "origin": "regressions",
+      "schema": "task-attempt",
+      "valid": false,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.task_attempt.v1",
+        "lineage": {
+          "source_id": "source-a",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": "task-1",
+          "attempt_id": "attempt-1",
+          "agent_instance_id": "agent-1",
+          "request_id": null
+        },
+        "assignment_ref": {
+          "source_id": "source-z",
+          "path": "runs/run-20261026-000000-demo/evidence.json",
+          "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema_version": "guild.evidence.v1",
+          "observed_at": "2026-10-26T00:00:00Z",
+          "availability": "available",
+          "reason": null
+        },
+        "ordinal": 1,
+        "state": {
+          "lifecycle": "active",
+          "outcome": "pending",
+          "acceptance": "pending",
+          "observability": "complete"
+        },
+        "result_refs": [],
+        "acceptance_subject_hash": null,
+        "accepted_by_controller_epoch": null,
+        "receipt_loss_reconciled": true,
+        "uncertain_effects": false
+      }
+    },
+    {
+      "id": "G4-S-inventory:run-binding/source_id",
+      "origin": "regressions",
+      "schema": "run-binding",
+      "valid": false,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.run_binding.v2",
+        "source_id": "source-z",
+        "run_id": "run-20261026-000000-demo",
+        "controller_source_id": "source-a",
+        "controller_host_id": "controller-host",
+        "controller_epoch": 1,
+        "writer_grant_id": "grant-1",
+        "writer_scope_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "open",
+        "logical_run_manifest_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "G4-S-inventory:run-binding/controller_source_id",
+      "origin": "regressions",
+      "schema": "run-binding",
+      "valid": false,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.run_binding.v2",
+        "source_id": "source-a",
+        "run_id": "run-20261026-000000-demo",
+        "controller_source_id": "source-z",
+        "controller_host_id": "controller-host",
+        "controller_epoch": 1,
+        "writer_grant_id": "grant-1",
+        "writer_scope_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "open",
+        "logical_run_manifest_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "G4-S-segment-consistent-foreign-owner-ok",
+      "origin": "regressions",
+      "schema": "execution-segment",
+      "valid": true,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.execution_segment.v1",
+        "lineage": {
+          "source_id": "source-b",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": null,
+          "attempt_id": null,
+          "agent_instance_id": null,
+          "request_id": null
+        },
+        "original_host_id": "codex",
+        "host_session_id": "host-session-1",
+        "issued_controller_epoch": 1,
+        "adapter_capability_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pins": {
+          "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "admission": "sealed",
+        "interval": {
+          "start": "2026-10-26T00:00:00Z",
+          "end": "2026-10-26T00:00:20Z",
+          "duration_ms": 20000,
+          "clock": {
+            "domain": "controller-a",
+            "basis": "controller",
+            "comparable": true,
+            "skew_bound_ms": 0
+          }
+        },
+        "observation_manifest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "seal_evidence": {
+          "source_id": "source-b",
+          "path": "runs/run-20261026-000000-demo/evidence.json",
+          "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema_version": "guild.evidence.v1",
+          "observed_at": "2026-10-26T00:00:00Z",
+          "availability": "available",
+          "reason": null
+        }
+      }
+    },
+    {
+      "id": "G4-S-assignment-federated-input-ok",
+      "origin": "regressions",
+      "schema": "task-assignment",
+      "valid": true,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.task_assignment.v3",
+        "lineage": {
+          "source_id": "source-a",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": "task-1",
+          "attempt_id": "attempt-1",
+          "agent_instance_id": "agent-1",
+          "request_id": null
+        },
+        "original_host_id": "codex",
+        "issued_controller_epoch": 1,
+        "assignment_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pins": {
+          "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "result_scope_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "grant_id": "grant-1",
+        "created_at": "2026-10-26T00:00:00Z",
+        "goal_contributions": [],
+        "input_refs": [
+          {
+            "source_id": "source-b",
+            "path": "runs/run-20261026-000000-demo/evidence.json",
+            "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "guild.evidence.v1",
+            "observed_at": "2026-10-26T00:00:00Z",
+            "availability": "available",
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "G5-C-coordinated-move:execution-lineage",
+      "origin": "regressions",
+      "schema": "execution-lineage",
+      "valid": true,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.stack.execution-lineage.v1",
+        "lineage": {
+          "source_id": "source-z",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": null,
+          "attempt_id": null,
+          "agent_instance_id": null,
+          "request_id": null
+        },
+        "run_schema": "guild.logical_run.v2",
+        "pins": {
+          "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "requested_host": "codex",
+        "observed_host": "codex",
+        "requested_model": "requested-model",
+        "observed_identity": {
+          "provider": "provider",
+          "model": "observed-model",
+          "status": "observed",
+          "reason": null
+        },
+        "adapter_capability_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "authority": {
+          "controller_source_id": "source-z",
+          "controller_epoch": 1,
+          "execution_id": "exec-1",
+          "attempt_id": null,
+          "writer_scope_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_disposition_revision": null
+        },
+        "attempt_grant_ref": null,
+        "admission": "active",
+        "state": {
+          "lifecycle": "active",
+          "outcome": "pending",
+          "acceptance": "pending",
+          "observability": "complete"
+        },
+        "interval": {
+          "start": "2026-10-26T00:00:00Z",
+          "end": "2026-10-26T00:00:20Z",
+          "duration_ms": 20000,
+          "clock": {
+            "domain": "controller-a",
+            "basis": "controller",
+            "comparable": true,
+            "skew_bound_ms": 0
+          }
+        },
+        "handoffs": [],
+        "evidence": [
+          {
+            "source_id": "source-z",
+            "path": "runs/run-20261026-000000-demo/evidence.json",
+            "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "guild.evidence.v1",
+            "observed_at": "2026-10-26T00:00:00Z",
+            "availability": "available",
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "G5-C-coordinated-move:logical-run",
+      "origin": "regressions",
+      "schema": "logical-run",
+      "valid": true,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.logical_run.v2",
+        "source_id": "source-z",
+        "run_id": "run-20261026-000000-demo",
+        "initiative_id": null,
+        "parent_run": null,
+        "created_at": "2026-10-26T00:00:00Z",
+        "phase": "build",
+        "initial_command": "/guild:build",
+        "initial_prompt_ref": {
+          "source_id": "source-z",
+          "path": "runs/run-20261026-000000-demo/evidence.json",
+          "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema_version": "guild.evidence.v1",
+          "observed_at": "2026-10-26T00:00:00Z",
+          "availability": "available",
+          "reason": null
+        },
+        "controller": {
+          "source_id": "source-z",
+          "host_id": "controller-host",
+          "epoch": 1,
+          "state": "active",
+          "failover": "manual_new_run_only"
+        },
+        "workflow_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "execution_refs": [
+          {
+            "source_id": "source-z",
+            "kind": "execution",
+            "id": "exec-1",
+            "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "goal_refs": [],
+        "state": {
+          "lifecycle": "active",
+          "outcome": "pending",
+          "acceptance": "pending",
+          "observability": "complete"
+        }
+      }
+    },
+    {
+      "id": "G5-C-coordinated-move:execution-segment",
+      "origin": "regressions",
+      "schema": "execution-segment",
+      "valid": true,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.execution_segment.v1",
+        "lineage": {
+          "source_id": "source-z",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": null,
+          "attempt_id": null,
+          "agent_instance_id": null,
+          "request_id": null
+        },
+        "original_host_id": "codex",
+        "host_session_id": "host-session-1",
+        "issued_controller_epoch": 1,
+        "adapter_capability_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pins": {
+          "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "admission": "sealed",
+        "interval": {
+          "start": "2026-10-26T00:00:00Z",
+          "end": "2026-10-26T00:00:20Z",
+          "duration_ms": 20000,
+          "clock": {
+            "domain": "controller-a",
+            "basis": "controller",
+            "comparable": true,
+            "skew_bound_ms": 0
+          }
+        },
+        "observation_manifest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "seal_evidence": {
+          "source_id": "source-z",
+          "path": "runs/run-20261026-000000-demo/evidence.json",
+          "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema_version": "guild.evidence.v1",
+          "observed_at": "2026-10-26T00:00:00Z",
+          "availability": "available",
+          "reason": null
+        }
+      }
+    },
+    {
+      "id": "G5-C-coordinated-move:task-assignment",
+      "origin": "regressions",
+      "schema": "task-assignment",
+      "valid": true,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.task_assignment.v3",
+        "lineage": {
+          "source_id": "source-z",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": "task-1",
+          "attempt_id": "attempt-1",
+          "agent_instance_id": "agent-1",
+          "request_id": null
+        },
+        "original_host_id": "codex",
+        "issued_controller_epoch": 1,
+        "assignment_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pins": {
+          "assignment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definition": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "configuration": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "workflow": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "result_scope_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "grant_id": "grant-1",
+        "created_at": "2026-10-26T00:00:00Z",
+        "goal_contributions": [],
+        "input_refs": [
+          {
+            "source_id": "source-z",
+            "path": "runs/run-20261026-000000-demo/evidence.json",
+            "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "guild.evidence.v1",
+            "observed_at": "2026-10-26T00:00:00Z",
+            "availability": "available",
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "G5-C-coordinated-move:task-attempt",
+      "origin": "regressions",
+      "schema": "task-attempt",
+      "valid": true,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.task_attempt.v1",
+        "lineage": {
+          "source_id": "source-z",
+          "run_id": "run-20261026-000000-demo",
+          "execution_id": "exec-1",
+          "host_session_id": "host-session-1",
+          "initiative_id": null,
+          "goal_id": null,
+          "logical_task_id": "task-1",
+          "attempt_id": "attempt-1",
+          "agent_instance_id": "agent-1",
+          "request_id": null
+        },
+        "assignment_ref": {
+          "source_id": "source-z",
+          "path": "runs/run-20261026-000000-demo/evidence.json",
+          "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema_version": "guild.evidence.v1",
+          "observed_at": "2026-10-26T00:00:00Z",
+          "availability": "available",
+          "reason": null
+        },
+        "ordinal": 1,
+        "state": {
+          "lifecycle": "active",
+          "outcome": "pending",
+          "acceptance": "pending",
+          "observability": "complete"
+        },
+        "result_refs": [],
+        "acceptance_subject_hash": null,
+        "accepted_by_controller_epoch": null,
+        "receipt_loss_reconciled": true,
+        "uncertain_effects": false
+      }
+    },
+    {
+      "id": "G5-C-coordinated-move:run-binding",
+      "origin": "regressions",
+      "schema": "run-binding",
+      "valid": true,
+      "expected_errors": [],
+      "instance": {
+        "schema_version": "guild.run_binding.v2",
+        "source_id": "source-z",
+        "run_id": "run-20261026-000000-demo",
+        "controller_source_id": "source-z",
+        "controller_host_id": "controller-host",
+        "controller_epoch": 1,
+        "writer_grant_id": "grant-1",
+        "writer_scope_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "open",
+        "logical_run_manifest_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ]
+}
