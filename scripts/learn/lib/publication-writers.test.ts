@@ -9,6 +9,7 @@ import * as path from "path";
 import { execFileSync } from "child_process";
 
 import { legacyExportState, readPublication } from "../../../src/domains/knowledge/publication";
+import { pinDependent, recordAcceptedDecision } from "../../../src/domains/knowledge/decision-propagation";
 import {
   GRAPH_ARTIFACT,
   NON_LAYER_WRITERS,
@@ -258,4 +259,36 @@ describe("K03 migrated writers publish generations", () => {
     expect(semanticView({ nodes: [llm as never], edges: [] })).toEqual(semanticView({ nodes: [stamped as never], edges: [] }));
     expect(structuralView({ nodes: [llm as never], edges: [] })).not.toEqual(structuralView({ nodes: [stamped as never], edges: [] }));
   });
+});
+
+describe("K04 learn publications carry decision propagation", () => {
+  function page(guildDir: string, slug: string, replaces?: string): string {
+    const p = path.join(guildDir, "wiki", "decisions", `${slug}.md`);
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, `---\ntype: decision\nschema_version: guild.decision.v1\nid: decision:${slug}\nstatus: canonical\n${replaces ? `replaces: ${replaces}\n` : ""}---\n# ${slug}\n`);
+    return p;
+  }
+
+  test("the learn CLI publishes replan_required and a stale project_memory channel after a supersession", () => {
+    const r = gitRepo();
+    const g = path.join(r, ".guild");
+    const d1 = page(g, "d1");
+    expect(recordAcceptedDecision({ guildDir: g, pagePath: d1 }).status).toBe("recorded");
+    const plan = path.join(g, "plan", "p.md");
+    const summary = path.join(g, "memory", "summaries", "s.md");
+    for (const f of [plan, summary]) {
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.writeFileSync(f, "pins d1\n");
+    }
+    const rev = `sha256:${require("crypto").createHash("sha256").update(fs.readFileSync(d1)).digest("hex")}` as const;
+    expect(pinDependent({ guildDir: g, kind: "plan", name: "p", path: plan, decisions: [{ id: "decision:d1", revision: rev }] }).status).toBe("pinned");
+    expect(pinDependent({ guildDir: g, kind: "summary", name: "s", path: summary, decisions: [{ id: "decision:d1", revision: rev }] }).status).toBe("pinned");
+    expect(recordAcceptedDecision({ guildDir: g, pagePath: page(g, "d2", "decision:d1") }).status).toBe("recorded");
+
+    cli("extract-structural.ts", r);
+    const rec = readPublication(path.join(g, "indexes"))!.record;
+    expect(rec.replan_required.map((e) => e.id)).toEqual(["plan:p"]);
+    expect(rec.decision_refs.map((e) => e.id)).toEqual(["decision:d2"]);
+    expect(rec.channels.find((c) => c.channel === "project_memory")?.state).toBe("stale");
+  }, 60000);
 });

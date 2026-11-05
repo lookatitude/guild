@@ -69,6 +69,7 @@ import {
 import { refreshWikiIndexPaths } from "./wiki-index";
 import { recordDecisionPromotion, recordDecisionRevert } from "./decision-catalog";
 import { checkContained, isRefused, isWithin } from "../kernel";
+import { propagateDecisions, recordAcceptedDecision, type EntityRef } from "./decision-propagation";
 
 export const DECISION_SCHEMA = "guild.decision.v1" as const;
 
@@ -294,6 +295,8 @@ export interface HarvestResult {
   replan_queued: boolean;
   next_need: NextNeed;
   stale_decision_ids: string[];
+  /** K04: pinned plans the accepted supersession made `replan_required` (never rewritten). */
+  replan_required?: EntityRef[];
   /**
    * True when the op refused because a target it was told to rewrite is not in
    * the shape the caller described — a named playbook span whose heading is not
@@ -916,9 +919,27 @@ function finishHarvest(
     }
   }
 
+  // ── accepted-decision event, then dependent propagation (K04) ─────────────
+  // Idempotent, so a resumed op re-entering here records nothing twice. A ledger
+  // that cannot take the event leaves the op resumable: the page is canonical but
+  // not yet authority, and reporting it promoted would skip the replan.
+  const guildDir = (storage.project ?? storage.workspace)!.definitions();
+  const superseded = [...new Set([...(input.replaces ? [input.replaces] : []), ...(op.superseded_ids ?? [])])];
+  const accepted = recordAcceptedDecision({ guildDir, pagePath: wikiAbs, supersededIds: superseded, now, opId: op.op_id });
+  if (accepted.status === "refused") return blockResume(input, op, "decision-ledger", `${accepted.reason}: ${accepted.detail}`);
+  const propagation = propagateDecisions({ guildDir, now });
+  if (propagation.status === "refused") return blockResume(input, op, "decision-propagation", `${propagation.reason}: ${propagation.detail}`);
+  const supersededSet = new Set(superseded);
+  const dependents = propagation.report.dependents.filter(
+    (d) => d.dependent_kind === "plan" && d.state === "replan_required" && d.stale_decisions.some((s) => supersededSet.has(s.pinned.id)),
+  );
+
   // ── pin hit → replan, without rewriting the spec (KTD53 / R65) ────────────
-  const pinned = new Set(input.pinned_decision_ids ?? []);
-  const stale = (op.superseded_ids ?? []).filter((id) => pinned.has(id));
+  const pinned = new Set([
+    ...(input.pinned_decision_ids ?? []),
+    ...dependents.flatMap((d) => d.stale_decisions.map((s) => s.pinned.id)),
+  ]);
+  const stale = superseded.filter((id) => pinned.has(id));
   const replan = stale.length > 0;
   if (replan) {
     op.pinned_in_flight = true;
@@ -940,6 +961,7 @@ function finishHarvest(
     replan_queued: replan,
     next_need: input.wiki_dirty === true ? "commit" : null,
     stale_decision_ids: stale,
+    replan_required: dependents.map((d) => d.dependent),
   };
 }
 

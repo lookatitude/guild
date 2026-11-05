@@ -4496,7 +4496,8 @@ function generationId(m) {
     artifacts: Object.fromEntries(Object.entries(m.artifacts).map(([k, v]) => [k, v.sha256])),
     layers: m.layers,
     source_basis_hash: m.source_basis.source_basis_hash,
-    exports: m.exports
+    exports: m.exports,
+    ...m.decisions ? { decisions: m.decisions } : {}
   });
 }
 var ORPHAN_GRACE_MS = 10 * 6e4;

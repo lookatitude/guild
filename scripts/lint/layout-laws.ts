@@ -1914,8 +1914,9 @@ const KTD29_DEEP_IMPORTS: ReadonlyMap<string, readonly string[]> = new Map<strin
   ["scripts/learn/lib/dependency-invalidation.test.ts", ["knowledge/source-basis", "knowledge/freshness-boundary"]],
   ["scripts/learn/lib/source-basis.test.ts", ["knowledge/source-basis", "knowledge/working-set"]],
   // K03 (CW-20): same bundle reason; learn writers publish through the generation store.
-  ["scripts/learn/lib/publish.ts", ["knowledge/publication", "knowledge/source-basis"]],
-  ["scripts/learn/lib/publication-writers.test.ts", ["knowledge/publication"]],
+  // K04 (CW-25): same bundle reason; learn generations carry the decision refs.
+  ["scripts/learn/lib/publish.ts", ["knowledge/publication", "knowledge/source-basis", "knowledge/decision-propagation"]],
+  ["scripts/learn/lib/publication-writers.test.ts", ["knowledge/publication", "knowledge/decision-propagation"]],
   // T01: the AT19/AT20 test drives the R01 records (lifecycle-internal) into the
   // trace capture, which stays off the telemetry index until activation.
   ["src/domains/lifecycle/trace-capture.test.ts", ["telemetry/trace-capture-v3"]],

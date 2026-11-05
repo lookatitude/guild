@@ -23,6 +23,7 @@ import {
   type PublicationArtifacts,
   type PublishResult,
 } from "../../../src/domains/knowledge/publication";
+import { decisionPublicationRefs } from "../../../src/domains/knowledge/decision-propagation";
 import { basisDigest, sourceWorktreeId, type SourceBasis } from "../../../src/domains/knowledge/source-basis";
 import { computeLearnSourceBasis } from "./paths";
 import { STRUCTURAL_EXTRACTOR, structuralSubset } from "./structural";
@@ -270,6 +271,8 @@ function publishBuilt(
         ? (dest, next) => structuralLoss(parse(dest?.[GRAPH_ARTIFACT]), parse(next[GRAPH_ARTIFACT]))
         : undefined,
     exports: [GRAPH_ARTIFACT, RECALL_ARTIFACT],
+    // K04: the owner's decision refs and replan signals ride on every generation.
+    decisions: () => decisionPublicationRefs(path.dirname(t.indexesDir)),
     lockTimeoutMs: opts.lockTimeoutMs,
   });
 }
