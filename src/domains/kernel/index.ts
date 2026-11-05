@@ -23,3 +23,5 @@ export * from "./plugin-root";
 // The §1 canonical-hash rule (team-contracts). Pure (crypto only), so config and
 // teams both reach it here without a teams -> config -> teams cycle.
 export * from "./canonical-hash";
+// R01: v2 identity field names v1 readers refuse instead of silently dropping.
+export * from "./reserved-identity-fields";

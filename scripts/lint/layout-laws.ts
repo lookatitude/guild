@@ -1916,6 +1916,9 @@ const KTD29_DEEP_IMPORTS: ReadonlyMap<string, readonly string[]> = new Map<strin
   // K03 (CW-20): same bundle reason; learn writers publish through the generation store.
   ["scripts/learn/lib/publish.ts", ["knowledge/publication", "knowledge/source-basis"]],
   ["scripts/learn/lib/publication-writers.test.ts", ["knowledge/publication"]],
+  // T01: the AT19/AT20 test drives the R01 records (lifecycle-internal) into the
+  // trace capture, which stays off the telemetry index until activation.
+  ["src/domains/lifecycle/trace-capture.test.ts", ["telemetry/trace-capture-v3"]],
 ]);
 
 const CHECKS: Check[] = [

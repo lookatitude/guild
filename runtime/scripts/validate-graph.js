@@ -39,7 +39,7 @@ __export(validate_graph_exports, {
 });
 module.exports = __toCommonJS(validate_graph_exports);
 var fs11 = __toESM(require("fs"));
-var path12 = __toESM(require("path"));
+var path13 = __toESM(require("path"));
 
 // scripts/learn/lib/paths.ts
 var fs6 = __toESM(require("fs"));
@@ -808,13 +808,13 @@ function readJson2(filePath) {
 
 // scripts/learn/lib/publish.ts
 var fs10 = __toESM(require("fs"));
-var path11 = __toESM(require("path"));
+var path12 = __toESM(require("path"));
 
 // src/domains/knowledge/publication.ts
 var crypto2 = __toESM(require("node:crypto"));
 var fs8 = __toESM(require("node:fs"));
 var os = __toESM(require("node:os"));
-var path9 = __toESM(require("node:path"));
+var path10 = __toESM(require("node:path"));
 
 // src/domains/kernel/module-manifest.ts
 var OWNED_INVENTORY_CATEGORIES = Object.freeze([
@@ -1085,6 +1085,76 @@ var TIER_BUS_CONTRACT = deepFreeze({
   tier_source: "the attempt record on disk, or the run's minted binding_ref \u2014 never the payload"
 });
 
+// src/domains/kernel/reserved-identity-fields.ts
+var path9 = __toESM(require("node:path"));
+var RESERVED_IDENTITY_FIELDS = Object.freeze([
+  // logical-run
+  "source_id",
+  "run_id",
+  "initiative_id",
+  "parent_run",
+  "created_at",
+  "phase",
+  "initial_command",
+  "initial_prompt_ref",
+  "controller",
+  "workflow_hash",
+  "settings_hash",
+  "execution_refs",
+  "goal_refs",
+  "state",
+  // execution-segment
+  "lineage",
+  "original_host_id",
+  "host_session_id",
+  "issued_controller_epoch",
+  "adapter_capability_hash",
+  "pins",
+  "admission",
+  "interval",
+  "observation_manifest",
+  "seal_evidence",
+  // task-assignment v3
+  "assignment_hash",
+  "result_scope_hash",
+  "grant_id",
+  "goal_contributions",
+  "input_refs",
+  // stack task-attempt
+  "assignment_ref",
+  "ordinal",
+  "result_refs",
+  "acceptance_subject_hash",
+  "accepted_by_controller_epoch",
+  "receipt_loss_reconciled",
+  "uncertain_effects",
+  // run-binding v2
+  "controller_source_id",
+  "controller_host_id",
+  "controller_epoch",
+  "writer_grant_id",
+  "writer_scope_hash",
+  "logical_run_manifest_hash",
+  // execution-lineage receipt
+  "run_schema",
+  "requested_host",
+  "observed_host",
+  "requested_model",
+  "observed_identity",
+  "authority",
+  "attempt_grant_ref",
+  "handoffs",
+  "evidence",
+  // lineage keys
+  "execution_id",
+  "goal_id",
+  "logical_task_id",
+  "attempt_id",
+  "agent_instance_id",
+  "request_id"
+]);
+var RUN_KIND_V2_MANIFEST_RELPATH = path9.join("lineage", "logical-run.json");
+
 // src/domains/knowledge/publication.ts
 var PUBLICATION_FAULT_STEPS = Object.freeze([
   "lock_acquired",
@@ -1105,10 +1175,10 @@ var ARTIFACT_NAME = /^[a-z0-9][a-z0-9._-]{0,127}\.json$/;
 var GEN_DIR = /^[a-f0-9]{64}$/;
 var HOST = crypto2.createHash("sha256").update(os.hostname()).digest("hex").slice(0, 12);
 function publicationDir(indexesDir) {
-  return path9.join(indexesDir, "publication");
+  return path10.join(indexesDir, "publication");
 }
 function generationsDir(indexesDir) {
-  return path9.join(publicationDir(indexesDir), "generations");
+  return path10.join(publicationDir(indexesDir), "generations");
 }
 function sha(bytes) {
   return `sha256:${crypto2.createHash("sha256").update(bytes).digest("hex")}`;
@@ -1155,11 +1225,11 @@ function contained2(indexesDir, target, leafFile = false) {
   return isRefused(r) ? `${r.code}: ${r.detail}` : null;
 }
 function ensureDir(indexesDir, dir) {
-  const r = prepareContainedWrite(indexesDir, path9.join(dir, ".probe"), { policy: "physical" });
+  const r = prepareContainedWrite(indexesDir, path10.join(dir, ".probe"), { policy: "physical" });
   if (isRefused(r)) throw new PublicationError("containment", `${r.code}: ${r.detail}`);
 }
 function removeContained(indexesDir, target) {
-  if (contained2(indexesDir, path9.dirname(target))) return;
+  if (contained2(indexesDir, path10.dirname(target))) return;
   let st;
   try {
     st = fs8.lstatSync(target);
@@ -1178,7 +1248,7 @@ var PublicationError = class extends Error {
 };
 function readOwner(lockDir) {
   try {
-    const o = JSON.parse(fs8.readFileSync(path9.join(lockDir, "owner.json"), "utf8"));
+    const o = JSON.parse(fs8.readFileSync(path10.join(lockDir, "owner.json"), "utf8"));
     return o && typeof o.pid === "number" && typeof o.token === "string" ? o : null;
   } catch {
     return null;
@@ -1186,11 +1256,11 @@ function readOwner(lockDir) {
 }
 function createOwned(parent, name) {
   const owner = { pid: process.pid, host: HOST, token: crypto2.randomUUID(), acquired_at: (/* @__PURE__ */ new Date()).toISOString() };
-  const tmp = path9.join(parent, `.${name}.${owner.token}`);
+  const tmp = path10.join(parent, `.${name}.${owner.token}`);
   fs8.mkdirSync(tmp);
   try {
-    writeDurable(path9.join(tmp, "owner.json"), JSON.stringify(owner));
-    fs8.renameSync(tmp, path9.join(parent, name));
+    writeDurable(path10.join(tmp, "owner.json"), JSON.stringify(owner));
+    fs8.renameSync(tmp, path10.join(parent, name));
     return owner;
   } catch (err) {
     const code = err.code;
@@ -1205,8 +1275,8 @@ function staleToken(dir) {
   return owner && owner.host === HOST && !pidAlive(owner.pid) ? owner.token : null;
 }
 function removeIfToken(parent, name, token) {
-  const dir = path9.join(parent, name);
-  const grave = path9.join(parent, `.${name}.dead.${crypto2.randomUUID()}`);
+  const dir = path10.join(parent, name);
+  const grave = path10.join(parent, `.${name}.dead.${crypto2.randomUUID()}`);
   try {
     fs8.renameSync(dir, grave);
   } catch {
@@ -1225,19 +1295,19 @@ function removeIfToken(parent, name, token) {
 function reclaimStaleLock(pubDir) {
   const mutexOwner = createOwned(pubDir, "lock.reclaim");
   if (!mutexOwner) {
-    const t = staleToken(path9.join(pubDir, "lock.reclaim"));
+    const t = staleToken(path10.join(pubDir, "lock.reclaim"));
     if (t) removeIfToken(pubDir, "lock.reclaim", t);
     return;
   }
   try {
-    const t = staleToken(path9.join(pubDir, "lock"));
+    const t = staleToken(path10.join(pubDir, "lock"));
     if (t) removeIfToken(pubDir, "lock", t);
   } finally {
     removeIfToken(pubDir, "lock.reclaim", mutexOwner.token);
   }
 }
 function acquirePublisherLock(pubDir, opts = {}) {
-  const lockDir = path9.join(pubDir, "lock");
+  const lockDir = path10.join(pubDir, "lock");
   const deadline = Date.now() + (opts.timeoutMs ?? 3e4);
   fs8.mkdirSync(pubDir, { recursive: true });
   for (let wait = 5; ; wait = Math.min(wait * 2, 100)) {
@@ -1274,10 +1344,10 @@ function parsePointer(file, indexesDir) {
   return ptr;
 }
 function successorFile(indexesDir, parent) {
-  return path9.join(publicationDir(indexesDir), "successors", parent ? hex(parent) : "root");
+  return path10.join(publicationDir(indexesDir), "successors", parent ? hex(parent) : "root");
 }
 function readPointer(indexesDir) {
-  const cur = path9.join(publicationDir(indexesDir), "CURRENT");
+  const cur = path10.join(publicationDir(indexesDir), "CURRENT");
   let ptr = fs8.existsSync(cur) ? parsePointer(cur, indexesDir) : null;
   if (!ptr) {
     const root = successorFile(indexesDir, null);
@@ -1295,21 +1365,21 @@ function readVerified(indexesDir, file, expected) {
   const bad = contained2(indexesDir, file, true);
   if (bad) throw new PublicationError("containment", bad);
   const bytes = fs8.readFileSync(file);
-  if (sha(bytes) !== expected) throw new PublicationError("corrupt", `hash mismatch for ${path9.basename(file)}`);
+  if (sha(bytes) !== expected) throw new PublicationError("corrupt", `hash mismatch for ${path10.basename(file)}`);
   return bytes;
 }
 function loadGeneration(indexesDir, generation, publicationSha) {
-  const dir = path9.join(generationsDir(indexesDir), hex(generation));
-  const recBytes = publicationSha ? readVerified(indexesDir, path9.join(dir, "publication.json"), publicationSha) : fs8.readFileSync(path9.join(dir, "publication.json"));
+  const dir = path10.join(generationsDir(indexesDir), hex(generation));
+  const recBytes = publicationSha ? readVerified(indexesDir, path10.join(dir, "publication.json"), publicationSha) : fs8.readFileSync(path10.join(dir, "publication.json"));
   const record = JSON.parse(recBytes.toString("utf8"));
   if (record.generation !== generation) throw new PublicationError("corrupt", "record names another generation");
-  const manBytes = readVerified(indexesDir, path9.join(dir, "manifest.json"), record.manifest.sha256);
+  const manBytes = readVerified(indexesDir, path10.join(dir, "manifest.json"), record.manifest.sha256);
   const manifest = JSON.parse(manBytes.toString("utf8"));
   if (manifest.generation !== generation) throw new PublicationError("corrupt", "manifest names another generation");
   const artifacts = {};
   for (const [name, a] of Object.entries(manifest.artifacts)) {
     if (!ARTIFACT_NAME.test(name)) throw new PublicationError("corrupt", `artifact name ${JSON.stringify(name)}`);
-    artifacts[name] = readVerified(indexesDir, path9.join(dir, name), a.sha256);
+    artifacts[name] = readVerified(indexesDir, path10.join(dir, name), a.sha256);
   }
   if (generationId(manifest) !== generation) throw new PublicationError("corrupt", "generation id does not match its manifest");
   const pointer = {
@@ -1322,13 +1392,13 @@ function loadGeneration(indexesDir, generation, publicationSha) {
 }
 function pinFile(indexesDir, generation) {
   try {
-    const dir = path9.join(publicationDir(indexesDir), "pins");
+    const dir = path10.join(publicationDir(indexesDir), "pins");
     if (contained2(indexesDir, dir)) return null;
     fs8.mkdirSync(dir, { recursive: true });
     const id = `${process.pid}-${crypto2.randomUUID()}`;
-    const tmp = path9.join(dir, `.tmp-${id}`);
+    const tmp = path10.join(dir, `.tmp-${id}`);
     writeDurable(tmp, JSON.stringify({ pid: process.pid, host: HOST, generation }));
-    const f = path9.join(dir, `${id}.json`);
+    const f = path10.join(dir, `${id}.json`);
     fs8.renameSync(tmp, f);
     return f;
   } catch {
@@ -1357,7 +1427,7 @@ function readPublication(indexesDir, opts = {}) {
   }
 }
 function exportProvenance(indexesDir, name) {
-  const file = path9.join(indexesDir, name);
+  const file = path10.join(indexesDir, name);
   let bytes;
   try {
     if (contained2(indexesDir, file, true)) return { provenance: "bypassed", sha256: null };
@@ -1372,7 +1442,7 @@ function exportProvenance(indexesDir, name) {
   for (const g of safeReaddir(generationsDir(indexesDir))) {
     if (!GEN_DIR.test(g)) continue;
     try {
-      const m = JSON.parse(fs8.readFileSync(path9.join(generationsDir(indexesDir), g, "manifest.json"), "utf8"));
+      const m = JSON.parse(fs8.readFileSync(path10.join(generationsDir(indexesDir), g, "manifest.json"), "utf8"));
       if (m.artifacts?.[name]?.sha256 === h) return { provenance: "lagging", sha256: h };
     } catch {
     }
@@ -1411,14 +1481,14 @@ function validateJob(job) {
   return null;
 }
 function relFromOwner(indexesDir, abs) {
-  return path9.join(".guild", "indexes", path9.relative(indexesDir, abs)).split(path9.sep).join("/");
+  return path10.join(".guild", "indexes", path10.relative(indexesDir, abs)).split(path10.sep).join("/");
 }
 function reclaimStaging(indexesDir) {
-  const sdir = path9.join(publicationDir(indexesDir), "successors");
+  const sdir = path10.join(publicationDir(indexesDir), "successors");
   if (!contained2(indexesDir, sdir)) {
     for (const n of safeReaddir(sdir)) {
       const m = /^\.claim-([a-f0-9]{12})-(\d+)-/.exec(n);
-      if (m && m[1] === HOST && !pidAlive(Number(m[2]))) removeContained(indexesDir, path9.join(sdir, n));
+      if (m && m[1] === HOST && !pidAlive(Number(m[2]))) removeContained(indexesDir, path10.join(sdir, n));
     }
   }
   const gdir = generationsDir(indexesDir);
@@ -1431,12 +1501,12 @@ function reclaimStaging(indexesDir) {
   for (const n of names) {
     const m = /^\.(?:stage|reclaim)-([a-f0-9]{12})-(\d+)-/.exec(n);
     if (!m) continue;
-    if (m[1] === HOST && !pidAlive(Number(m[2]))) removeContained(indexesDir, path9.join(gdir, n));
+    if (m[1] === HOST && !pidAlive(Number(m[2]))) removeContained(indexesDir, path10.join(gdir, n));
   }
 }
 function livePins(indexesDir) {
   const out = /* @__PURE__ */ new Set();
-  const dir = path9.join(publicationDir(indexesDir), "pins");
+  const dir = path10.join(publicationDir(indexesDir), "pins");
   if (fs8.existsSync(dir) && contained2(indexesDir, dir)) return null;
   let names = [];
   try {
@@ -1445,7 +1515,7 @@ function livePins(indexesDir) {
     return out;
   }
   for (const n of names) {
-    const f = path9.join(dir, n);
+    const f = path10.join(dir, n);
     const tmp = /^\.tmp-(\d+)-/.exec(n);
     if (tmp) {
       if (!pidAlive(Number(tmp[1]))) removeContained(indexesDir, f);
@@ -1472,7 +1542,7 @@ function reclaimGenerations(indexesDir, opts = {}) {
   const now = opts.now ?? Date.now();
   const removed = [];
   const gdir = generationsDir(indexesDir);
-  if (contained2(indexesDir, gdir) || contained2(indexesDir, path9.join(publicationDir(indexesDir), "successors"))) return removed;
+  if (contained2(indexesDir, gdir) || contained2(indexesDir, path10.join(publicationDir(indexesDir), "successors"))) return removed;
   const tip = readPointer(indexesDir);
   if (!tip) return removed;
   advanceCurrent(indexesDir, tip);
@@ -1482,7 +1552,7 @@ function reclaimGenerations(indexesDir, opts = {}) {
   for (let g = tip.generation; g && chain.length < 1e5; ) {
     chain.push(hex(g));
     try {
-      g = JSON.parse(fs8.readFileSync(path9.join(gdir, hex(g), "publication.json"), "utf8")).previous_generation;
+      g = JSON.parse(fs8.readFileSync(path10.join(gdir, hex(g), "publication.json"), "utf8")).previous_generation;
     } catch {
       g = null;
     }
@@ -1495,30 +1565,30 @@ function reclaimGenerations(indexesDir, opts = {}) {
     if (d === void 0) {
       let age = 0;
       try {
-        age = now - fs8.statSync(path9.join(gdir, n)).mtimeMs;
+        age = now - fs8.statSync(path10.join(gdir, n)).mtimeMs;
       } catch {
         continue;
       }
       if (age < ORPHAN_GRACE_MS) continue;
     }
-    const aside = path9.join(gdir, `.reclaim-${HOST}-${process.pid}-${n}`);
+    const aside = path10.join(gdir, `.reclaim-${HOST}-${process.pid}-${n}`);
     try {
-      fs8.renameSync(path9.join(gdir, n), aside);
+      fs8.renameSync(path10.join(gdir, n), aside);
     } catch {
       continue;
     }
     const again = livePins(indexesDir);
     if (!again || again.has(n)) {
       try {
-        fs8.renameSync(aside, path9.join(gdir, n));
+        fs8.renameSync(aside, path10.join(gdir, n));
       } catch {
       }
       continue;
     }
     removeContained(indexesDir, aside);
     for (const side of ["hints", "verifications"]) {
-      removeContained(indexesDir, path9.join(publicationDir(indexesDir), side, `${n}.jsonl`));
-      removeContained(indexesDir, path9.join(publicationDir(indexesDir), side, `${n}.json`));
+      removeContained(indexesDir, path10.join(publicationDir(indexesDir), side, `${n}.jsonl`));
+      removeContained(indexesDir, path10.join(publicationDir(indexesDir), side, `${n}.json`));
     }
     removed.push(n);
   }
@@ -1527,13 +1597,13 @@ function reclaimGenerations(indexesDir, opts = {}) {
 }
 function advanceCurrent(indexesDir, tip) {
   const pubDir = publicationDir(indexesDir);
-  const cur = path9.join(pubDir, "CURRENT");
+  const cur = path10.join(pubDir, "CURRENT");
   if (contained2(indexesDir, cur, true)) return;
   try {
     if (JSON.parse(fs8.readFileSync(cur, "utf8")).generation === tip.generation) return;
   } catch {
   }
-  const tmp = path9.join(pubDir, `.CURRENT.${process.pid}.${crypto2.randomUUID()}`);
+  const tmp = path10.join(pubDir, `.CURRENT.${process.pid}.${crypto2.randomUUID()}`);
   writeDurable(tmp, JSON.stringify(tip, null, 2) + "\n");
   fs8.renameSync(tmp, cur);
   fsyncPath(pubDir);
@@ -1646,22 +1716,22 @@ function publishGeneration(job) {
         exports: exportsList
       };
       const generation = generationId(manifestBase);
-      const finalDir = path9.join(gdir, hex(generation));
+      const finalDir = path10.join(gdir, hex(generation));
       const reused = fs8.existsSync(finalDir);
       inflightPin = pinFile(job.indexesDir, generation);
       if (!inflightPin) return { status: "refused", reason: "containment", detail: "cannot pin the in-flight generation" };
       if (!reused) {
-        staging = path9.join(gdir, `.stage-${HOST}-${process.pid}-${crypto2.randomUUID()}`);
+        staging = path10.join(gdir, `.stage-${HOST}-${process.pid}-${crypto2.randomUUID()}`);
         fs8.mkdirSync(staging);
         for (const [name, bytes] of Object.entries(all)) {
           if (!bytes) continue;
-          writeDurable(path9.join(staging, name), bytes, 292);
+          writeDurable(path10.join(staging, name), bytes, 292);
           fault(`artifact:${name}`);
         }
         fault("layers_written");
         const manifest = { schema_version: "guild.knowledge_publication_manifest.v1", generation, ...manifestBase };
         const manBytes = JSON.stringify(manifest, null, 2) + "\n";
-        writeDurable(path9.join(staging, "manifest.json"), manBytes, 292);
+        writeDurable(path10.join(staging, "manifest.json"), manBytes, 292);
         fault("manifest_written");
         const evidence = (p, s, schema) => ({
           source_id: job.identity.source_id,
@@ -1680,7 +1750,7 @@ function publishGeneration(job) {
             state,
             basis_hash: l.basis_hash,
             layer_hash: l.layer_hash,
-            output: evidence(path9.join(finalDir, l.artifact), manifestBase.artifacts[l.artifact].sha256, "guild.knowledge_layer_artifact.v1"),
+            output: evidence(path10.join(finalDir, l.artifact), manifestBase.artifacts[l.artifact].sha256, "guild.knowledge_layer_artifact.v1"),
             reason: carriedReason[c] ?? (unresolved ? "resolver inputs outside the basis are unresolved" : current4basis ? null : "layer was built for an older source basis")
           };
         });
@@ -1696,12 +1766,12 @@ function publishGeneration(job) {
           generation,
           previous_generation: manifestBase.previous_generation,
           destination_layer_digest: layerDigest(layers),
-          manifest: evidence(path9.join(finalDir, "manifest.json"), sha(manBytes), manifest.schema_version),
+          manifest: evidence(path10.join(finalDir, "manifest.json"), sha(manBytes), manifest.schema_version),
           channels,
           decision_refs: [],
           replan_required: []
         };
-        writeDurable(path9.join(staging, "publication.json"), JSON.stringify(record, null, 2) + "\n", 292);
+        writeDurable(path10.join(staging, "publication.json"), JSON.stringify(record, null, 2) + "\n", 292);
         fault("record_written");
         fsyncPath(staging);
         fs8.renameSync(staging, finalDir);
@@ -1711,11 +1781,11 @@ function publishGeneration(job) {
       }
       const loaded = loadGeneration(job.indexesDir, generation, null);
       const pointer = loaded.pointer;
-      ensureDir(job.indexesDir, path9.join(pubDir, "successors"));
+      ensureDir(job.indexesDir, path10.join(pubDir, "successors"));
       const claim = successorFile(job.indexesDir, current?.pointer.generation ?? null);
       const badClaim = contained2(job.indexesDir, claim, true);
       if (badClaim) return { status: "refused", reason: "containment", detail: badClaim };
-      const claimTmp = path9.join(path9.dirname(claim), `.claim-${HOST}-${process.pid}-${crypto2.randomUUID()}`);
+      const claimTmp = path10.join(path10.dirname(claim), `.claim-${HOST}-${process.pid}-${crypto2.randomUUID()}`);
       writeDurable(claimTmp, JSON.stringify(pointer, null, 2) + "\n");
       fault("successor_tmp");
       try {
@@ -1732,12 +1802,12 @@ function publishGeneration(job) {
         continue;
       }
       fs8.rmSync(claimTmp, { force: true });
-      fsyncPath(path9.dirname(claim));
+      fsyncPath(path10.dirname(claim));
       fault("successor_claimed");
-      const tmp = path9.join(pubDir, `.CURRENT.${process.pid}.${crypto2.randomUUID()}`);
+      const tmp = path10.join(pubDir, `.CURRENT.${process.pid}.${crypto2.randomUUID()}`);
       writeDurable(tmp, JSON.stringify(pointer, null, 2) + "\n");
       fault("pointer_tmp_written");
-      const curFile = path9.join(pubDir, "CURRENT");
+      const curFile = path10.join(pubDir, "CURRENT");
       const badPtr = contained2(job.indexesDir, curFile, true);
       if (!badPtr) {
         fs8.renameSync(tmp, curFile);
@@ -1753,7 +1823,7 @@ function publishGeneration(job) {
     if (inflightPin) fs8.rmSync(inflightPin, { force: true });
     if (staging) fs8.rmSync(staging, { recursive: true, force: true });
     for (const n of safeReaddir(pubDir)) {
-      if (n.startsWith(`.CURRENT.${process.pid}.`)) fs8.rmSync(path9.join(pubDir, n), { force: true });
+      if (n.startsWith(`.CURRENT.${process.pid}.`)) fs8.rmSync(path10.join(pubDir, n), { force: true });
     }
     lock.release();
   }
@@ -1769,7 +1839,7 @@ function exportLegacy(indexesDir, gen, fault) {
   for (const name of gen.manifest.exports) {
     const bytes = gen.artifacts[name];
     if (!bytes) continue;
-    const target = path9.join(indexesDir, name);
+    const target = path10.join(indexesDir, name);
     const bad = contained2(indexesDir, target, true);
     if (bad) throw new PublicationError("containment", bad);
     try {
@@ -1779,7 +1849,7 @@ function exportLegacy(indexesDir, gen, fault) {
       }
     } catch {
     }
-    const tmp = path9.join(indexesDir, `.${name}.${process.pid}.${crypto2.randomUUID()}.tmp`);
+    const tmp = path10.join(indexesDir, `.${name}.${process.pid}.${crypto2.randomUUID()}.tmp`);
     writeDurable(tmp, bytes);
     fs8.renameSync(tmp, target);
     fault(`export:${name}`);
@@ -1788,7 +1858,7 @@ function exportLegacy(indexesDir, gen, fault) {
 
 // scripts/learn/lib/schema.ts
 var fs9 = __toESM(require("fs"));
-var path10 = __toESM(require("path"));
+var path11 = __toESM(require("path"));
 var NODE_TYPES = sealSet([
   "file",
   "function",
@@ -2270,7 +2340,7 @@ function resolveAnchor(repoRoot, anchor) {
   if (!anchor || typeof anchor !== "string") return false;
   const relPath = anchorToPath(anchor);
   if (!relPath) return false;
-  const absPath = path10.resolve(repoRoot, relPath);
+  const absPath = path11.resolve(repoRoot, relPath);
   try {
     if (!fs9.existsSync(absPath)) return false;
   } catch {
@@ -2872,7 +2942,7 @@ function baseFrom(pinned, t) {
   }
   let graph = null;
   try {
-    graph = JSON.parse(fs10.readFileSync(path11.join(t.indexesDir, GRAPH_ARTIFACT), "utf8"));
+    graph = JSON.parse(fs10.readFileSync(path12.join(t.indexesDir, GRAPH_ARTIFACT), "utf8"));
   } catch {
     graph = null;
   }
@@ -2986,7 +3056,7 @@ function main() {
     input = JSON.parse(fs11.readFileSync(0, "utf8"));
   } else {
     const inPath = parseFlag(argv, "in");
-    const resolved = inPath ? path12.resolve(cwd, inPath) : gp.partialGraph;
+    const resolved = inPath ? path13.resolve(cwd, inPath) : gp.partialGraph;
     input = readJson2(resolved);
     if (input === null) {
       process.stderr.write(`[validate] ERROR: cannot read input graph ${resolved}
@@ -3046,14 +3116,14 @@ function main() {
 `);
       process.exit(2);
     }
-    process.stderr.write(`[validate] \u2192 ${path12.relative(gp.repoRoot, gp.knowledgeGraph)}
+    process.stderr.write(`[validate] \u2192 ${path13.relative(gp.repoRoot, gp.knowledgeGraph)}
 `);
   }
   if (hasFlag(argv, "print")) {
     process.stdout.write(JSON.stringify({ data: result.data, issues: result.issues }, null, 2) + "\n");
   } else {
     process.stdout.write(
-      dry ? "validated (dry-run)\n" : path12.relative(gp.repoRoot, gp.knowledgeGraph) + "\n"
+      dry ? "validated (dry-run)\n" : path13.relative(gp.repoRoot, gp.knowledgeGraph) + "\n"
     );
   }
 }
