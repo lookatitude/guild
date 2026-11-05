@@ -107,6 +107,8 @@ export interface RoleNodeObligation {
   within_gate: ComponentGateRole | null;
   capabilities: string[];
   required: boolean;
+  /** Participants whose own capability scope covers this node. */
+  eligible: string[];
 }
 
 export interface RoleObligation {
@@ -273,7 +275,12 @@ function checkQaPolicy(raw: unknown): QaPolicy {
 }
 
 function checkProposal(raw: unknown, phase: string): TeamProposalV2 {
-  const verdict = validateProposal(raw);
+  let verdict: ReturnType<typeof validateProposal>;
+  try {
+    verdict = validateProposal(raw);
+  } catch (err) {
+    fail("invalid-team", `team proposal could not be validated: ${(err as Error).message.split("\n")[0].slice(0, 200)}`);
+  }
   if (!verdict.valid) fail("invalid-team", `team proposal is not a valid guild.team_proposal.v2: ${verdict.reasons.slice(0, 5).join("; ")}`);
   const p = raw as TeamProposalV2;
   if (p.phase !== phase) fail("team-phase-mismatch", `team was proposed for phase ${show(p.phase)}, not '${phase}'`);
@@ -309,10 +316,12 @@ function composeInner(registry: WorkflowComponentRegistry, rawInput: PhaseCompos
   // The team is the compile policy: role → union of its participants' capabilities.
   const roleCaps = new Map<string, Set<string>>();
   const roleMembers = new Map<string, string[]>();
+  const scopeOf = new Map<string, ReadonlySet<string>>();
   for (const part of team.participants) {
     const caps = roleCaps.get(part.role_ref) ?? new Set<string>();
     for (const c of part.capability_scope ?? []) caps.add(c);
     roleCaps.set(part.role_ref, caps);
+    scopeOf.set(part.participant_id, new Set(part.capability_scope ?? []));
     roleMembers.set(part.role_ref, [...(roleMembers.get(part.role_ref) ?? []), part.participant_id]);
   }
   const roles: Record<string, string[]> = {};
@@ -329,6 +338,14 @@ function composeInner(registry: WorkflowComponentRegistry, rawInput: PhaseCompos
 
   const pinOf = new Map(projection.components.map((c) => [`${c.id}\u0000${c.sha256}`, `${c.id}@${c.version}`]));
   const members = (role: string): string[] => sortStr(roleMembers.get(role) ?? []);
+  // A node is served by a participant whose own scope covers every capability it
+  // needs; the role's union across participants is not enough.
+  const eligible = new Map<string, string[]>();
+  for (const n of projection.nodes) {
+    const ids = members(n.role).filter((id) => n.capabilities.every((c) => scopeOf.get(id)!.has(c)));
+    if (!ids.length) fail("incompatible-role", `node ${n.id} needs [${n.capabilities.join(", ")}] from role '${n.role}', which no single participant's capability scope covers`);
+    eligible.set(n.id, ids);
+  }
 
   const roleObligations: RoleObligation[] = [];
   const boundRoles = new Set<string>();
@@ -350,6 +367,7 @@ function composeInner(registry: WorkflowComponentRegistry, rawInput: PhaseCompos
           within_gate: n.within_gate,
           capabilities: sortStr(n.capabilities),
           required: n.required,
+          eligible: eligible.get(n.id)!,
         }))
         .sort((a, b) => (a.node_id < b.node_id ? -1 : a.node_id > b.node_id ? 1 : 0)),
     });
@@ -364,12 +382,13 @@ function composeInner(registry: WorkflowComponentRegistry, rawInput: PhaseCompos
     return { kind, node_ids: ids };
   });
 
-  const writeRoles = new Set(projection.nodes.filter((n) => n.effect === "write").map((n) => n.role));
-  const authors = sortStr(new Set([...writeRoles].flatMap(members)));
+  // Authors: anyone eligible to change the subject or act on it (write, privileged operation, release).
+  const AUTHOR_EFFECTS: ReadonlySet<string> = new Set(["write", "privileged_operation", "release"]);
+  const authors = sortStr(new Set(projection.nodes.filter((n) => AUTHOR_EFFECTS.has(n.effect)).flatMap((n) => eligible.get(n.id)!)));
   const independence: ReviewIndependence[] = projection.nodes
     .filter((n) => n.effect === "review" || n.effect === "gate")
     .map((n) => {
-      const reviewers = members(n.role);
+      const reviewers = eligible.get(n.id)!;
       return { node_id: n.id, effect: n.effect, role: n.role, reviewers, authors, independent: reviewers.length > 0 && reviewers.every((r) => !authors.includes(r)) };
     })
     .sort((a, b) => (a.node_id < b.node_id ? -1 : a.node_id > b.node_id ? 1 : 0));

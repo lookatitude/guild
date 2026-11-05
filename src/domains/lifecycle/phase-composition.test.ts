@@ -289,6 +289,36 @@ describe("AT21 · phase composition — two projects, distinct chains and QA pol
     expect(rules(r)).toContain("qa-obligation-unserved");
   });
 
+  it("negative: whoever performs a privileged operation cannot also be its independent reviewer", () => {
+    const grant = component("impl-grant", ["write", "review", "gate", "privileged_operation"], seq("main", [
+      gate("d5", "d5"),
+      task("build"),
+      task("grant", { effect: "privileged_operation", role: "steward", capabilities: ["provision"] }),
+      assurance("security", "security", "steward"),
+      gate("qa", "qa"),
+      gate("d8", "d8"),
+    ]));
+    const team: Member[] = [["dev", "developer", ["code"]], ["stw", "steward", ["provision", "assurance:security"]], ["lead", "owner", []]];
+    const r = composePhase(registry([grant]), input({ class: "product", root: { id: "impl-grant", version: "1" }, proposal: proposal("build", team), qa_policy: qa(["security"]) }));
+    expect(rules(r)).toContain("review-not-independent");
+  });
+
+  it("negative: a node needs one participant whose own scope covers all its capabilities", () => {
+    const both = component("impl-both", ["write", "review", "gate"], seq("main", [
+      gate("d5", "d5"),
+      task("build", { capabilities: ["code", "design"] }),
+      assurance("quality", "quality", "qa-reviewer"),
+      gate("qa", "qa"),
+      gate("d8", "d8"),
+    ]));
+    const split: Member[] = [["d1", "developer", ["code"]], ["d2", "developer", ["design"]], ["qar", "qa-reviewer", ["assurance:quality"]], ["lead", "owner", []]];
+    const mk = (team: Member[]) => composePhase(registry([both]), input({ class: "product", root: { id: "impl-both", version: "1" }, proposal: proposal("build", team), qa_policy: qa(["quality"]) }));
+    expect(rules(mk(split))).toContain("incompatible-role");
+    const whole = ok(mk([...split, ["d3", "developer", ["code", "design"]]])).composition;
+    const build = whole.role_obligations.find((o) => o.role === "developer")!.nodes[0];
+    expect(build.eligible).toEqual(["d3"]);
+  });
+
   it("is deterministic: participant order and registry order do not change the bytes", () => {
     const base = ok(composePhase(registry(PROJECT_B_DOCS), B_IMPL())).composition;
     for (let i = 0; i < 3; i++) {
@@ -479,6 +509,10 @@ describe("AT21 · untrusted overlay and team input", () => {
     proto.participants[0].role_ref = "__proto__";
     expect(composePhase(registry(PROJECT_A_DOCS), { ...A_IMPL(), proposal: proto }).ok).toBe(false);
     expect(rules(composePhase(registry(PROJECT_A_DOCS), { ...A_IMPL(), proposal: null as never }))).toContain("invalid-team");
+    const coerce = JSON.parse(JSON.stringify(base));
+    coerce.obligations[0].obligation_id = { toString: "not callable" };
+    coerce.obligations[0].disposition = {};
+    expect(rules(composePhase(registry(PROJECT_A_DOCS), { ...A_IMPL(), proposal: coerce }))).toContain("invalid-team");
   });
 
   it("negative: a malformed plan reference is refused", () => {

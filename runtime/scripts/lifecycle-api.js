@@ -49680,7 +49680,12 @@ function checkQaPolicy(raw) {
   return { schema_version: QA_POLICY_SCHEMA_VERSION, required: sortStr(seen) };
 }
 function checkProposal(raw, phase) {
-  const verdict = validateProposal(raw);
+  let verdict;
+  try {
+    verdict = validateProposal(raw);
+  } catch (err) {
+    fail2("invalid-team", `team proposal could not be validated: ${err.message.split("\n")[0].slice(0, 200)}`);
+  }
   if (!verdict.valid) fail2("invalid-team", `team proposal is not a valid guild.team_proposal.v2: ${verdict.reasons.slice(0, 5).join("; ")}`);
   const p = raw;
   if (p.phase !== phase) fail2("team-phase-mismatch", `team was proposed for phase ${show6(p.phase)}, not '${phase}'`);
@@ -49709,10 +49714,12 @@ function composeInner(registry, rawInput, bindingOnly) {
   const team = checkProposal(proposal, phase);
   const roleCaps = /* @__PURE__ */ new Map();
   const roleMembers = /* @__PURE__ */ new Map();
+  const scopeOf = /* @__PURE__ */ new Map();
   for (const part of team.participants) {
     const caps = roleCaps.get(part.role_ref) ?? /* @__PURE__ */ new Set();
     for (const c of part.capability_scope ?? []) caps.add(c);
     roleCaps.set(part.role_ref, caps);
+    scopeOf.set(part.participant_id, new Set(part.capability_scope ?? []));
     roleMembers.set(part.role_ref, [...roleMembers.get(part.role_ref) ?? [], part.participant_id]);
   }
   const roles = {};
@@ -49727,6 +49734,12 @@ function composeInner(registry, rawInput, bindingOnly) {
   const { projection, manifest } = compiled;
   const pinOf = new Map(projection.components.map((c) => [`${c.id}\0${c.sha256}`, `${c.id}@${c.version}`]));
   const members = (role) => sortStr(roleMembers.get(role) ?? []);
+  const eligible = /* @__PURE__ */ new Map();
+  for (const n of projection.nodes) {
+    const ids = members(n.role).filter((id) => n.capabilities.every((c) => scopeOf.get(id).has(c)));
+    if (!ids.length) fail2("incompatible-role", `node ${n.id} needs [${n.capabilities.join(", ")}] from role '${n.role}', which no single participant's capability scope covers`);
+    eligible.set(n.id, ids);
+  }
   const roleObligations = [];
   const boundRoles = /* @__PURE__ */ new Set();
   for (const role of sortStr(roleCaps.keys())) {
@@ -49745,7 +49758,8 @@ function composeInner(registry, rawInput, bindingOnly) {
         gate_role: n.gate_role,
         within_gate: n.within_gate,
         capabilities: sortStr(n.capabilities),
-        required: n.required
+        required: n.required,
+        eligible: eligible.get(n.id)
       })).sort((a, b) => a.node_id < b.node_id ? -1 : a.node_id > b.node_id ? 1 : 0)
     });
   }
@@ -49756,10 +49770,10 @@ function composeInner(registry, rawInput, bindingOnly) {
     if (!ids.length) fail2("qa-obligation-unserved", `QA policy requires '${kind}' assurance, but no review node inside the QA gate carries capability assurance:${kind}`);
     return { kind, node_ids: ids };
   });
-  const writeRoles = new Set(projection.nodes.filter((n) => n.effect === "write").map((n) => n.role));
-  const authors = sortStr(new Set([...writeRoles].flatMap(members)));
+  const AUTHOR_EFFECTS = /* @__PURE__ */ new Set(["write", "privileged_operation", "release"]);
+  const authors = sortStr(new Set(projection.nodes.filter((n) => AUTHOR_EFFECTS.has(n.effect)).flatMap((n) => eligible.get(n.id))));
   const independence = projection.nodes.filter((n) => n.effect === "review" || n.effect === "gate").map((n) => {
-    const reviewers = members(n.role);
+    const reviewers = eligible.get(n.id);
     return { node_id: n.id, effect: n.effect, role: n.role, reviewers, authors, independent: reviewers.length > 0 && reviewers.every((r) => !authors.includes(r)) };
   }).sort((a, b) => a.node_id < b.node_id ? -1 : a.node_id > b.node_id ? 1 : 0);
   const dependent = independence.filter((r) => !r.independent);
