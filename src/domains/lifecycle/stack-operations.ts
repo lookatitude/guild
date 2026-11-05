@@ -15,6 +15,7 @@ import {
   type GuildStorage,
 } from "../state";
 import { resolvePolicy, assertPolicyWrite, policyKeySpec } from "../config";
+import { canonicalizeRealPath } from "../kernel";
 import {
   scrubbedWrite,
   redactTokenShapes,
@@ -178,7 +179,7 @@ export class StackFacade {
   private runtime(relative: string, source?: StackSource): string {
     const storage = this.storage(source);
     fs.mkdirSync(storage.root.state, { recursive: true });
-    const base = fs.realpathSync(storage.root.state);
+    const base = canonicalizeRealPath(storage.root.state);
     return stackContained(
       base,
       "roots/" + storage.rootId + "/stack/" + relative,
