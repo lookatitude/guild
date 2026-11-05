@@ -37624,11 +37624,67 @@ var init_redirect_route = __esm({
   }
 });
 
+// src/domains/knowledge/freshness-boundary.ts
+var BACKGROUND_STRUCTURAL_POLICY, BACKGROUND_HARD_LIMITS;
+var init_freshness_boundary = __esm({
+  "src/domains/knowledge/freshness-boundary.ts"() {
+    init_source_basis();
+    BACKGROUND_STRUCTURAL_POLICY = Object.freeze({
+      policy: "guild.learn.background_structural.v1",
+      channel: "structural_graph",
+      max_jobs: 4,
+      max_paths_per_job: 64
+    });
+    BACKGROUND_HARD_LIMITS = Object.freeze({ max_jobs: 16, max_paths_per_job: 256 });
+  }
+});
+
+// src/domains/knowledge/publication.ts
+var crypto22, os5, PUBLICATION_FAULT_STEPS, HOST, ORPHAN_GRACE_MS;
+var init_publication = __esm({
+  "src/domains/knowledge/publication.ts"() {
+    crypto22 = __toESM(require("node:crypto"));
+    os5 = __toESM(require("node:os"));
+    init_kernel();
+    init_source_basis();
+    PUBLICATION_FAULT_STEPS = Object.freeze([
+      "lock_acquired",
+      "artifact:knowledge-graph.json",
+      "artifact:knowledge-recall.json",
+      "layers_written",
+      "manifest_written",
+      "record_written",
+      "generation_renamed",
+      "successor_claimed",
+      "pointer_tmp_written",
+      "pointer_renamed",
+      "export:knowledge-graph.json",
+      "export:knowledge-recall.json",
+      "reclaimed"
+    ]);
+    HOST = crypto22.createHash("sha256").update(os5.hostname()).digest("hex").slice(0, 12);
+    ORPHAN_GRACE_MS = 10 * 6e4;
+  }
+});
+
+// src/domains/knowledge/publication-boundary.ts
+var AFTER_EDIT_BUDGET;
+var init_publication_boundary = __esm({
+  "src/domains/knowledge/publication-boundary.ts"() {
+    init_freshness_boundary();
+    init_publication();
+    init_source_basis();
+    init_state();
+    AFTER_EDIT_BUDGET = Object.freeze({ max_files: 0, max_bytes: 0 });
+  }
+});
+
 // src/domains/knowledge/refresh-touched.ts
 var init_refresh_touched = __esm({
   "src/domains/knowledge/refresh-touched.ts"() {
     init_state();
     init_knowledge_links_contract();
+    init_publication_boundary();
     init_wiki_index();
     init_working_set();
   }
@@ -38432,7 +38488,7 @@ function resolveRecallBeforeRead(cwd) {
   return true;
 }
 function hashQuery(query) {
-  return crypto22.createHash("sha256").update(query).digest("hex").slice(0, 16);
+  return crypto23.createHash("sha256").update(query).digest("hex").slice(0, 16);
 }
 function rankWikiDocs(docs, wikiBase, limit, composite) {
   const scoring = docs.filter((d) => d.score > 0);
@@ -38765,7 +38821,7 @@ function recall(query, opts) {
   const _traceBranch = allChunks.length === 0 ? "empty" : source === "combined" ? "combined" : source === "structural" ? "structural" : source;
   try {
     const _analysisTs = (/* @__PURE__ */ new Date()).toISOString();
-    const _spanId = crypto22.createHash("sha256").update(`${runId ?? ""}|recall|${_analysisTs}|${_laneId}`).digest("hex").slice(0, 16);
+    const _spanId = crypto23.createHash("sha256").update(`${runId ?? ""}|recall|${_analysisTs}|${_laneId}`).digest("hex").slice(0, 16);
     emitTraceEvent(
       makeAnalysisTraceEvent({
         ts: new Date(_traceStart).toISOString(),
@@ -38931,12 +38987,12 @@ function runRecallCli() {
   }
   process.stdout.write(JSON.stringify(result2) + "\n");
 }
-var fs62, path72, crypto22, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
+var fs62, path72, crypto23, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
 var init_recall = __esm({
   "src/domains/knowledge/recall.ts"() {
     fs62 = __toESM(require("node:fs"));
     path72 = __toESM(require("node:path"));
-    crypto22 = __toESM(require("node:crypto"));
+    crypto23 = __toESM(require("node:crypto"));
     init_state();
     init_wiki_recall();
     init_fs_scanner();
@@ -51853,15 +51909,15 @@ function resolveScopeDecision(args) {
 }
 
 // hooks/pre-tool-use.ts
-var crypto24 = __toESM(require("node:crypto"));
+var crypto25 = __toESM(require("node:crypto"));
 
 // hooks/lib/security/mcp-hash-pin.ts
-var crypto23 = __toESM(require("node:crypto"));
+var crypto24 = __toESM(require("node:crypto"));
 function isMcpTool(toolName) {
   return typeof toolName === "string" && toolName.startsWith("mcp__");
 }
 function hashDescription(description) {
-  return crypto23.createHash("sha256").update(description, "utf8").digest("hex");
+  return crypto24.createHash("sha256").update(description, "utf8").digest("hex");
 }
 function verifyMcpDescription(toolName, liveDescription, pins) {
   const pinned = pins[toolName];
@@ -53274,7 +53330,7 @@ function runDirOverride(env = process.env) {
 
 // hooks/lib/security/lane-wiki-guard.ts
 var fs76 = __toESM(require("node:fs"));
-var os5 = __toESM(require("node:os"));
+var os6 = __toESM(require("node:os"));
 var path92 = __toESM(require("node:path"));
 function isLaneWorker(env) {
   return ["GUILD_TASK_ID", "GUILD_LANE_ID", "GUILD_TASK_CELL_INSTANCE_ID"].some((k) => {
@@ -53368,7 +53424,7 @@ function isWithin2(root, child) {
 function resolvesUnderWiki(wikiRoots, target, cwd) {
   if (target.length === 0) return false;
   const readings = [target];
-  if (target === "~" || target.startsWith("~/")) readings.push(os5.homedir() + target.slice(1));
+  if (target === "~" || target.startsWith("~/")) readings.push(os6.homedir() + target.slice(1));
   const roots = wikiRoots.map((root) => realpathDeep(root));
   return readings.some((r) => {
     const abs = realpathDeep(path92.isAbsolute(r) ? r : cwd + path92.sep + r);
@@ -53947,7 +54003,7 @@ function traceAgentPromptSent(payload, cwd) {
         parent_span_id: parentSpanId,
         phase: process.env["GUILD_PHASE"] || void 0,
         task_id: taskId,
-        prompt_hash: crypto24.createHash("sha256").update(prompt).digest("hex").slice(0, 16),
+        prompt_hash: crypto25.createHash("sha256").update(prompt).digest("hex").slice(0, 16),
         payload_ref: payloadRef2,
         redaction: payloadRef2 ? "redacted" : "omitted",
         status: "ok",
@@ -54210,7 +54266,7 @@ function readShippedMcpPins() {
   }
   try {
     const bin = fs78.readFileSync(path94.join(pluginRoot, doc.binary), "utf8");
-    const actual = crypto24.createHash("sha256").update(bin, "utf8").digest("hex");
+    const actual = crypto25.createHash("sha256").update(bin, "utf8").digest("hex");
     if (actual !== doc.binary_sha256) {
       shippedMcpPinsCache = { pins: null, failure: "binary_hash_mismatch" };
       return shippedMcpPinsCache;

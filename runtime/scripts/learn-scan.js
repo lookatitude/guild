@@ -400,17 +400,25 @@ function walkRepo(repoRoot, maxFiles = 2e4) {
   const filter = createIgnoreFilter(repoRoot);
   const subGuilds = registeredSubGuildPaths(repoRoot);
   const out = [];
+  let truncated = false;
+  const unreadable = [];
+  const unsupported = [];
   const visit = (absDir) => {
-    if (out.length >= maxFiles) return;
+    if (truncated) return;
     let entries;
     try {
       entries = fs5.readdirSync(absDir, { withFileTypes: true });
     } catch {
+      unreadable.push(path5.relative(repoRoot, absDir).replace(/\\/g, "/"));
       return;
     }
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const e of entries) {
       const abs = path5.join(absDir, e.name);
+      if (path5.sep === "/" && e.name.includes("\\") || e.name.includes("\uFFFD")) {
+        unsupported.push(path5.relative(repoRoot, abs));
+        continue;
+      }
       const rel = path5.relative(repoRoot, abs).replace(/\\/g, "/");
       if (e.isDirectory()) {
         if (subGuilds.has(rel)) continue;
@@ -418,20 +426,24 @@ function walkRepo(repoRoot, maxFiles = 2e4) {
         visit(abs);
       } else if (e.isFile()) {
         if (filter.isIgnored(rel)) continue;
+        if (out.length >= maxFiles) {
+          truncated = true;
+          return;
+        }
         out.push(rel);
-        if (out.length >= maxFiles) return;
       }
     }
   };
   visit(repoRoot);
   out.sort();
-  return { files: out, filter };
+  return { files: out, filter, truncated, unreadable: unreadable.sort(), unsupported: unsupported.sort() };
 }
 
 // scripts/learn/lib/tsconfig-chain.ts
 var fs6 = __toESM(require("fs"));
 var path6 = __toESM(require("path"));
 var TSCONFIG_MAX_DEPTH = 8;
+var LINE_BREAK = /[\n\r\u2028\u2029]/;
 function parseJsonc(text) {
   const src = text.charCodeAt(0) === 65279 ? text.slice(1) : text;
   let noComments = "";
@@ -440,15 +452,17 @@ function parseJsonc(text) {
     if (c === '"') {
       let j = i + 1;
       while (j < src.length && src[j] !== '"') j += src[j] === "\\" ? 2 : 1;
+      if (j >= src.length) throw new SyntaxError("parseJsonc: unterminated string");
       noComments += src.slice(i, j + 1);
       i = j;
     } else if (c === "/" && src[i + 1] === "/") {
-      while (i < src.length && src[i] !== "\n") i++;
+      while (i < src.length && !LINE_BREAK.test(src[i])) i++;
       noComments += "\n";
     } else if (c === "/" && src[i + 1] === "*") {
       const end = src.indexOf("*/", i + 2);
+      if (end < 0) throw new SyntaxError("parseJsonc: unterminated block comment");
       noComments += " ";
-      i = end < 0 ? src.length : end + 1;
+      i = end + 1;
     } else {
       noComments += c;
     }
@@ -477,12 +491,23 @@ function contained(root, abs) {
   if (rel === "" || rel.startsWith("..") || path6.isAbsolute(rel)) return null;
   return rel.split(path6.sep).join("/");
 }
+function isAbsentError(err) {
+  const code = err?.code;
+  return code === "ENOENT" || code === "ENOTDIR";
+}
 function entryPresent(root, rel) {
   try {
     fs6.lstatSync(path6.join(root, rel));
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    return !isAbsentError(err);
+  }
+}
+function presentNonDirectory(root, rel) {
+  try {
+    return !fs6.lstatSync(path6.join(root, rel)).isDirectory();
+  } catch (err) {
+    return !isAbsentError(err);
   }
 }
 function readJson(root, rel) {
@@ -495,7 +520,7 @@ function readJson(root, rel) {
     return null;
   }
 }
-function candidates(root, fromRel, spec, probed) {
+function candidates(root, fromRel, spec, probed, refuse) {
   const fromDir = path6.join(root, path6.posix.dirname(fromRel));
   const withJson = (p) => p.endsWith(".json") ? [p] : [p, `${p}.json`];
   if (spec.startsWith("./") || spec.startsWith("../") || path6.isAbsolute(spec)) {
@@ -513,7 +538,12 @@ function candidates(root, fromRel, spec, probed) {
     const pkgRel = contained(root, path6.join(base, "package.json"));
     if (pkgRel) probed.add(pkgRel);
     const pkg = pkgRel ? readJson(root, pkgRel) : null;
-    if (pkg && typeof pkg.tsconfig === "string") push(path6.join(base, pkg.tsconfig));
+    if (pkgRel && !pkg && entryPresent(root, pkgRel)) refuse(`${pkgRel}: not a contained, parseable regular file`);
+    if (pkg && pkg.tsconfig !== void 0) {
+      if (typeof pkg.tsconfig !== "string") refuse(`${pkgRel}: tsconfig field is not a string`);
+      else if (contained(root, path6.join(base, pkg.tsconfig)) === null) refuse(`${pkgRel}: tsconfig ${pkg.tsconfig} outside worktree`);
+      else push(path6.join(base, pkg.tsconfig));
+    }
     push(path6.join(base, "tsconfig.json"));
     if (contained(root, dir) === null) break;
   }
@@ -548,18 +578,32 @@ function loadTsconfigChain(root, rootConfig = "tsconfig.json") {
         unresolved.push(`${tag}: depth>${TSCONFIG_MAX_DEPTH}`);
         continue;
       }
-      const cands = candidates(root, from.path, spec, probedSet);
+      const refused = [];
+      const cands = candidates(root, from.path, spec, probedSet, (why) => refused.push(why));
+      if (refused.length) {
+        for (const why of refused) unresolved.push(`${tag}: ${why}`);
+        continue;
+      }
       if (cands === "escape") {
         unresolved.push(`${tag}: outside worktree`);
         continue;
       }
       let hit;
+      let refusedHit;
       for (const rel of cands) {
         probedSet.add(rel);
         if (readContainedFile(root, rel) !== null) {
           hit = rel;
           break;
         }
+        if (presentNonDirectory(root, rel)) {
+          refusedHit = rel;
+          break;
+        }
+      }
+      if (refusedHit) {
+        unresolved.push(`${tag}: not a contained regular file`);
+        continue;
       }
       if (!hit) {
         unresolved.push(`${tag}: not a contained regular file`);

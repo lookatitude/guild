@@ -25,6 +25,7 @@ import * as path from "node:path";
 
 import { createGuildStorage, type GuildStorage } from "../state";
 import { KNOWLEDGE_LINKS_EDGE_SCHEMA_VERSION } from "./knowledge-links-contract";
+import { hintPublicationFromCwd, type HintResult } from "./publication-boundary";
 import { refreshWikiIndexPaths } from "./wiki-index";
 import {
   buildWorkingSetCard,
@@ -49,6 +50,8 @@ export interface RefreshTouchedResult {
   relinked: string[];
   card: WorkingSet;
   card_path: string;
+  /** K03: the touched paths logged against the owner's published generation. */
+  publication_hint: HintResult;
 }
 
 /** The v1 edge layer this function updates a subset of. */
@@ -147,6 +150,9 @@ export function refreshTouched(
   }
   const relinked = pruneTouchedEdges(storage, citationKeys);
 
+  // K03: a hint makes the published layers pending; the source basis decides.
+  const publication_hint = hintPublicationFromCwd(storage.activeRoot, (paths ?? []).filter((p) => typeof p === "string" && p !== ""));
+
   const phase = opts.phase ?? "after-edit";
   const card = buildWorkingSetCard({
     phase,
@@ -157,5 +163,5 @@ export function refreshTouched(
   });
   const card_path = writeWorkingSet(storage, card);
 
-  return { reindexed: wikiRel, relinked, card, card_path };
+  return { reindexed: wikiRel, relinked, card, card_path, publication_hint };
 }

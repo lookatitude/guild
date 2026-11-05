@@ -27,7 +27,9 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson, SCHEMA, scannedFileList } from "./lib/paths";
+import { guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson, SCHEMA, scannedFileList, computeLearnSourceBasis } from "./lib/paths";
+import { assertPublished, GRAPH_ARTIFACT, learnTarget, publishLearnArtifacts, readLearnBase } from "./lib/publish";
+import { carryLabels, ownerArtifactTarget } from "./lib/publish";
 import { headSha } from "./lib/git";
 import {
   extractStructuralGraph,
@@ -158,6 +160,14 @@ function main(): void {
   const outPath = parseFlag(argv, "out") ?? gp.knowledgeGraph;
   const started = Date.now();
 
+  // K03: basis before any source byte is read; re-observed under the lock.
+  const outKind = ownerArtifactTarget(gp, outPath);
+  if (outKind === "store") {
+    process.stderr.write(`refusing to write inside the generation store: ${outPath}\n`);
+    process.exit(1);
+  }
+  const publishing = outKind === "export";
+  const basis = publishing ? computeLearnSourceBasis(gp.sourceRoot) : undefined;
   const relFiles = scannedFileList(gp);
   const readFile = (abs: string) => fs.readFileSync(abs, "utf8");
 
@@ -165,52 +175,74 @@ function main(): void {
   // (the owner graph may come from another worktree or an older tree); foreign
   // (LLM-tier) items are kept the way extract-structural keeps them, and an edge
   // survives only when both endpoints do.
-  const existing = readJson<ExistingGraph>(outPath);
-  const fresh = extractStructuralGraph(repoRoot, relFiles, readFile);
-  const foreign = stripStructural(existing?.nodes ?? [], existing?.edges ?? []);
-  const mergedRaw = mergeStructuralInto(foreign.nodes, foreign.edges, fresh);
-  const ids = new Set(mergedRaw.nodes.map((n) => n.id));
-  const base = {
-    nodes: mergedRaw.nodes,
-    edges: mergedRaw.edges.filter((e) => ids.has(e.source) && ids.has(e.target)),
+  const learnBase = publishing ? readLearnBase(learnTarget(gp)) : null;
+  // Merge onto a destination graph; re-run on a newer generation (K03 rebase).
+  const assemble = (existing: ExistingGraph | null) => {
+    const fresh = extractStructuralGraph(repoRoot, relFiles, readFile);
+    const foreign = stripStructural(existing?.nodes ?? [], existing?.edges ?? []);
+    const mergedRaw = mergeStructuralInto(foreign.nodes, foreign.edges, fresh);
+    const ids = new Set(mergedRaw.nodes.map((n) => n.id));
+    const base = {
+      nodes: mergedRaw.nodes,
+      edges: mergedRaw.edges.filter((e) => ids.has(e.source) && ids.has(e.target)),
+    };
+
+    const refined = refineCalls(repoRoot, relFiles, readFile, base);
+
+    const out: Record<string, unknown> = {
+      version: existing?.version ?? SCHEMA.knowledgeGraph,
+      kind: existing?.kind ?? "codebase",
+      // FIX G2-2 (determinism): commit metadata lives in the sidecar only; ALWAYS
+      // write the commit-independent constant so a stale sha on a pre-fix graph is
+      // normalized away rather than carried forward.
+      generated_from_commit: "structural",
+      project: existing?.project ?? { name: path.basename(gp.repoRoot), description: "" },
+      nodes: carryLabels(existing, { nodes: refined.nodes }).nodes,
+      edges: refined.edges,
+      layers: existing?.layers ?? [],
+      tour: existing?.tour ?? [],
+    };
+
+    // FIX G1-3: validate BEFORE write; fail if the refined graph drops structural items.
+    const preCount = structuralSubset(out as { nodes: GraphNode[]; edges: GraphEdge[] });
+    const validation = validateGraph(out);
+    if (!validation.success || !validation.data) {
+      process.stderr.write(`[resolve-calls] FATAL: graph failed schema validation: ${validation.fatal}\n`);
+      process.exit(1);
+    }
+    const postCount = structuralSubset(validation.data);
+    if (postCount.edges.length < preCount.edges.length || postCount.nodes.length < preCount.nodes.length) {
+      process.stderr.write(
+        `[resolve-calls] FATAL: validation dropped structural items ` +
+        `(nodes ${preCount.nodes.length}→${postCount.nodes.length}, edges ${preCount.edges.length}→${postCount.edges.length})\n`,
+      );
+      process.exit(1);
+    }
+    return { out, refined, validated: validation.data };
   };
-
-  const refined = refineCalls(repoRoot, relFiles, readFile, base);
-
-  const out: Record<string, unknown> = {
-    version: existing?.version ?? SCHEMA.knowledgeGraph,
-    kind: existing?.kind ?? "codebase",
-    // FIX G2-2 (determinism): commit metadata lives in the sidecar only; ALWAYS
-    // write the commit-independent constant so a stale sha on a pre-fix graph is
-    // normalized away rather than carried forward.
-    generated_from_commit: "structural",
-    project: existing?.project ?? { name: path.basename(gp.repoRoot), description: "" },
-    nodes: refined.nodes,
-    edges: refined.edges,
-    layers: existing?.layers ?? [],
-    tour: existing?.tour ?? [],
-  };
-
-  // FIX G1-3: validate BEFORE write; fail if the refined graph drops structural items.
-  const preCount = structuralSubset(out as { nodes: GraphNode[]; edges: GraphEdge[] });
-  const validation = validateGraph(out);
-  if (!validation.success || !validation.data) {
-    process.stderr.write(`[resolve-calls] FATAL: graph failed schema validation: ${validation.fatal}\n`);
-    process.exit(1);
-  }
-  const postCount = structuralSubset(validation.data);
-  if (postCount.edges.length < preCount.edges.length || postCount.nodes.length < preCount.nodes.length) {
-    process.stderr.write(
-      `[resolve-calls] FATAL: validation dropped structural items ` +
-      `(nodes ${preCount.nodes.length}→${postCount.nodes.length}, edges ${preCount.edges.length}→${postCount.edges.length})\n`,
-    );
-    process.exit(1);
-  }
+  const first = assemble((learnBase ? learnBase.graph : readJson<ExistingGraph>(outPath)) as ExistingGraph | null);
+  let { out, refined } = first;
 
   // FIX G2-3: persist the VALIDATED graph (validation.data), not the original
   // `out` — never write an artifact that differs from what the validator accepted.
   try {
-    writeJson(outPath, validation.data);
+    if (learnBase) {
+      assertPublished(
+        publishLearnArtifacts(learnTarget(gp), {
+          channels: ["structural_graph"],
+          base: learnBase,
+          basis,
+          build: (b) => {
+            const a = b === learnBase ? first : assemble(b.graph as ExistingGraph | null);
+            ({ out, refined } = a);
+            return { [GRAPH_ARTIFACT]: a.validated };
+          },
+        }),
+        "resolve-calls",
+      );
+    } else {
+      writeJson(outPath, first.validated);
+    }
   } catch (err) {
     process.stderr.write(`[resolve-calls] ERROR writing graph: ${String(err)}\n`);
     process.exit(1);

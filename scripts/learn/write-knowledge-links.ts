@@ -54,6 +54,7 @@ export {
 } from "../../src/domains/knowledge/index";
 import { importanceMultiplier, confidenceBonus } from "./kg-query";
 import { durableGuildDir } from "../lib/state/storage";
+import { assertPublished, publishLearnArtifacts, RECALL_ARTIFACT } from "./lib/publish";
 
 // ---------------------------------------------------------------------------
 // Schema version constants
@@ -183,17 +184,10 @@ export function sortNodesByRecall(nodes: GraphNode[]): GraphNode[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Write the nonce-free knowledge-recall.json recall projection and its
- * provenance sidecar.
- *
- * Idempotent: calling twice with the same graph + repoRoot overwrites the
- * previous output with byte-identical content.
- *
- * SC-8: knowledge-recall.json is a pure function of (graph, config).
- *   run_id / generatedAt go to the provenance sidecar ONLY.
+ * Build the nonce-free knowledge-recall.json recall projection bytes.
+ * SC-8: a pure function of (graph, config); no run_id, no timestamp.
  */
-export function writeKnowledgeLinks(opts: WriteKnowledgeLinksOptions): WriteKnowledgeLinksResult {
-  const { graph, repoRoot, runId, generatedAt } = opts;
+export function buildKnowledgeRecall(graph: { nodes: GraphNode[]; edges: GraphEdge[] }): { bytes: string; edgeCount: number } {
 
   // ── Step 1: dedup edges by (source, target, type); first occurrence wins ──
   const seenEdgeKeys = new Set<string>();
@@ -227,29 +221,55 @@ export function writeKnowledgeLinks(opts: WriteKnowledgeLinksOptions): WriteKnow
     edges: canonEdges,
   };
 
-  // ── Step 6: write to disk (L0 convention: JSON.stringify(.,null,2)+"\n") ──
+  return { bytes: JSON.stringify(linksDoc, null, 2) + "\n", edgeCount: dedupedEdges.length };
+}
+
+/** Provenance sidecar (run_id + timestamps go HERE only). Not a published layer. */
+export function writeRecallProvenance(
+  repoRoot: string,
+  info: { runId?: string; generatedAt?: string; nodeCount: number; edgeCount: number },
+): string {
   const indexesDir = path.join(durableGuildDir(repoRoot), "indexes");
   fs.mkdirSync(indexesDir, { recursive: true });
-
-  const linksPath = path.join(indexesDir, "knowledge-recall.json");
-  fs.writeFileSync(linksPath, JSON.stringify(linksDoc, null, 2) + "\n", "utf8");
-
-  // ── Step 7: write provenance sidecar (run_id + timestamps go HERE only) ──
   const provenanceDoc = {
     schema_version: KNOWLEDGE_LINKS_PROVENANCE_SCHEMA_VERSION,
-    run_id: runId ?? null,
-    generated_at: generatedAt ?? null,
-    node_count: graph.nodes.length,
-    edge_count: dedupedEdges.length,
+    run_id: info.runId ?? null,
+    generated_at: info.generatedAt ?? null,
+    node_count: info.nodeCount,
+    edge_count: info.edgeCount,
   };
-
   const provenancePath = path.join(indexesDir, "knowledge-recall-provenance.json");
   fs.writeFileSync(provenancePath, JSON.stringify(provenanceDoc, null, 2) + "\n", "utf8");
+  return provenancePath;
+}
 
+/**
+ * Publish the nonce-free knowledge-recall.json recall projection (K03: as a
+ * `recall` layer of the owner generation) and write its provenance sidecar.
+ *
+ * Idempotent: calling twice with the same graph + repoRoot republishes
+ * byte-identical content.
+ *
+ * SC-8: knowledge-recall.json is a pure function of (graph, config).
+ *   run_id / generatedAt go to the provenance sidecar ONLY.
+ */
+export function writeKnowledgeLinks(opts: WriteKnowledgeLinksOptions): WriteKnowledgeLinksResult {
+  const { graph, repoRoot, runId, generatedAt } = opts;
+  const recall = buildKnowledgeRecall(graph);
+  const indexesDir = path.join(durableGuildDir(repoRoot), "indexes");
+  assertPublished(
+    publishLearnArtifacts(
+      { indexesDir, repoRoot, sourceRoot: repoRoot },
+      // The caller's graph has no recorded basis: the recall layer publishes `unknown`.
+      { channels: ["recall"], provenance: { recall: "ingested" }, build: () => ({ [RECALL_ARTIFACT]: recall.bytes }) },
+    ),
+    "write-knowledge-links",
+  );
+  const provenancePath = writeRecallProvenance(repoRoot, { runId, generatedAt, nodeCount: graph.nodes.length, edgeCount: recall.edgeCount });
   return {
-    linksPath,
+    linksPath: path.join(indexesDir, RECALL_ARTIFACT),
     provenancePath,
     nodeCount: graph.nodes.length,
-    edgeCount: dedupedEdges.length,
+    edgeCount: recall.edgeCount,
   };
 }

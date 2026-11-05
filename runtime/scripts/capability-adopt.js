@@ -38112,11 +38112,67 @@ var init_redirect_route = __esm({
   }
 });
 
+// src/domains/knowledge/freshness-boundary.ts
+var BACKGROUND_STRUCTURAL_POLICY, BACKGROUND_HARD_LIMITS;
+var init_freshness_boundary = __esm({
+  "src/domains/knowledge/freshness-boundary.ts"() {
+    init_source_basis();
+    BACKGROUND_STRUCTURAL_POLICY = Object.freeze({
+      policy: "guild.learn.background_structural.v1",
+      channel: "structural_graph",
+      max_jobs: 4,
+      max_paths_per_job: 64
+    });
+    BACKGROUND_HARD_LIMITS = Object.freeze({ max_jobs: 16, max_paths_per_job: 256 });
+  }
+});
+
+// src/domains/knowledge/publication.ts
+var crypto21, os5, PUBLICATION_FAULT_STEPS, HOST, ORPHAN_GRACE_MS;
+var init_publication = __esm({
+  "src/domains/knowledge/publication.ts"() {
+    crypto21 = __toESM(require("node:crypto"));
+    os5 = __toESM(require("node:os"));
+    init_kernel();
+    init_source_basis();
+    PUBLICATION_FAULT_STEPS = Object.freeze([
+      "lock_acquired",
+      "artifact:knowledge-graph.json",
+      "artifact:knowledge-recall.json",
+      "layers_written",
+      "manifest_written",
+      "record_written",
+      "generation_renamed",
+      "successor_claimed",
+      "pointer_tmp_written",
+      "pointer_renamed",
+      "export:knowledge-graph.json",
+      "export:knowledge-recall.json",
+      "reclaimed"
+    ]);
+    HOST = crypto21.createHash("sha256").update(os5.hostname()).digest("hex").slice(0, 12);
+    ORPHAN_GRACE_MS = 10 * 6e4;
+  }
+});
+
+// src/domains/knowledge/publication-boundary.ts
+var AFTER_EDIT_BUDGET;
+var init_publication_boundary = __esm({
+  "src/domains/knowledge/publication-boundary.ts"() {
+    init_freshness_boundary();
+    init_publication();
+    init_source_basis();
+    init_state();
+    AFTER_EDIT_BUDGET = Object.freeze({ max_files: 0, max_bytes: 0 });
+  }
+});
+
 // src/domains/knowledge/refresh-touched.ts
 var init_refresh_touched = __esm({
   "src/domains/knowledge/refresh-touched.ts"() {
     init_state();
     init_knowledge_links_contract();
+    init_publication_boundary();
     init_wiki_index();
     init_working_set();
   }
@@ -38920,7 +38976,7 @@ function resolveRecallBeforeRead(cwd) {
   return true;
 }
 function hashQuery(query) {
-  return crypto21.createHash("sha256").update(query).digest("hex").slice(0, 16);
+  return crypto22.createHash("sha256").update(query).digest("hex").slice(0, 16);
 }
 function rankWikiDocs(docs, wikiBase, limit, composite) {
   const scoring = docs.filter((d) => d.score > 0);
@@ -39253,7 +39309,7 @@ function recall(query, opts) {
   const _traceBranch = allChunks.length === 0 ? "empty" : source === "combined" ? "combined" : source === "structural" ? "structural" : source;
   try {
     const _analysisTs = (/* @__PURE__ */ new Date()).toISOString();
-    const _spanId = crypto21.createHash("sha256").update(`${runId ?? ""}|recall|${_analysisTs}|${_laneId}`).digest("hex").slice(0, 16);
+    const _spanId = crypto22.createHash("sha256").update(`${runId ?? ""}|recall|${_analysisTs}|${_laneId}`).digest("hex").slice(0, 16);
     emitTraceEvent(
       makeAnalysisTraceEvent({
         ts: new Date(_traceStart).toISOString(),
@@ -39419,12 +39475,12 @@ function runRecallCli() {
   }
   process.stdout.write(JSON.stringify(result2) + "\n");
 }
-var fs59, path72, crypto21, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
+var fs59, path72, crypto22, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
 var init_recall = __esm({
   "src/domains/knowledge/recall.ts"() {
     fs59 = __toESM(require("node:fs"));
     path72 = __toESM(require("node:path"));
-    crypto21 = __toESM(require("node:crypto"));
+    crypto22 = __toESM(require("node:crypto"));
     init_state();
     init_wiki_recall();
     init_fs_scanner();
@@ -53071,7 +53127,7 @@ var fs73 = __toESM(require("fs"));
 var path90 = __toESM(require("path"));
 
 // scripts/lib/capability/adoption-migrate.ts
-var crypto23 = __toESM(require("crypto"));
+var crypto24 = __toESM(require("crypto"));
 var fs70 = __toESM(require("fs"));
 var path87 = __toESM(require("path"));
 var import_util8 = require("util");
@@ -53687,7 +53743,7 @@ var ADOPTION_RESOLUTIONS = Object.freeze([
 init_kernel();
 
 // scripts/lib/core/contracts/specialist-identity.ts
-var crypto22 = __toESM(require("crypto"));
+var crypto23 = __toESM(require("crypto"));
 var import_util6 = require("util");
 
 // scripts/lib/roster.ts
@@ -53941,7 +53997,7 @@ function hashSpecialistProfile(profile) {
   return sha256Hex3(canonicalJson2(profile));
 }
 function sha256Hex3(s) {
-  return crypto22.createHash("sha256").update(s, "utf8").digest("hex");
+  return crypto23.createHash("sha256").update(s, "utf8").digest("hex");
 }
 var TOOL_TO_CAPABILITY = Object.freeze({
   Read: "read-files",
@@ -54347,7 +54403,7 @@ init_host_id_namespace2();
 var import_node_child_process3 = require("node:child_process");
 var import_node_crypto3 = require("node:crypto");
 var fs68 = __toESM(require("node:fs"));
-var os5 = __toESM(require("node:os"));
+var os6 = __toESM(require("node:os"));
 var path85 = __toESM(require("node:path"));
 init_config2();
 init_kernel();
@@ -56101,7 +56157,7 @@ function loadAttestedMigrationBoundary(boundaryPath, persistProjectRoot) {
   }
   const boundary = validateMigrationBoundary(parsed);
   if (boundary === null) throw new Error("migration boundary is invalid or its hash binding does not verify");
-  const temporaryDirectory = fs68.mkdtempSync(path85.join(os5.tmpdir(), "guild-migration-boundary-"));
+  const temporaryDirectory = fs68.mkdtempSync(path85.join(os6.tmpdir(), "guild-migration-boundary-"));
   const snapshotPath = path85.join(temporaryDirectory, path85.basename(boundaryPath));
   try {
     const descriptor = fs68.openSync(snapshotPath, "wx", 384);
@@ -57292,7 +57348,7 @@ function readArray4(value) {
   return out;
 }
 function sha256Prefixed(bytes) {
-  return `sha256:${crypto23.createHash("sha256").update(bytes).digest("hex")}`;
+  return `sha256:${crypto24.createHash("sha256").update(bytes).digest("hex")}`;
 }
 function toPosixRel(abs, root) {
   const rel2 = path87.relative(root, abs);

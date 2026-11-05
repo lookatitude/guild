@@ -1144,6 +1144,11 @@
       "kind": "cli"
     },
     {
+      "id": "learn/lib/dependency-manifest",
+      "source_path": "scripts/learn/lib/dependency-manifest.ts",
+      "kind": "cli"
+    },
+    {
       "id": "learn/lib/domain",
       "source_path": "scripts/learn/lib/domain.ts",
       "kind": "cli"
@@ -1216,6 +1221,11 @@
     {
       "id": "learn/lib/paths",
       "source_path": "scripts/learn/lib/paths.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/publish",
+      "source_path": "scripts/learn/lib/publish.ts",
       "kind": "cli"
     },
     {
@@ -2066,6 +2076,11 @@
     {
       "id": "lib/skill-source-transform",
       "source_path": "scripts/lib/skill-source-transform.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/stack-contract-reader-validator",
+      "source_path": "scripts/lib/stack-contract-reader-validator.ts",
       "kind": "lib"
     },
     {

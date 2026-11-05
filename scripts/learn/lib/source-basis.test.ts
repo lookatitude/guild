@@ -7,6 +7,7 @@
  * AT32: the source basis moves exactly with the declared scan policy across
  * tracked/staged/unstaged/untracked/ignored/rename/delete/branch/rebase edits.
  */
+import { publishLearnArtifacts } from "./publish";
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { execFileSync, spawnSync } from "child_process";
 import * as fs from "fs";
@@ -370,7 +371,12 @@ describe("K01 review r2 regressions", () => {
     const kg = path.join(main, ".guild", "indexes", "knowledge-graph.json");
     const g = JSON.parse(fs.readFileSync(kg, "utf8"));
     g.nodes.push({ id: "concept:keep-me", type: "concept", name: "keep-me", source_refs: [], confidence: "high" });
-    fs.writeFileSync(kg, JSON.stringify(g));
+    // K03: enrichment arrives through the publisher; a direct export write is never adopted.
+    const planted = publishLearnArtifacts(
+      { indexesDir: path.dirname(kg), repoRoot: main, sourceRoot: main },
+      { channels: ["semantic_graph"], build: () => ({ "knowledge-graph.json": g }) },
+    );
+    expect(planted.status).toBe("published");
     expect(tsx("resolve-calls.ts", "--cwd", main).status).toBe(0);
     expect(fs.readFileSync(kg, "utf8")).toContain("concept:keep-me");
   }, 120000);
@@ -596,5 +602,74 @@ describe("K01 review r5 regressions", () => {
   test("R5-F3: JSONC keeps string contents and accepts a BOM", () => {
     expect(parseJsonc('\uFEFF{"a":"x,}/*","b":["src,]/*",],}')).toEqual({ a: "x,}/*", b: ["src,]/*"] });
     expect(parseJsonc('{"u":"http://x" /* c */, // d\n "v":1,}')).toEqual({ u: "http://x", v: 1 });
+  });
+});
+
+describe("K02 review r1 regressions (K01 F1/F3 fixes)", () => {
+  test("R1-F1: a symlinked or malformed package.json is unresolved, never a silent fallback", () => {
+    const main = seedMain();
+    write(main, "node_modules/cfg/tsconfig.json", '{"compilerOptions":{"paths":{"@f/*":["f/*"]}}}');
+    write(main, "tsconfig.json", '{"extends":"cfg"}');
+    fs.writeFileSync(path.join(tmp, "pkg.json"), '{"tsconfig":"x.json"}');
+    fs.symlinkSync(path.join(tmp, "pkg.json"), path.join(main, "node_modules/cfg/package.json"));
+    expect(loadTsconfigChain(main).unresolved.join(" ")).toContain("node_modules/cfg/package.json");
+    expect(freshnessFor(computeLearnSourceBasis(main), computeLearnSourceBasis(main))).toBe("unknown");
+    fs.rmSync(path.join(main, "node_modules/cfg/package.json"));
+    write(main, "node_modules/cfg/package.json", "{not json");
+    expect(loadTsconfigChain(main).unresolved.join(" ")).toContain("parseable");
+  });
+
+  test("R1-F3: package.json#tsconfig outside the worktree is unresolved", () => {
+    const main = seedMain();
+    write(main, "node_modules/cfg/package.json", '{"tsconfig":"../../../outside.json"}');
+    write(main, "node_modules/cfg/tsconfig.json", "{}");
+    write(main, "tsconfig.json", '{"extends":"cfg"}');
+    expect(loadTsconfigChain(main).unresolved.join(" ")).toContain("outside worktree");
+    expect(freshnessFor(computeLearnSourceBasis(main), computeLearnSourceBasis(main))).toBe("unknown");
+  });
+
+  test("R1-F2: line comments end at CR, LS and PS; unterminated strings and comments throw", () => {
+    expect(parseJsonc('{\n// c\r"extends":"./b.json"\n}')).toEqual({ extends: "./b.json" });
+    expect(parseJsonc('{// c "a":1}')).toEqual({ a: 1 });
+    expect(parseJsonc('{// c "a":1}')).toEqual({ a: 1 });
+    expect(() => parseJsonc('{"a":1 /* open')).toThrow();
+    expect(() => parseJsonc('{"a":"open')).toThrow();
+  });
+});
+
+describe("K02 review r2 regressions (tsconfig)", () => {
+  test("R2-F3: a refused declared tsconfig target does not fall through to the package tsconfig.json", () => {
+    const main = seedMain();
+    fs.writeFileSync(path.join(tmp, "outside.json"), "{}");
+    write(main, "node_modules/cfg/package.json", '{"tsconfig":"declared.json"}');
+    fs.symlinkSync(path.join(tmp, "outside.json"), path.join(main, "node_modules/cfg/declared.json"));
+    write(main, "node_modules/cfg/tsconfig.json", "{}");
+    write(main, "tsconfig.json", '{"extends":"cfg"}');
+    const chain = loadTsconfigChain(main);
+    expect(chain.unresolved).toEqual(["tsconfig.json -> cfg: not a contained regular file"]);
+    expect(chain.hops.map((h) => h.path)).toEqual(["tsconfig.json"]);
+    // A package directory named like the specifier is skipped, not refused.
+    fs.rmSync(path.join(main, "node_modules/cfg/declared.json"));
+    write(main, "node_modules/cfg/package.json", '{"name":"cfg"}');
+    expect(loadTsconfigChain(main)).toMatchObject({ unresolved: [], hops: [{ path: "tsconfig.json" }, { path: "node_modules/cfg/tsconfig.json" }] });
+  });
+});
+
+describe("K02 review r4 regressions (fixed after the final round)", () => {
+  test("R4-F1: an inaccessible nearer node_modules is unresolved, not a fallback to an ancestor", () => {
+    const main = seedMain();
+    write(main, "config/node_modules/cfg/tsconfig.json", "{}");
+    write(main, "node_modules/cfg/tsconfig.json", "{}");
+    write(main, "config/base.json", '{"extends":"cfg"}');
+    write(main, "tsconfig.json", '{"extends":"./config/base.json"}');
+    expect(loadTsconfigChain(main).unresolved).toEqual([]);
+    fs.chmodSync(path.join(main, "config/node_modules"), 0o000);
+    try {
+      const u = loadTsconfigChain(main).unresolved;
+      expect(u.length).toBe(1);
+      expect(u[0].startsWith("config/base.json -> cfg: ")).toBe(true);
+    } finally {
+      fs.chmodSync(path.join(main, "config/node_modules"), 0o755);
+    }
   });
 });
