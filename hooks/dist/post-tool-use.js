@@ -8545,12 +8545,12 @@ function stackId(value) {
     throw new StackError("invalid_id", "Invalid source or entity identity");
   return value;
 }
-function stackContained(root, relative28, missing = false) {
-  if (!relative28 || path27.isAbsolute(relative28) || /[\\%\x00-\x1f]/.test(relative28) || relative28.split("/").some((x) => !x || x === "." || x === ".."))
+function stackContained(root, relative27, missing = false) {
+  if (!relative27 || path27.isAbsolute(relative27) || /[\\%\x00-\x1f]/.test(relative27) || relative27.split("/").some((x) => !x || x === "." || x === ".."))
     throw new StackError("path_refused", "Invalid relative record path", 403);
-  const target = path27.join(root, ...relative28.split("/"));
+  const target = path27.join(root, ...relative27.split("/"));
   let current = root;
-  for (const part of relative28.split("/")) {
+  for (const part of relative27.split("/")) {
     current = path27.join(current, part);
     try {
       const st = fs23.lstatSync(current);
@@ -8565,19 +8565,13 @@ function stackContained(root, relative28, missing = false) {
       throw error;
     }
   }
-  const ancestor = (() => {
-    let p = target;
-    while (!fs23.existsSync(p)) p = path27.dirname(p);
-    return fs23.realpathSync(p);
-  })();
-  const rel2 = path27.relative(fs23.realpathSync(root), ancestor);
-  if (rel2.startsWith("..") || path27.isAbsolute(rel2))
+  if (isRefused(checkContained(root, target)))
     throw new StackError("path_refused", "Record escaped owning root", 403);
   return target;
 }
-function stackRead(root, relative28, optional = false) {
+function stackRead(root, relative27, optional = false) {
   try {
-    const p = stackContained(root, relative28);
+    const p = stackContained(root, relative27);
     const st = fs23.statSync(p);
     if (!st.isFile() || st.size > 1024 * 1024)
       throw new StackError(
@@ -8597,6 +8591,7 @@ var init_stack_scope = __esm({
     fs23 = __toESM(require("node:fs"));
     path27 = __toESM(require("node:path"));
     import_node_crypto2 = require("node:crypto");
+    init_kernel();
     init_frontmatter();
     init_storage_roots();
     StackError = class extends Error {
@@ -36553,7 +36548,7 @@ var init_result_contracts = __esm({
         source_path: "plugin/scripts/verify-gate-pass.ts",
         // correction #2.
         purpose: "Advisory/adversarial review result (gate-pass binding).",
-        live_caller: { path: "scripts/verify-gate-pass.ts", call: "parseReviewResult" }
+        live_caller: { path: "src/domains/distribution/review-gate-pass.ts", call: "parseReviewResult" }
       },
       {
         wire_schema_version: "guild.phase_result.v1",
@@ -38532,8 +38527,18 @@ var init_review_gate_pass = __esm({
 });
 
 // src/domains/distribution/review-invocation.ts
+var INVOCATION_ADAPTER_JOIN_FIELDS;
 var init_review_invocation = __esm({
   "src/domains/distribution/review-invocation.ts"() {
+    INVOCATION_ADAPTER_JOIN_FIELDS = Object.freeze([
+      "exit",
+      "reviewer_family",
+      "author_family",
+      "independence",
+      "served_model",
+      "started_at",
+      "finished_at"
+    ]);
   }
 });
 
@@ -48223,9 +48228,9 @@ function createRunLifecycle(env) {
     materializeRunStart(plan) {
       const rootHint = env.__rootHint;
       if (!path95.isAbsolute(plan.root) || rootHint !== void 0 && plan.root !== rootHint) throw new Error("staged start belongs to another source");
-      const safeRelative = (relative28) => {
-        if (typeof relative28 !== "string" || !relative28 || path95.isAbsolute(relative28) || /[\\%\x00-\x1f]/.test(relative28) || relative28.split("/").some((v) => !v || v === "." || v === "..")) throw new Error("staged start path escaped source");
-        const abs = path95.join(plan.root, relative28);
+      const safeRelative = (relative27) => {
+        if (typeof relative27 !== "string" || !relative27 || path95.isAbsolute(relative27) || /[\\%\x00-\x1f]/.test(relative27) || relative27.split("/").some((v) => !v || v === "." || v === "..")) throw new Error("staged start path escaped source");
+        const abs = path95.join(plan.root, relative27);
         if (fsNode.existsSync(plan.root) && isRefused(checkContained(plan.root, abs, { policy: "physical" }))) throw new Error("staged start physical path refused");
         return abs;
       };
@@ -48247,7 +48252,7 @@ function createRunLifecycle(env) {
         const abs = path95.join(plan.root, file.path);
         if (env.fs.exists(abs)) throw new Error("staged target is occupied");
         if (env.fs.writeFileExclusive) {
-          if (!env.fs.writeFileExclusive(abs, file.bytes, abs === runBindingPath(plan.root, plan.run_id) ? PRIVATE_BINDING_MODE : void 0)) throw new Error("staged target is occupied");
+          if (!env.fs.writeFileExclusive(abs, file.bytes, abs === runBindingPath(plan.root, plan.run_id) ? 384 : void 0)) throw new Error("staged target is occupied");
         } else env.fs.writeFile(abs, file.bytes);
       }
       env.initializeRunBindingExclusion?.(plan.root, plan.run_id);
@@ -60522,7 +60527,7 @@ function p05Redact(v) {
     }));
   return v;
 }
-function p05ArtifactText(bytes, relative28) {
+function p05ArtifactText(bytes, relative27) {
   const structured = (value) => {
     const seen = /* @__PURE__ */ new Set();
     let nodes = 0;
@@ -60543,9 +60548,9 @@ function p05ArtifactText(bytes, relative28) {
     return value;
   };
   try {
-    if (/\.json$/i.test(relative28)) return structured(JSON.parse(bytes));
-    if (/\.jsonl$/i.test(relative28)) return bytes.split(/\r?\n/).map((line) => line.trim() ? structured(JSON.parse(line)) : line).join("\n");
-    if (/\.ya?ml$/i.test(relative28)) return structured(yaml5(bytes));
+    if (/\.json$/i.test(relative27)) return structured(JSON.parse(bytes));
+    if (/\.jsonl$/i.test(relative27)) return bytes.split(/\r?\n/).map((line) => line.trim() ? structured(JSON.parse(line)) : line).join("\n");
+    if (/\.ya?ml$/i.test(relative27)) return structured(yaml5(bytes));
     try {
       return structured(JSON.parse(bytes));
     } catch {
@@ -60571,12 +60576,13 @@ var init_stack_p05 = __esm({
     import_node_crypto4 = require("node:crypto");
     init_state();
     init_security();
+    init_kernel();
     init_initiative();
     init_initiative_workitems();
     init_run_lifecycle();
     init_initiative_evidence();
-    P05_READS = /* @__PURE__ */ new Set(["initiative.list", "initiative.inspect", "initiative.close_check", "decision.list", "decision.inspect", "run.list", "run.inspect", "run.trace", "run.artifacts"]);
-    P05_WRITES = /* @__PURE__ */ new Set(["initiative.create", "initiative.revise", "initiative.link", "initiative.unlink", "initiative.pause", "initiative.close", "initiative.archive", "initiative.restore", "decision.propose", "decision.approve", "decision.reject", "decision.supersede"]);
+    P05_READS = sealSet(["initiative.list", "initiative.inspect", "initiative.close_check", "decision.list", "decision.inspect", "run.list", "run.inspect", "run.trace", "run.artifacts"], "P05_READS");
+    P05_WRITES = sealSet(["initiative.create", "initiative.revise", "initiative.link", "initiative.unlink", "initiative.pause", "initiative.close", "initiative.archive", "initiative.restore", "decision.propose", "decision.approve", "decision.reject", "decision.supersede"], "P05_WRITES");
     EMPTY2 = /* @__PURE__ */ stackHash("");
     json = (v) => JSON.stringify(v, null, 2) + "\n";
     issue2 = (code, message) => ({ code, message, evidence: [] });
@@ -60868,7 +60874,7 @@ var init_stack_p05 = __esm({
         const lines = bytes.split(/\r?\n/).filter((l) => l.trim() !== "");
         if (lines[0] !== "# Verify \u2014 " + id || lines[1] !== "Overall status: pass" || bytes.includes("\u2717") || /^Overall status: (?!pass$)/m.test(bytes))
           return false;
-        return [1, 2, 3, 4, 5, 6].every((n) => lines.some((l) => new RegExp("^" + n + "\\. ").test(l) && (/\bpass\b/.test(l) || l.includes("\u2713"))));
+        return [1, 2, 3, 4, 5, 6].every((n) => lines.some((l) => l.startsWith(n + ". ") && (/\bpass\b/.test(l) || l.includes("\u2713"))));
       }
       dependencies(works) {
         const ids = new Set(works.map((w) => w.id));
@@ -61377,7 +61383,7 @@ function runtimeRoot(root) {
   fs91.mkdirSync(root, { recursive: true, mode: 448 });
   if (fs91.lstatSync(root).isSymbolicLink()) throw new StackError("unsafe_runtime", "Linked managed runtime refused");
   fs91.chmodSync(root, 448);
-  return fs91.realpathSync(root);
+  return canonicalizeRealPath(root);
 }
 function claimPath(root, id) {
   return stackContained(runtimeRoot(root), stackId(id) + ".json", true);
@@ -61613,6 +61619,7 @@ var init_managed_run = __esm({
     path105 = __toESM(require("node:path"));
     import_node_crypto5 = require("node:crypto");
     init_state();
+    init_kernel();
     init_run_lifecycle();
     init_run_binding();
   }
@@ -61667,6 +61674,7 @@ var init_stack_operations = __esm({
     import_node_crypto6 = require("node:crypto");
     init_state();
     init_config2();
+    init_kernel();
     init_security();
     init_workflow_graph_overlay();
     init_stack_contracts_generated();
@@ -61740,18 +61748,18 @@ var init_stack_operations = __esm({
           profile: s.kind === "workspace" ? "hybrid" : "standalone"
         });
       }
-      runtime(relative28, source) {
+      runtime(relative27, source) {
         const storage = this.storage(source);
         fs92.mkdirSync(storage.root.state, { recursive: true });
-        const base = fs92.realpathSync(storage.root.state);
+        const base = canonicalizeRealPath(storage.root.state);
         return stackContained(
           base,
-          "roots/" + storage.rootId + "/stack/" + relative28,
+          "roots/" + storage.rootId + "/stack/" + relative27,
           true
         );
       }
-      saveRuntime(relative28, value, source) {
-        const target = this.runtime(relative28, source);
+      saveRuntime(relative27, value, source) {
+        const target = this.runtime(relative27, source);
         fs92.mkdirSync(path106.dirname(target), { recursive: true, mode: 448 });
         const temp = target + ".tmp-" + (0, import_node_crypto6.randomUUID)();
         const fd = fs92.openSync(temp, "wx", 384);
@@ -61773,8 +61781,8 @@ var init_stack_operations = __esm({
           fs92.rmSync(temp, { force: true });
         }
       }
-      loadRuntime(relative28, source) {
-        const p = this.runtime(relative28, source);
+      loadRuntime(relative27, source) {
+        const p = this.runtime(relative27, source);
         try {
           return JSON.parse(fs92.readFileSync(p, "utf8"));
         } catch (e) {
@@ -61852,7 +61860,7 @@ var init_stack_operations = __esm({
         const manifests = [
           ".claude-plugin/plugin.json",
           ".codex-plugin/plugin.json"
-        ].map((relative28) => stackRead(this.packageRoot, relative28, true)).filter((x) => x !== null).map((x) => JSON.parse(x));
+        ].map((relative27) => stackRead(this.packageRoot, relative27, true)).filter((x) => x !== null).map((x) => JSON.parse(x));
         if (!manifests.length || manifests.some(
           (x) => x.name !== manifests[0].name || x.version !== manifests[0].version
         ))
@@ -62021,7 +62029,7 @@ var init_stack_operations = __esm({
           );
         const out = [];
         let seen = 0;
-        const walk = (relative28, depth) => {
+        const walk = (relative27, depth) => {
           if (depth > 8 || seen > 1e4)
             throw new StackError(
               "collection_limit",
@@ -62030,7 +62038,7 @@ var init_stack_operations = __esm({
             );
           let names;
           try {
-            const p = stackContained(source.realpath, relative28);
+            const p = stackContained(source.realpath, relative27);
             names = fs92.readdirSync(p).sort();
           } catch (e) {
             if (e.code === "ENOENT") return;
@@ -62038,7 +62046,7 @@ var init_stack_operations = __esm({
           }
           for (const name of names) {
             seen++;
-            const rel2 = relative28 + "/" + name;
+            const rel2 = relative27 + "/" + name;
             const p = stackContained(source.realpath, rel2);
             const st = fs92.statSync(p);
             if (st.isDirectory()) {
@@ -62253,11 +62261,11 @@ var init_stack_operations = __esm({
           fs92.rmSync(p, { recursive: true, force: true });
         }
       }
-      evidence(source, relative28) {
-        const bytes = stackRead(source.realpath, relative28);
+      evidence(source, relative27) {
+        const bytes = stackRead(source.realpath, relative27);
         return {
           source_id: source.source_id,
-          path: relative28.slice(7),
+          path: relative27.slice(7),
           sha256: stackHash(bytes),
           schema_version: "guild.policy.v1",
           observed_at: this.now().toISOString(),
@@ -62575,8 +62583,8 @@ var init_stack_operations = __esm({
               "A rejection or return requires rationale",
               422
             );
-          const relative28 = this.artifactPath(input.operation_id, "approval");
-          const existing = stackRead(source.realpath, relative28, true);
+          const relative27 = this.artifactPath(input.operation_id, "approval");
+          const existing = stackRead(source.realpath, relative27, true);
           const approval = {
             schema_version: "guild.stack.approval-record.v1",
             approval_id: input.operation_id,
@@ -62602,7 +62610,7 @@ var init_stack_operations = __esm({
           }
           this.screenedWrite(
             source,
-            relative28,
+            relative27,
             JSON.stringify(approval, null, 2) + "\n",
             input.operation_id,
             true
@@ -63001,15 +63009,15 @@ var init_stack_operations = __esm({
             }
           const id = "op-" + (0, import_node_crypto6.randomUUID)(), allocated = (request.operation === "initiative.create" ? "initiative-" : request.operation === "decision.propose" ? "decision-" : "event-") + (0, import_node_crypto6.randomUUID)(), at = this.now().toISOString();
           const domain = this.domain(source), snapshot = this.snapshotP05(source, domain), plan = domain.plan(request.operation, request.arguments, request.targets, id, allocated, at);
-          const addEvidence = (relative28, expectedHash) => {
-            stackContained(source.realpath, relative28);
-            const bytes = domain.read(relative28, false), sha2568 = stackHash(bytes);
+          const addEvidence = (relative27, expectedHash) => {
+            stackContained(source.realpath, relative27);
+            const bytes = domain.read(relative27, false), sha2568 = stackHash(bytes);
             if (expectedHash !== void 0 && expectedHash !== sha2568)
               throw new StackError("invalid_evidence", "Evidence changed before preview", 409);
-            const existing = snapshot.find((s) => s.path === relative28);
+            const existing = snapshot.find((s) => s.path === relative27);
             if (existing && existing.sha256 !== sha2568)
               throw new StackError("stale_preview", "Evidence changed while planning", 409);
-            if (!existing) snapshot.push({ path: relative28, bytes, sha256: sha2568 });
+            if (!existing) snapshot.push({ path: relative27, bytes, sha256: sha2568 });
           };
           for (const w of plan.writes) {
             if (!w.after_bytes || !/\.(json|yaml)$/.test(w.path)) continue;
@@ -64857,7 +64865,6 @@ __export(lifecycle_exports, {
   PENDING_SUBSTANTIVE_OPERATION_SCHEMA: () => PENDING_SUBSTANTIVE_OPERATION_SCHEMA,
   PLAN_STEP_STATUSES: () => PLAN_STEP_STATUSES,
   PLUGIN_GRAPH_DIRS: () => PLUGIN_GRAPH_DIRS,
-  PRIVATE_BINDING_MODE: () => PRIVATE_BINDING_MODE,
   PRODUCT_LOOP_ENTRY_SKILL: () => PRODUCT_LOOP_ENTRY_SKILL,
   PROGRAM_STATUSES: () => PROGRAM_STATUSES2,
   PROJECTABLE_DOCUMENT_KINDS: () => PROJECTABLE_DOCUMENT_KINDS,
@@ -65162,10 +65169,10 @@ __export(lifecycle_exports, {
   sortIssues: () => sortIssues,
   stableLockPath: () => stableLockPath,
   stackCanonical: () => stackCanonical,
-  stackContractBundle: () => stack_contracts_generated_default,
+  stackContractBundle: () => stackContractBundle,
   stackManagedReview: () => stackManagedReview,
-  stackManagedSchemas: () => managed_run_schemas_default,
-  stackP05Schemas: () => stack_p05_schemas_default,
+  stackManagedSchemas: () => stackManagedSchemas,
+  stackP05Schemas: () => stackP05Schemas,
   stackPreviewHash: () => stackPreviewHash,
   stagePendingSubstantiveOperation: () => stagePendingSubstantiveOperation,
   summaryPath: () => summaryPath,
@@ -65216,6 +65223,7 @@ __export(lifecycle_exports, {
   writeTaskRun: () => writeTaskRun,
   writeWorkflowCursor: () => writeWorkflowCursor
 });
+var stackContractBundle, stackP05Schemas, stackManagedSchemas;
 var init_lifecycle = __esm({
   "src/domains/lifecycle/index.ts"() {
     init_neutral_runtime_contracts();
@@ -65269,10 +65277,14 @@ var init_lifecycle = __esm({
     init_trace_v2();
     init_stack_operations();
     init_stack_contracts_generated();
-    init_initiative_evidence();
     init_stack_p05_schemas();
-    init_managed_run();
     init_managed_run_schemas();
+    init_kernel();
+    init_initiative_evidence();
+    init_managed_run();
+    stackContractBundle = deepFreeze(stack_contracts_generated_default);
+    stackP05Schemas = deepFreeze(stack_p05_schemas_default);
+    stackManagedSchemas = deepFreeze(managed_run_schemas_default);
   }
 });
 
