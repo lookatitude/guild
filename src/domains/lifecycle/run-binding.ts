@@ -79,7 +79,7 @@ export interface BindingFs {
 // binding.json carries the run nonce: the real writers create and update it
 // owner-only (0600, CD21). chmod after the write also tightens a record created
 // earlier with a wider mode the first time this process updates it.
-export const PRIVATE_BINDING_MODE = 0o600;
+const PRIVATE_BINDING_MODE = 0o600;
 
 function realBindingFs(): BindingFs {
   return {
