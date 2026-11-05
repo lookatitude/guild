@@ -213,13 +213,15 @@ describe("AT14 · initiative close predicate (software vs research)", () => {
 describe("AT14 · recordWorkClose", () => {
   let tmp: string;
   let durableRoot: string;
+  let privateDir: string;
   let ctl: RunController;
   let grant: WriterGrant;
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "r04-close-"));
     durableRoot = path.join(tmp, "project");
     fs.mkdirSync(durableRoot);
-    ctl = openRunController({ privateDir: path.join(tmp, "state"), durableRoot, source_id: SRC, run_id: RUN, host_id: "host-a" });
+    privateDir = path.join(tmp, "state");
+    ctl = openRunController({ privateDir, durableRoot, source_id: SRC, run_id: RUN, host_id: "host-a" });
     grant = ctl.issueWriterGrant("scope:lifecycle");
   });
   afterEach(() => {
@@ -230,15 +232,15 @@ describe("AT14 · recordWorkClose", () => {
   it("persists one closure per work, idempotent on replay, conflicting outcome refused", () => {
     const d = evaluateTaskClose(input());
     if (!d.ok) throw new Error("fixture");
-    const a = recordWorkClose({ controller: ctl, grant, durableRoot, subject: TASK, operation_id: "close-task-1", decision: d, request: { kind: "verified_success" }, closed_at: "2026-11-05T01:00:00.000Z" });
-    const b = recordWorkClose({ controller: ctl, grant, durableRoot, subject: TASK, operation_id: "close-task-1", decision: d, request: { kind: "verified_success" }, closed_at: "2026-11-05T02:00:00.000Z" });
+    const a = recordWorkClose({ controller: ctl, grant, controllerPrivateDir: privateDir, durableRoot, subject: TASK, operation_id: "close-task-1", decision: d, request: { kind: "verified_success" }, closed_at: "2026-11-05T01:00:00.000Z" });
+    const b = recordWorkClose({ controller: ctl, grant, controllerPrivateDir: privateDir, durableRoot, subject: TASK, operation_id: "close-task-1", decision: d, request: { kind: "verified_success" }, closed_at: "2026-11-05T02:00:00.000Z" });
     expect(b).toEqual(a);
-    expect(readWorkClosure(durableRoot, RUN, TASK)).toEqual(a);
+    expect(readWorkClosure(durableRoot, RUN, TASK, privateDir)).toEqual(a);
     const c = evaluateTaskClose(input({ request: { kind: "cancel", operator_id: "op-miguel", reason: "x" } }));
     if (!c.ok) throw new Error("fixture");
     let code = "";
     try {
-      recordWorkClose({ controller: ctl, grant, durableRoot, subject: TASK, operation_id: "close-task-1b", decision: c, request: { kind: "cancel", operator_id: "op-miguel", reason: "x" }, closed_at: "2026-11-05T03:00:00.000Z" });
+      recordWorkClose({ controller: ctl, grant, controllerPrivateDir: privateDir, durableRoot, subject: TASK, operation_id: "close-task-1b", decision: c, request: { kind: "cancel", operator_id: "op-miguel", reason: "x" }, closed_at: "2026-11-05T03:00:00.000Z" });
     } catch (e) { code = (e as WorkClosureRefusal).code; }
     expect(code).toBe("closure_conflict");
   });
@@ -255,17 +257,45 @@ describe("AT14 · recordWorkClose", () => {
     if (!d.ok) throw new Error("fixture");
     let code = "";
     try {
-      recordWorkClose({ controller: ctl, grant, durableRoot, subject: TASK, operation_id: "close-task-1", decision: d, request: { kind: "verified_success" }, closed_at: "2026-11-05T01:00:00.000Z" });
+      recordWorkClose({ controller: ctl, grant, controllerPrivateDir: privateDir, durableRoot, subject: TASK, operation_id: "close-task-1", decision: d, request: { kind: "verified_success" }, closed_at: "2026-11-05T01:00:00.000Z" });
     } catch (e) { code = (e as WorkClosureRefusal).code; }
     expect(code).toBe("transfer_unacknowledged");
-    expect(readWorkClosure(durableRoot, RUN, TASK)).toBeNull();
+    expect(readWorkClosure(durableRoot, RUN, TASK, privateDir)).toBeNull();
+  });
+
+  it("codex r1 F1: a tampered closure record refuses on read", () => {
+    const c = evaluateTaskClose(input({ request: { kind: "cancel", operator_id: "op-miguel", reason: "x" } }));
+    if (!c.ok) throw new Error("fixture");
+    recordWorkClose({ controller: ctl, grant, controllerPrivateDir: privateDir, durableRoot, subject: TASK, operation_id: "close-task-1", decision: c, request: { kind: "cancel", operator_id: "op-miguel", reason: "x" }, closed_at: "2026-11-05T01:00:00.000Z" });
+    const file = path.join(durableRoot, ".guild", "runs", RUN, "closures", "logical_task", "task-1.json");
+    const rec = JSON.parse(fs.readFileSync(file, "utf8"));
+    rec.state = { ...rec.state, outcome: "succeeded", acceptance: "verified" };
+    fs.writeFileSync(file, JSON.stringify(rec));
+    let code = "";
+    try { readWorkClosure(durableRoot, RUN, TASK, privateDir); } catch (e) { code = (e as WorkClosureRefusal).code; }
+    expect(code).toBe("closure_corrupt");
+  });
+
+  it("codex r1 F4: a closed work cannot acquire a follow-up reservation", () => {
+    const rev = openWorkDisposition(durableRoot, RUN, TASK);
+    const d = evaluateTaskClose(input());
+    if (!d.ok) throw new Error("fixture");
+    recordWorkClose({ controller: ctl, grant, controllerPrivateDir: privateDir, durableRoot, subject: TASK, operation_id: "close-task-1", decision: d, request: { kind: "verified_success" }, closed_at: "2026-11-05T01:00:00.000Z" });
+    const target = path.join(tmp, "target");
+    fs.mkdirSync(target);
+    const r = runTransfer(
+      { operation_id: "xfer-1", source_work: TASK, expected_disposition_revision: rev, destination_work: { source_id: "source-b", kind: "logical_task", id: "follow-1", revision: H("f") }, destination_policy_hash: H("1"), payload: { title: "late" } },
+      { controller: ctl, grant, sourceRoot: durableRoot, targetRoot: target },
+    );
+    expect([r.state, r.refusal]).toEqual(["aborted", "disposition_conflict"]);
+    expect(fs.existsSync(path.join(target, ".guild"))).toBe(false);
   });
 
   it("a worker (attempt) grant cannot record a close", () => {
     const d = evaluateTaskClose(input());
     if (!d.ok) throw new Error("fixture");
     const worker = ctl.issueAttemptGrant({ execution_id: "exec-1", attempt_id: "att-9", scope: "scope:w", expires_at_ms: Date.now() + 60_000 });
-    expect(() => recordWorkClose({ controller: ctl, grant: worker as unknown as WriterGrant, durableRoot, subject: TASK, operation_id: "close-x", decision: d, request: { kind: "verified_success" }, closed_at: "2026-11-05T01:00:00.000Z" })).toThrow("worker_grant_not_writer");
-    expect(readWorkClosure(durableRoot, RUN, TASK)).toBeNull();
+    expect(() => recordWorkClose({ controller: ctl, grant: worker as unknown as WriterGrant, controllerPrivateDir: privateDir, durableRoot, subject: TASK, operation_id: "close-x", decision: d, request: { kind: "verified_success" }, closed_at: "2026-11-05T01:00:00.000Z" })).toThrow("worker_grant_not_writer");
+    expect(readWorkClosure(durableRoot, RUN, TASK, privateDir)).toBeNull();
   });
 });

@@ -60,36 +60,44 @@ function readFd(fd: number, max: number): string | null {
   return buf.subarray(0, off).toString("utf8");
 }
 
-/** Read a contained regular file; null when absent, a non-file, oversized or refused by containment. */
+/**
+ * Read a contained regular file. Null only when the path is absent; a
+ * containment refusal, a symlink, a non-file or an oversized file throws, so
+ * callers fail closed instead of mistaking a tampered path for "nothing here".
+ */
 export function readOnce(root: string, rel: string, max = MAX_RECORD_BYTES): string | null {
   const r = checkContained(root, rel, { policy: "physical" });
-  if (isRefused(r)) return null;
+  if (isRefused(r)) throw new DurableOnceError("containment_refused", `${rel} (${r.code})`);
   let fd: number;
   try {
     fd = fs.openSync(r.realPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
   } catch (e) {
     const c = (e as NodeJS.ErrnoException).code;
-    if (c === "ENOENT" || c === "ELOOP" || c === "ENOTDIR") return null;
-    throw e;
+    if (c === "ENOENT") return null;
+    throw new DurableOnceError("io_failed", `${rel}: ${c ?? (e as Error).message}`);
   }
   try {
-    return readFd(fd, max);
+    const text = readFd(fd, max);
+    if (text === null) throw new DurableOnceError("io_failed", `${rel} is not a regular file within the size bound`);
+    return text;
   } finally {
     fs.closeSync(fd);
   }
 }
 
-/** Names in a contained directory, sorted; empty when absent. Bounded by `max`. */
+/** Names in a contained directory, sorted; empty only when absent. Refusals and non-directories throw. */
 export function listOnce(root: string, rel: string, max = 10_000): string[] {
   const r = checkContained(root, rel, { policy: "physical" });
-  if (isRefused(r)) return [];
-  let names: string[];
+  if (isRefused(r)) throw new DurableOnceError("containment_refused", `${rel} (${r.code})`);
+  let st: fs.Stats;
   try {
-    if (!fs.lstatSync(r.realPath).isDirectory()) return [];
-    names = fs.readdirSync(r.realPath);
-  } catch {
-    return [];
+    st = fs.lstatSync(r.realPath);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw new DurableOnceError("io_failed", `${rel}: ${(e as Error).message}`);
   }
+  if (!st.isDirectory()) throw new DurableOnceError("io_failed", `${rel} is not a directory`);
+  const names = fs.readdirSync(r.realPath);
   if (names.length > max) throw new DurableOnceError("io_failed", `${rel} holds more than ${max} entries`);
   return names.filter((n) => !n.startsWith(".")).sort();
 }

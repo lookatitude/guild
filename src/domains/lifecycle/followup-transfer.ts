@@ -30,7 +30,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { canonicalizeRealPath } from "../kernel";
-import { ControllerRefusal, type ControlAction, type RunController, type WriterGrant } from "./run-controller";
+import { ControllerRefusal, readControllerJournal, type ControlAction, type RunController, type WriterGrant } from "./run-controller";
 import type { Entity, Evidence, Hash } from "./execution-identity";
 import { DurableOnceError, canonicalJson, hashOf, listOnce, publishOnce, readOnce } from "./durable-once";
 
@@ -202,7 +202,8 @@ function storage<T>(fn: () => T): T {
 
 // ── disposition chain ────────────────────────────────────────────────────────
 
-export type DispositionState = "open" | "transfer_reserved" | "transferred" | "released";
+/** `closed` is written by work closure: terminal, so a closed work can never be reserved. */
+export type DispositionState = "open" | "transfer_reserved" | "transferred" | "released" | "closed";
 export interface DispositionEntry {
   schema_version: typeof WORK_DISPOSITION_SCHEMA;
   source_id: string;
@@ -244,7 +245,7 @@ export function readWorkDisposition(sourceRoot: string, run_id: string, work: En
   const revisions: Hash[] = [];
   names.forEach((name, i) => {
     if (name !== `${String(i).padStart(6, "0")}.json`) corrupt(`disposition chain has a gap or a foreign file at ${name}`);
-    const raw = readOnce(root, dispositionFile(run_id, work, i));
+    const raw = storage(() => readOnce(root, dispositionFile(run_id, work, i)));
     if (raw === null) corrupt(`disposition entry ${i} unreadable`);
     let e: DispositionEntry;
     try { e = JSON.parse(raw!) as DispositionEntry; } catch { return corrupt(`disposition entry ${i} is not JSON`); }
@@ -262,6 +263,9 @@ export function readWorkDisposition(sourceRoot: string, run_id: string, work: En
       : e.state === "transfer_reserved" ? prev !== null && (prev.state === "open" || prev.state === "released") && opFields && e.prepared_sha256 === null
       : e.state === "transferred" ? prev?.state === "transfer_reserved" && carried && typeof e.prepared_sha256 === "string" && HASH_RE.test(e.prepared_sha256)
       : e.state === "released" ? prev?.state === "transfer_reserved" && carried && e.prepared_sha256 === null
+      : e.state === "closed" ? prev !== null && (prev.state === "open" || prev.state === "released" || prev.state === "transferred")
+        && typeof e.operation_id === "string" && SEG_RE.test(e.operation_id) && typeof e.intent_hash === "string" && HASH_RE.test(e.intent_hash)
+        && e.destination_work === null && e.target_root_digest === null && e.prepared_sha256 === null
       : false;
     if (!ok) corrupt(`disposition entry ${i} is not a valid ${String(e.state)} transition`);
     entries.push(e);
@@ -339,7 +343,7 @@ const MAX_PAYLOAD_BYTES = 256 * 1024;
 const intentBytes = (i: TransferIntent) => Buffer.from(`${canonicalJson(i)}\n`, "utf8");
 
 function readIntent(root: string, run_id: string, op: string): { intent: TransferIntent; hash: Hash } | null {
-  const raw = readOnce(root, path.join(transferDir(run_id, op), "intent.json"));
+  const raw = storage(() => readOnce(root, path.join(transferDir(run_id, op), "intent.json")));
   if (raw === null) return null;
   let i: TransferIntent;
   try { i = JSON.parse(raw) as TransferIntent; } catch { return corrupt(`intent for ${op} is not JSON`); }
@@ -361,6 +365,15 @@ interface InboundActivated {
 }
 interface InboundAck { schema_version: typeof FOLLOWUP_INBOUND_SCHEMA; stage: "ack"; operation_id: string; source_id: string; activated_sha256: Hash }
 const inboundBytes = (v: unknown) => Buffer.from(`${canonicalJson(v)}\n`, "utf8");
+/** The only activation bytes a committed transfer can have: fully determined by the source journal. */
+function activatedBytesFor(i: TransferIntent, preparedSha: Hash, commitRev: Hash): Buffer {
+  const a: InboundActivated = { schema_version: FOLLOWUP_INBOUND_SCHEMA, stage: "activated", operation_id: i.operation_id, source_id: i.source_id, prepared_sha256: preparedSha, source_commit_sha256: commitRev, executable: true };
+  return inboundBytes(a);
+}
+function ackBytesFor(i: TransferIntent, activatedSha: Hash): Buffer {
+  const k: InboundAck = { schema_version: FOLLOWUP_INBOUND_SCHEMA, stage: "ack", operation_id: i.operation_id, source_id: i.source_id, activated_sha256: activatedSha };
+  return inboundBytes(k);
+}
 
 class TargetUnreachable extends Error {}
 function rootReachable(targetRoot: string): boolean {
@@ -391,7 +404,7 @@ const stageIdentity = (r: FollowupTransferV1) => canonicalJson({
 });
 
 function readStage(root: string, intent: TransferIntent, stage: StageName): FollowupTransferV1 | null {
-  const raw = readOnce(root, path.join(transferDir(intent.run_id, intent.operation_id), STAGE_FILES[stage]));
+  const raw = storage(() => readOnce(root, path.join(transferDir(intent.run_id, intent.operation_id), STAGE_FILES[stage])));
   if (raw === null) return null;
   let r: FollowupTransferV1;
   try { r = JSON.parse(raw) as FollowupTransferV1; } catch { return corrupt(`${stage} record is not JSON`); }
@@ -496,20 +509,41 @@ function abortWith(ctx: Ctx, reserved: Hash, refusal: TransferOutcomeReason): Tr
 
 /**
  * The whole source journal, verified: stages are contiguous, every record
- * matches the intent and one reservation, and evidence once recorded is
- * carried unchanged by every later stage. Returns the latest record.
+ * matches the intent and its one reservation, evidence once recorded is
+ * carried unchanged, and every evidence hash joins the disposition chain (the
+ * source commit) or the bytes that chain determines (target activation and
+ * ack). Returns the latest record.
  */
 function latestStage(ctx: Ctx): FollowupTransferV1 | null {
+  const i = ctx.intent;
   const order = ["reserved", "target_prepared", "source_committed", "target_activated", "acknowledged"] as const;
-  const recs = order.map((s) => readStage(ctx.root, ctx.intent, s));
+  const recs = order.map((s) => readStage(ctx.root, i, s));
+  if (!recs.some(Boolean)) return null;
+  const view = readWorkDisposition(ctx.root, i.run_id, i.source_work);
+  const ri = view.entries.findIndex((e) => e.state === "transfer_reserved" && e.operation_id === i.operation_id && e.intent_hash === ctx.intentHash);
+  if (ri < 0) corrupt(`${i.operation_id} journal has no reservation in the disposition chain`);
+  const ti = view.entries.findIndex((e) => e.state === "transferred" && e.operation_id === i.operation_id && e.intent_hash === ctx.intentHash);
+  const commit = ti >= 0 ? { rel: toPosix(dispositionFile(i.run_id, i.source_work, ti)), rev: view.revisions[ti]!, prepared: view.entries[ti]!.prepared_sha256! } : null;
+  const inbound = inboundDir(i.source_id, i.operation_id);
+  const activatedSha = commit ? hashOf(activatedBytesFor(i, commit.prepared, commit.rev)) : null;
+  const ackSha = activatedSha ? hashOf(ackBytesFor(i, activatedSha)) : null;
+  const joins = (e: Evidence | null, source_id: string, rel: string, sha: Hash | null, schema: string) =>
+    e === null || (sha !== null && e.source_id === source_id && e.path === rel && e.sha256 === sha && e.schema_version === schema && e.availability === "available");
   let last: FollowupTransferV1 | null = null;
-  recs.forEach((r, i) => {
+  recs.forEach((r, k) => {
     if (!r) return;
-    if (i > 0 && !recs[i - 1]) corrupt(`${order[i]} recorded without ${order[i - 1]}`);
+    if (k > 0 && !recs[k - 1]) corrupt(`${order[k]} recorded without ${order[k - 1]}`);
+    if (r.reserved_disposition_revision !== view.revisions[ri]) corrupt(`${order[k]} names another reservation`);
+    if (k >= 2 && !commit) corrupt(`${order[k]} recorded without a source commit`);
+    const dest = i.destination_work.source_id;
+    if (!joins(r.source_commit, i.source_id, commit?.rel ?? "", commit?.rev ?? null, WORK_DISPOSITION_SCHEMA)
+      || !joins(r.target_activation, dest, toPosix(path.join(inbound, "activated.json")), activatedSha, FOLLOWUP_INBOUND_SCHEMA)
+      || !joins(r.target_ack, dest, toPosix(path.join(inbound, "ack.json")), ackSha, FOLLOWUP_INBOUND_SCHEMA)) {
+      corrupt(`${order[k]} evidence does not join the disposition chain`);
+    }
     if (last) {
-      if (r.reserved_disposition_revision !== last.reserved_disposition_revision) corrupt(`${order[i]} names another reservation`);
-      for (const k of ["source_commit", "target_activation", "target_ack"] as const) {
-        if (last[k] !== null && canonicalJson(r[k]) !== canonicalJson(last[k])) corrupt(`${order[i]} rewrote ${k}`);
+      for (const f of ["source_commit", "target_activation", "target_ack"] as const) {
+        if (last[f] !== null && canonicalJson(r[f]) !== canonicalJson(last[f])) corrupt(`${order[k]} rewrote ${f}`);
       }
     }
     last = r;
@@ -634,11 +668,7 @@ export function runTransfer(req: TransferRequest, ports: TransferPorts): Transfe
   at("source_committed_record");
 
   // Target activate: only against the committed source and the same prepared bytes.
-  const activated: InboundActivated = {
-    schema_version: FOLLOWUP_INBOUND_SCHEMA, stage: "activated", operation_id: op, source_id: intent.source_id,
-    prepared_sha256: preparedSha, source_commit_sha256: commitRev, executable: true,
-  };
-  const ab = inboundBytes(activated);
+  const ab = activatedBytesFor(intent, preparedSha, commitRev);
   const act = target(() => {
     if (readOnce(targetRoot, path.join(inbound, "prepared.json")) !== pb.toString("utf8")) return false;
     const r = publishOnce(targetRoot, path.join(inbound, "activated.json"), ab);
@@ -653,8 +683,7 @@ export function runTransfer(req: TransferRequest, ports: TransferPorts): Transfe
   at("activated_record");
 
   // Target ack, then the source retains it.
-  const ack: InboundAck = { schema_version: FOLLOWUP_INBOUND_SCHEMA, stage: "ack", operation_id: op, source_id: intent.source_id, activated_sha256: hashOf(ab) };
-  const kb = inboundBytes(ack);
+  const kb = ackBytesFor(intent, hashOf(ab));
   const acked = target(() => {
     if (readOnce(targetRoot, path.join(inbound, "activated.json")) !== ab.toString("utf8")) return false;
     const r = publishOnce(targetRoot, path.join(inbound, "ack.json"), kb);
@@ -738,15 +767,30 @@ export function reconcileTransfer(opts: { sourceRoot: string; targetRoot: string
   const committed = view.entries.some((e) => e.state === "transferred" && e.operation_id === op);
   const latest = latestStage(ctx);
   const inbound = inboundDir(found.intent.source_id, op);
-  const has = (f: string) => reachable && readOnce(targetRoot, path.join(inbound, f)) !== null;
+  const ti = view.entries.findIndex((e) => e.state === "transferred" && e.operation_id === op);
+  const targetRaw = (f: string): string | null => {
+    if (!reachable) return null;
+    try { return readOnce(targetRoot, path.join(inbound, f)); } catch { return null; }
+  };
+  const preparedOk = (): boolean => {
+    const raw = targetRaw("prepared.json");
+    if (raw === null) return false;
+    if (ti >= 0) return hashOf(raw) === view.entries[ti]!.prepared_sha256;
+    try {
+      const p = JSON.parse(raw) as InboundPrepared;
+      return raw === inboundBytes(p).toString("utf8") && p.stage === "prepared" && p.operation_id === op && p.intent_hash === found.hash
+        && p.reserved_disposition_revision === view.revisions[ri] && p.executable === false;
+    } catch { return false; }
+  };
+  const activatedOk = (): boolean => ti >= 0 && targetRaw("activated.json") === activatedBytesFor(found.intent, view.entries[ti]!.prepared_sha256!, view.revisions[ti]!).toString("utf8");
 
   const order: Array<TransferState | "none"> = ["none", "reserved", "target_prepared", "source_committed", "target_activated", "acknowledged"];
   let rank = latest ? order.indexOf(latest.state) : 0;
   const lift = (s: TransferState) => { rank = Math.max(rank, order.indexOf(s)); };
   if (ri >= 0) lift("reserved");
-  if (ri >= 0 && has("prepared.json")) lift("target_prepared");
+  if (ri >= 0 && preparedOk()) lift("target_prepared");
   if (committed) lift("source_committed");
-  if (committed && has("activated.json")) lift("target_activated");
+  if (committed && activatedOk()) lift("target_activated");
   const journal_state = order[rank]!;
 
   let record = latest;
@@ -757,19 +801,45 @@ export function reconcileTransfer(opts: { sourceRoot: string; targetRoot: string
 
 /**
  * What blocks a clean close of the source work: a reservation in flight, or a
- * committed transfer whose ack the source has not retained. Null when free.
+ * committed transfer whose ack the source has not retained. An ack counts only
+ * when the whole journal verifies and the run controller's keyed journal holds
+ * the ack authorization for this exact intent. Null when free.
  */
-export function transferCloseBlocker(sourceRoot: string, run_id: string, work: Entity): { operation_id: string; state: TransferState } | null {
+export function transferCloseBlocker(sourceRoot: string, run_id: string, work: Entity, controllerPrivateDir: string): { operation_id: string; state: TransferState } | null {
   const root = path.resolve(sourceRoot);
   const view = readWorkDisposition(root, run_id, work);
   const head = view.entries[view.entries.length - 1];
-  if (!head || head.state === "open" || head.state === "released") return null;
+  if (!head || head.state === "open" || head.state === "released" || head.state === "closed") return null;
   const op = head.operation_id!;
   if (head.state === "transfer_reserved") return { operation_id: op, state: "reserved" };
   const found = readIntent(root, run_id, op);
-  if (!found || found.hash !== head.intent_hash) corrupt(`${op} committed without its intent`);
-  const ack = readStage(root, found!.intent, "acknowledged");
-  return ack && disclosed(ack.target_ack) ? null : { operation_id: op, state: "source_committed" };
+  if (!found || found.hash !== head.intent_hash) return corrupt(`${op} committed without its intent`);
+  const ctx: Ctx = { root, targetRoot: root, intent: found.intent, intentHash: found.hash, ports: undefined as unknown as TransferPorts, now: Date.now };
+  const latest = latestStage(ctx);
+  if (!latest || latest.state !== "acknowledged" || !disclosed(latest.target_ack)) return { operation_id: op, state: latest?.state ?? "source_committed" };
+  const journal = readControllerJournal({ privateDir: controllerPrivateDir });
+  const auth = journal.run_id === run_id && journal.source_id === found.intent.source_id ? journal.operations.get(`${op}.ack`) : undefined;
+  if (!auth || auth.action !== "accept" || auth.subject !== `xfer.${found.hash.slice(7, 47)}`) return { operation_id: op, state: "acknowledged" };
+  return null;
+}
+
+/**
+ * Append the terminal `closed` entry for a work closure. Same CAS chain as
+ * reservations, so a close and a reservation can never both win. Idempotent
+ * for the same operation and closure digest.
+ */
+export function closeWorkDisposition(sourceRoot: string, run_id: string, work: Entity, c: { operation_id: string; closure_hash: Hash }):
+  { outcome: "closed" | "already" } | { outcome: "blocked"; state: DispositionState } {
+  const root = path.resolve(sourceRoot);
+  seg(c.operation_id, "operation_id");
+  if (!HASH_RE.test(c.closure_hash)) throw new TransferRefusal("request_invalid", "closure_hash must be a sha256 hash");
+  openWorkDisposition(root, run_id, work);
+  const view = readWorkDisposition(root, run_id, work);
+  const head = view.entries[view.entries.length - 1]!;
+  if (head.state === "closed") return head.operation_id === c.operation_id && head.intent_hash === c.closure_hash ? { outcome: "already" } : { outcome: "blocked", state: "closed" };
+  if (head.state === "transfer_reserved") return { outcome: "blocked", state: head.state };
+  const res = appendDisposition(root, run_id, work, view, { state: "closed", operation_id: c.operation_id, intent_hash: c.closure_hash, destination_work: null, target_root_digest: null, prepared_sha256: null });
+  return res.won ? { outcome: "closed" } : { outcome: "blocked", state: res.existing.state };
 }
 
 /**

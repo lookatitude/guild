@@ -260,8 +260,8 @@ describe("AT16 · transfer crash matrix", () => {
       expect(view === null ? "none" : view.journal_state).toBe(STAGE_AFTER[point]);
       if (view?.record) expectFrozenValid(view.record);
       const reservedYet = !["intent", "reserve_receipt", "reserve_link"].includes(point);
-      if (reservedYet && point !== "ack") expect(transferCloseBlocker(sourceRoot, RUN, WORK)).not.toBeNull();
-      else expect(transferCloseBlocker(sourceRoot, RUN, WORK)).toBeNull();
+      if (reservedYet && point !== "ack") expect(transferCloseBlocker(sourceRoot, RUN, WORK, path.join(tmp, "state"))).not.toBeNull();
+      else expect(transferCloseBlocker(sourceRoot, RUN, WORK, path.join(tmp, "state"))).toBeNull();
 
       // A competing claimant cannot take the source while this one is in flight.
       const rival = runTransfer(req("xfer-b", rev, dest("follow-b")), ports(targetB));
@@ -278,7 +278,7 @@ describe("AT16 · transfer crash matrix", () => {
       expect(done.state).toBe("acknowledged");
       expectFrozenValid(done.record);
       expect([exec(targetA, "xfer-a"), exec(targetB, "xfer-b")]).toEqual([true, false]);
-      expect(transferCloseBlocker(sourceRoot, RUN, WORK)).toBeNull();
+      expect(transferCloseBlocker(sourceRoot, RUN, WORK, path.join(tmp, "state"))).toBeNull();
       expect(readWorkDisposition(sourceRoot, RUN, WORK).entries.map((e) => e.state)).toEqual(["open", "transfer_reserved", "transferred"]);
       // Work lineage survives into the destination.
       const prepared = JSON.parse(fs.readFileSync(path.join(targetA, ".guild", "transfers", "inbound", SRC, "xfer-a", "prepared.json"), "utf8"));
@@ -304,7 +304,7 @@ describe("AT16 · transfer crash matrix", () => {
     const head = readWorkDisposition(sourceRoot, RUN, WORK).head_revision!;
     expect(runTransfer(req("xfer-c", head, dest("follow-c")), ports(targetB)).state).toBe("acknowledged");
     expect([exec(targetA, "xfer-a"), exec(targetB, "xfer-b"), exec(targetB, "xfer-c")]).toEqual([false, false, true]);
-    expect(transferCloseBlocker(sourceRoot, RUN, WORK)).toBeNull();
+    expect(transferCloseBlocker(sourceRoot, RUN, WORK, path.join(tmp, "state"))).toBeNull();
   });
 
   it("abort after the source commit is refused", () => {
@@ -321,7 +321,7 @@ describe("AT16 · transfer crash matrix", () => {
     expect(r.record.source_commit).toBeNull();
     expect(r.record.target_ack).toBeNull();
     expectFrozenValid(r.record);
-    expect(transferCloseBlocker(sourceRoot, RUN, WORK)).not.toBeNull();
+    expect(transferCloseBlocker(sourceRoot, RUN, WORK, path.join(tmp, "state"))).not.toBeNull();
   });
 
   it("negative control: a target lost after the source commit stays recovery_needed, never acknowledged", () => {
@@ -336,7 +336,7 @@ describe("AT16 · transfer crash matrix", () => {
     expectFrozenValid(r.record);
     const v = reconcileTransfer({ sourceRoot, targetRoot: targetA, source_id: SRC, run_id: RUN, operation_id: "xfer-a" });
     expect(v?.record.state).toBe("recovery_needed");
-    expect(transferCloseBlocker(sourceRoot, RUN, WORK)).not.toBeNull();
+    expect(transferCloseBlocker(sourceRoot, RUN, WORK, path.join(tmp, "state"))).not.toBeNull();
   });
 
   it("a fenced (older-epoch) controller cannot advance the source journal", () => {
@@ -352,6 +352,51 @@ describe("AT16 · transfer crash matrix", () => {
     } finally {
       next.close();
     }
+  });
+
+  it("codex r1 F2: a fabricated ack record does not clear the close blocker", () => {
+    const rev = openWorkDisposition(sourceRoot, RUN, WORK);
+    expect(code(() => runTransfer(req("xfer-a", rev), ports(targetA, (p) => { if (p === "source_committed_record") throw new Error("crash"); })))).toBe("other:crash");
+    const dir = path.join(sourceRoot, ".guild", "runs", RUN, "transfers", "xfer-a");
+    const rec = JSON.parse(fs.readFileSync(path.join(dir, "03-source_committed.json"), "utf8"));
+    const fake = { ...rec.source_commit, path: ".guild/transfers/inbound/source-a/xfer-a/ack.json", sha256: H("5"), schema_version: "guild.followup_inbound.v1", source_id: "source-b" };
+    for (const [f, st, ev] of [["04-target_activated.json", "target_activated", { target_activation: { ...fake, path: ".guild/transfers/inbound/source-a/xfer-a/activated.json" }, target_ack: null }], ["05-acknowledged.json", "acknowledged", { target_activation: { ...fake, path: ".guild/transfers/inbound/source-a/xfer-a/activated.json" }, target_ack: fake }]] as const) {
+      fs.writeFileSync(path.join(dir, f), JSON.stringify({ ...rec, ...ev, state: st }));
+    }
+    expect(code(() => transferCloseBlocker(sourceRoot, RUN, WORK, path.join(tmp, "state")))).toBe("journal_corrupt");
+  });
+
+  it("an ack counts only when this run's controller journal authorized it", () => {
+    const rev = openWorkDisposition(sourceRoot, RUN, WORK);
+    expect(runTransfer(req("xfer-a", rev), ports(targetA)).state).toBe("acknowledged");
+    const otherRoot = path.join(tmp, "other");
+    fs.mkdirSync(otherRoot);
+    const other = openRunController({ privateDir: path.join(tmp, "other-state"), durableRoot: otherRoot, source_id: SRC, run_id: RUN, host_id: "host-b", now: () => clock });
+    other.close();
+    expect(transferCloseBlocker(sourceRoot, RUN, WORK, path.join(tmp, "other-state"))).toEqual({ operation_id: "xfer-a", state: "acknowledged" });
+    expect(transferCloseBlocker(sourceRoot, RUN, WORK, path.join(tmp, "state"))).toBeNull();
+  });
+
+  it("codex r1 F3: a symlinked disposition directory fails closed", () => {
+    const rev = openWorkDisposition(sourceRoot, RUN, WORK);
+    expect(code(() => runTransfer(req("xfer-a", rev), ports(targetA, (p) => { if (p === "reserved_record") throw new Error("crash"); })))).toBe("other:crash");
+    const disp = path.join(sourceRoot, ".guild", "runs", RUN, "work", "logical_task", "task-1", "disposition");
+    const empty = path.join(sourceRoot, "empty");
+    fs.mkdirSync(empty);
+    fs.renameSync(disp, path.join(tmp, "moved"));
+    fs.symlinkSync(empty, disp);
+    expect(code(() => transferCloseBlocker(sourceRoot, RUN, WORK, path.join(tmp, "state")))).toBe("storage_refused");
+    expect(exec(targetA, "xfer-a")).toBe(false);
+  });
+
+  it("codex r1 F5: a malformed target activation does not advance reconciliation", () => {
+    const rev = openWorkDisposition(sourceRoot, RUN, WORK);
+    expect(code(() => runTransfer(req("xfer-a", rev), ports(targetA, (p) => { if (p === "source_commit") throw new Error("crash"); })))).toBe("other:crash");
+    fs.writeFileSync(path.join(targetA, ".guild", "transfers", "inbound", SRC, "xfer-a", "activated.json"), "not JSON");
+    expect(reconcileTransfer({ sourceRoot, targetRoot: targetA, source_id: SRC, run_id: RUN, operation_id: "xfer-a" })?.journal_state).toBe("source_committed");
+    expect(exec(targetA, "xfer-a")).toBe(false);
+    // Resume refuses to adopt the foreign activation: the target is in conflict, never committed.
+    expect(runTransfer(req("xfer-a", rev), ports(targetA)).state).toBe("recovery_needed");
   });
 
   it("shareable bytes carry no absolute root path and no secret", () => {

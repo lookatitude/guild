@@ -15,11 +15,11 @@
  * work item disposed and the docs leg, and may not claim a software release.
  */
 import * as path from "node:path";
-import { ControllerRefusal, type RunController, type WriterGrant } from "./run-controller";
+import { ControllerRefusal, readControllerJournal, type RunController, type WriterGrant } from "./run-controller";
 import type { Entity, Evidence, Hash, StackTaskAttemptV1, StateAxes } from "./execution-identity";
 import { d8CloseGate, type D8Input } from "./initiative";
 import { DurableOnceError, canonicalJson, hashOf, publishOnce, readOnce } from "./durable-once";
-import { transferCloseBlocker, type TransferState } from "./followup-transfer";
+import { TransferRefusal, closeWorkDisposition, readWorkDisposition, transferCloseBlocker, type TransferState } from "./followup-transfer";
 
 export const WORK_CLOSURE_SCHEMA = "guild.work_closure.v1" as const;
 
@@ -223,12 +223,48 @@ export interface WorkClosureRecord {
 }
 
 const closurePath = (run_id: string, subject: Entity) => path.join(".guild", "runs", run_id, "closures", subject.kind, `${subject.id}.json`);
-const closureIdentity = (r: WorkClosureRecord) => canonicalJson({ ...r, controller_epoch: null, closed_at: null });
+/** Everything but the epoch, which is checked against the controller receipt instead. */
+const closureDigest = (r: WorkClosureRecord) => hashOf(canonicalJson({ ...r, controller_epoch: null }));
+const closeSubject = (digest: Hash) => `close.${digest.slice(7, 47)}`;
+const CLOSURE_KEYS = ["schema_version", "source_id", "run_id", "subject", "operation_id", "request", "state", "final_attempt_id", "surfaced", "controller_epoch", "closed_at"];
+const AXES: Record<keyof StateAxes, readonly string[]> = {
+  lifecycle: ["created", "active", "suspended", "closed", "unknown"],
+  outcome: ["pending", "succeeded", "failed", "cancelled", "partial", "unknown"],
+  acceptance: ["pending", "verified", "rejected", "not_required", "unknown"],
+  observability: ["complete", "partial", "unavailable"],
+};
+function closureShapeOk(r: unknown): r is WorkClosureRecord {
+  if (typeof r !== "object" || r === null || Array.isArray(r)) return false;
+  const o = r as Record<string, unknown>;
+  if (Object.keys(o).length !== CLOSURE_KEYS.length || !CLOSURE_KEYS.every((k) => k in o)) return false;
+  const st = o.state as Record<string, unknown>;
+  const req = o.request as Record<string, unknown>;
+  return o.schema_version === WORK_CLOSURE_SCHEMA && typeof o.operation_id === "string" && SEG_RE.test(o.operation_id)
+    && typeof st === "object" && st !== null && Object.keys(st).length === 4 && (Object.keys(AXES) as Array<keyof StateAxes>).every((k) => AXES[k].includes(st[k] as string))
+    && typeof req === "object" && req !== null && requestBlockers(req as unknown as CloseRequest).length === 0
+    && (o.final_attempt_id === null || typeof o.final_attempt_id === "string")
+    && Array.isArray(o.surfaced) && o.surfaced.every((x) => typeof x === "string")
+    && Number.isSafeInteger(o.controller_epoch) && typeof o.closed_at === "string" && !Number.isNaN(Date.parse(o.closed_at));
+}
 
-/** Persist one closure per work through the run controller. Idempotent on replay; a different outcome is refused. */
+function refuseFrom(e: unknown): never {
+  if (e instanceof ControllerRefusal) throw new WorkClosureRefusal("controller_refused", `${e.code}: ${e.message}`);
+  if (e instanceof TransferRefusal) throw new WorkClosureRefusal(e.code === "journal_corrupt" ? "closure_corrupt" : "storage_refused", e.message);
+  if (e instanceof DurableOnceError) throw new WorkClosureRefusal("storage_refused", e.message);
+  throw e;
+}
+
+/**
+ * Persist one closure per work through the run controller. The controller
+ * receipt binds the record digest, and a terminal `closed` disposition entry
+ * shares the transfer CAS chain, so a close and a follow-up reservation never
+ * both win. Idempotent on replay; a different outcome is refused.
+ */
 export function recordWorkClose(opts: {
   controller: RunController;
   grant: WriterGrant;
+  /** The controller's private state dir; used to verify closures and transfer acks against the keyed journal. */
+  controllerPrivateDir: string;
   durableRoot: string;
   subject: Entity;
   operation_id: string;
@@ -238,7 +274,7 @@ export function recordWorkClose(opts: {
 }): WorkClosureRecord {
   const { controller, subject } = opts;
   if (!opts.decision.ok) throw new WorkClosureRefusal("decision_refused", opts.decision.blockers.map((b) => `${b.code}:${b.subject}`).join(", "));
-  if (!subject || subject.source_id !== controller.source_id || !["logical_task", "goal"].includes(subject.kind) || !SEG_RE.test(subject.id)) {
+  if (!subject || subject.source_id !== controller.source_id || !["logical_task", "goal"].includes(subject.kind) || !SEG_RE.test(subject.id) || !SEG_RE.test(subject.source_id)) {
     throw new WorkClosureRefusal("request_invalid", "subject must be a logical_task or goal of this source with a path-safe id");
   }
   if (!SEG_RE.test(opts.operation_id) || Number.isNaN(Date.parse(opts.closed_at))) throw new WorkClosureRefusal("request_invalid", "operation_id or closed_at invalid");
@@ -249,42 +285,65 @@ export function recordWorkClose(opts: {
     request: opts.request, state: opts.decision.state, final_attempt_id: opts.decision.final_attempt_id, surfaced: opts.decision.surfaced,
     controller_epoch: controller.epoch, closed_at: new Date(Date.parse(opts.closed_at)).toISOString(),
   };
-  const existing = readWorkClosure(root, run_id, subject);
-  if (existing) {
-    if (existing.operation_id === want.operation_id && closureIdentity(existing) === closureIdentity(want)) return existing;
-    throw new WorkClosureRefusal("closure_conflict", `${subject.kind} ${subject.id} already closed by ${existing.operation_id}`);
-  }
-  // Re-read the transfer journal: the caller's snapshot may be stale.
-  const blocker = transferCloseBlocker(root, run_id, subject);
-  if (blocker) throw new WorkClosureRefusal("transfer_unacknowledged", `follow-up ${blocker.operation_id} is ${blocker.state}`);
+  if (!closureShapeOk(want)) throw new WorkClosureRefusal("request_invalid", "closure record would be malformed");
+  const digest = closureDigest(want);
   try {
-    const digest = hashOf(closureIdentity(want)).slice(7, 47);
-    controller.control(opts.grant, { operation_id: opts.operation_id, action: "close", subject: `close.${digest}` });
+    const existing = readWorkClosure(root, run_id, subject, opts.controllerPrivateDir);
+    if (existing) {
+      if (existing.operation_id === want.operation_id && canonicalJson({ ...existing, controller_epoch: null, closed_at: null }) === canonicalJson({ ...want, controller_epoch: null, closed_at: null })) return existing;
+      throw new WorkClosureRefusal("closure_conflict", `${subject.kind} ${subject.id} already closed by ${existing.operation_id}`);
+    }
+    // Re-read the transfer journal: the caller's snapshot may be stale.
+    const blocker = transferCloseBlocker(root, run_id, subject, opts.controllerPrivateDir);
+    if (blocker) throw new WorkClosureRefusal("transfer_unacknowledged", `follow-up ${blocker.operation_id} is ${blocker.state}`);
+    const receipt = controller.control(opts.grant, { operation_id: opts.operation_id, action: "close", subject: closeSubject(digest) });
+    const rec = { ...want, controller_epoch: receipt.controller_epoch };
+    const sealed = closeWorkDisposition(root, run_id, subject, { operation_id: opts.operation_id, closure_hash: digest });
+    if (sealed.outcome === "blocked") {
+      throw sealed.state === "closed"
+        ? new WorkClosureRefusal("closure_conflict", `${subject.kind} ${subject.id} closed concurrently`)
+        : new WorkClosureRefusal("transfer_unacknowledged", `disposition is ${sealed.state}`);
+    }
+    const r = publishOnce(root, closurePath(run_id, subject), Buffer.from(`${JSON.stringify(rec, null, 2)}\n`, "utf8"));
+    if (r.created) return rec;
+    const landed = readWorkClosure(root, run_id, subject, opts.controllerPrivateDir);
+    if (landed && landed.operation_id === rec.operation_id && closureDigest(landed) === digest) return landed;
+    throw new WorkClosureRefusal("closure_conflict", `${subject.kind} ${subject.id} closed concurrently`);
   } catch (e) {
-    if (e instanceof ControllerRefusal) throw new WorkClosureRefusal("controller_refused", `${e.code}: ${e.message}`);
-    throw e;
+    if (e instanceof WorkClosureRefusal) throw e;
+    return refuseFrom(e);
   }
-  let r: ReturnType<typeof publishOnce>;
-  try {
-    r = publishOnce(root, closurePath(run_id, subject), Buffer.from(`${JSON.stringify(want, null, 2)}\n`, "utf8"));
-  } catch (e) {
-    if (e instanceof DurableOnceError) throw new WorkClosureRefusal("storage_refused", e.message);
-    throw e;
-  }
-  if (r.created) return want;
-  const landed = readWorkClosure(root, run_id, subject);
-  if (landed && landed.operation_id === want.operation_id && closureIdentity(landed) === closureIdentity(want)) return landed;
-  throw new WorkClosureRefusal("closure_conflict", `${subject.kind} ${subject.id} closed concurrently`);
 }
 
-export function readWorkClosure(durableRoot: string, run_id: string, subject: Entity): WorkClosureRecord | null {
+/**
+ * Read a closure and verify it: full shape, the controller receipt that binds
+ * its digest and epoch, and the terminal `closed` disposition entry. Null when
+ * the work has no closure; anything that does not verify refuses.
+ */
+export function readWorkClosure(durableRoot: string, run_id: string, subject: Entity, controllerPrivateDir: string): WorkClosureRecord | null {
   if (!SEG_RE.test(run_id) || !subject || !SEG_RE.test(subject.id) || !["logical_task", "goal"].includes(subject.kind)) return null;
-  const raw = readOnce(path.resolve(durableRoot), closurePath(run_id, subject));
+  const root = path.resolve(durableRoot);
+  let raw: string | null;
+  try { raw = readOnce(root, closurePath(run_id, subject)); } catch (e) { return refuseFrom(e); }
   if (raw === null) return null;
-  let rec: WorkClosureRecord;
-  try { rec = JSON.parse(raw) as WorkClosureRecord; } catch { throw new WorkClosureRefusal("closure_corrupt", "closure record is not JSON"); }
-  if (rec.schema_version !== WORK_CLOSURE_SCHEMA || rec.run_id !== run_id || canonicalJson(rec.subject) !== canonicalJson(subject)) {
-    throw new WorkClosureRefusal("closure_corrupt", "closure record identity mismatch");
+  let rec: unknown;
+  try { rec = JSON.parse(raw); } catch { throw new WorkClosureRefusal("closure_corrupt", "closure record is not JSON"); }
+  if (!closureShapeOk(rec) || rec.run_id !== run_id || canonicalJson(rec.subject) !== canonicalJson(subject)) {
+    throw new WorkClosureRefusal("closure_corrupt", "closure record shape or identity mismatch");
   }
+  const digest = closureDigest(rec);
+  let journal: ReturnType<typeof readControllerJournal>;
+  try { journal = readControllerJournal({ privateDir: controllerPrivateDir }); } catch (e) { return refuseFrom(e); }
+  const bound = journal.run_id === run_id && journal.source_id === rec.source_id ? journal.operations.get(rec.operation_id) : undefined;
+  if (!bound || bound.action !== "close" || bound.subject !== closeSubject(digest) || bound.controller_epoch !== rec.controller_epoch) {
+    throw new WorkClosureRefusal("closure_corrupt", "closure record is not bound by the run controller");
+  }
+  let sealed = false;
+  try {
+    const view = readWorkDisposition(root, run_id, subject);
+    const head = view.entries[view.entries.length - 1];
+    sealed = !!head && head.state === "closed" && head.operation_id === rec.operation_id && head.intent_hash === digest;
+  } catch (e) { return refuseFrom(e); }
+  if (!sealed) throw new WorkClosureRefusal("closure_corrupt", "closure record has no matching closed disposition");
   return rec;
 }
