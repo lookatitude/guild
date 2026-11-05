@@ -50,44 +50,44 @@ function isPlainObject(value) {
 function isStringArray(value) {
   return Array.isArray(value) && value.every((item) => typeof item === "string" && item.length > 0);
 }
-function validateManifest(value, relPath2) {
+function validateManifest(value, relPath3) {
   const errors = [];
   if (!isPlainObject(value)) {
-    return { ok: false, errors: [`${relPath2}: manifest must be an object`] };
+    return { ok: false, errors: [`${relPath3}: manifest must be an object`] };
   }
   if (value.schema_version !== MODULE_MANIFEST_SCHEMA_VERSION) {
-    errors.push(`${relPath2}: schema_version must be ${MODULE_MANIFEST_SCHEMA_VERSION}`);
+    errors.push(`${relPath3}: schema_version must be ${MODULE_MANIFEST_SCHEMA_VERSION}`);
   }
   if (typeof value.id !== "string" || value.id.trim() === "") {
-    errors.push(`${relPath2}: id must be a non-empty string`);
+    errors.push(`${relPath3}: id must be a non-empty string`);
   }
   if (typeof value.title !== "string" || value.title.trim() === "") {
-    errors.push(`${relPath2}: title must be a non-empty string`);
+    errors.push(`${relPath3}: title must be a non-empty string`);
   }
   if (!["capability", "substrate", "operator", "build"].includes(String(value.kind))) {
-    errors.push(`${relPath2}: kind must be capability|substrate|operator|build`);
+    errors.push(`${relPath3}: kind must be capability|substrate|operator|build`);
   }
   if (!["workflow-backed", "resource-only"].includes(String(value.implementation_mode))) {
-    errors.push(`${relPath2}: implementation_mode must be workflow-backed|resource-only`);
+    errors.push(`${relPath3}: implementation_mode must be workflow-backed|resource-only`);
   }
   if (typeof value.description !== "string" || value.description.trim() === "") {
-    errors.push(`${relPath2}: description must be a non-empty string`);
+    errors.push(`${relPath3}: description must be a non-empty string`);
   }
   if (value.depends_on !== void 0 && !isStringArray(value.depends_on)) {
-    errors.push(`${relPath2}: depends_on must be a string array when present`);
+    errors.push(`${relPath3}: depends_on must be a string array when present`);
   }
   if (value.lifecycle_slots !== void 0 && !isStringArray(value.lifecycle_slots)) {
-    errors.push(`${relPath2}: lifecycle_slots must be a string array when present`);
+    errors.push(`${relPath3}: lifecycle_slots must be a string array when present`);
   }
   if (!isPlainObject(value.owns)) {
-    errors.push(`${relPath2}: owns must be an object`);
+    errors.push(`${relPath3}: owns must be an object`);
   } else {
     const allowed = new Set(Object.values(CATEGORY_KEYS).flatMap((keys) => [keys.ids, keys.prefixes]));
     for (const key of Object.keys(value.owns)) {
       if (!allowed.has(key)) {
-        errors.push(`${relPath2}: owns.${key} is not a supported ownership selector`);
+        errors.push(`${relPath3}: owns.${key} is not a supported ownership selector`);
       } else if (!isStringArray(value.owns[key])) {
-        errors.push(`${relPath2}: owns.${key} must be a string array`);
+        errors.push(`${relPath3}: owns.${key} must be a string array`);
       }
     }
   }
@@ -114,33 +114,33 @@ function moduleManifestFiles(root) {
 }
 function loadModuleManifests(root) {
   const manifests = [];
-  for (const { id: id2, path: manifestPath } of moduleManifestFiles(root)) {
-    const relPath2 = path.relative(root, manifestPath).split(path.sep).join("/");
+  for (const { id: id3, path: manifestPath } of moduleManifestFiles(root)) {
+    const relPath3 = path.relative(root, manifestPath).split(path.sep).join("/");
     let parsed;
     try {
       parsed = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
     } catch (err) {
-      throw new Error(`${relPath2}: cannot parse JSON: ${String(err)}`);
+      throw new Error(`${relPath3}: cannot parse JSON: ${String(err)}`);
     }
-    const validation = validateManifest(parsed, relPath2);
+    const validation = validateManifest(parsed, relPath3);
     if (!validation.ok) {
       throw new Error(validation.errors.join("\n"));
     }
-    if (parsed.id !== id2) {
-      throw new Error(`${relPath2}: id "${parsed.id}" does not match the file name "${id2}"`);
+    if (parsed.id !== id3) {
+      throw new Error(`${relPath3}: id "${parsed.id}" does not match the file name "${id3}"`);
     }
     manifests.push(parsed);
   }
   return manifests;
 }
-function ownsId(manifest, category, id2) {
+function ownsId(manifest, category, id3) {
   const keys = CATEGORY_KEYS[category];
   const exact = manifest.owns[keys.ids] ?? [];
   const prefixes = manifest.owns[keys.prefixes] ?? [];
-  return exact.includes(id2) || prefixes.some((prefix) => id2.startsWith(prefix));
+  return exact.includes(id3) || prefixes.some((prefix) => id3.startsWith(prefix));
 }
-function ownersFor(manifests, category, id2) {
-  return manifests.filter((manifest) => ownsId(manifest, category, id2)).map((manifest) => manifest.id);
+function ownersFor(manifests, category, id3) {
+  return manifests.filter((manifest) => ownsId(manifest, category, id3)).map((manifest) => manifest.id);
 }
 function entriesFor(inventory, category) {
   return inventory[category];
@@ -947,8 +947,8 @@ var require_null = __commonJS({
     function constructYamlNull() {
       return null;
     }
-    function isNull(object3) {
-      return object3 === null;
+    function isNull(object4) {
+      return object4 === null;
     }
     module2.exports = new Type("tag:yaml.org,2002:null", {
       kind: "scalar",
@@ -990,8 +990,8 @@ var require_bool = __commonJS({
     function constructYamlBoolean(data) {
       return data === "true" || data === "True" || data === "TRUE";
     }
-    function isBoolean(object3) {
-      return Object.prototype.toString.call(object3) === "[object Boolean]";
+    function isBoolean(object4) {
+      return Object.prototype.toString.call(object4) === "[object Boolean]";
     }
     module2.exports = new Type("tag:yaml.org,2002:bool", {
       kind: "scalar",
@@ -999,14 +999,14 @@ var require_bool = __commonJS({
       construct: constructYamlBoolean,
       predicate: isBoolean,
       represent: {
-        lowercase: function(object3) {
-          return object3 ? "true" : "false";
+        lowercase: function(object4) {
+          return object4 ? "true" : "false";
         },
-        uppercase: function(object3) {
-          return object3 ? "TRUE" : "FALSE";
+        uppercase: function(object4) {
+          return object4 ? "TRUE" : "FALSE";
         },
-        camelcase: function(object3) {
-          return object3 ? "True" : "False";
+        camelcase: function(object4) {
+          return object4 ? "True" : "False";
         }
       },
       defaultStyle: "lowercase"
@@ -1097,8 +1097,8 @@ var require_int = __commonJS({
     function constructYamlInteger(data) {
       return parseYamlInteger(data);
     }
-    function isInteger(object3) {
-      return Object.prototype.toString.call(object3) === "[object Number]" && (object3 % 1 === 0 && !common.isNegativeZero(object3));
+    function isInteger(object4) {
+      return Object.prototype.toString.call(object4) === "[object Number]" && (object4 % 1 === 0 && !common.isNegativeZero(object4));
     }
     module2.exports = new Type("tag:yaml.org,2002:int", {
       kind: "scalar",
@@ -1167,8 +1167,8 @@ var require_float = __commonJS({
       return sign * parseFloat(value, 10);
     }
     var SCIENTIFIC_WITHOUT_DOT = /^[-+]?[0-9]+e/;
-    function representYamlFloat(object3, style) {
-      if (isNaN(object3)) {
+    function representYamlFloat(object4, style) {
+      if (isNaN(object4)) {
         switch (style) {
           case "lowercase":
             return ".nan";
@@ -1177,7 +1177,7 @@ var require_float = __commonJS({
           case "camelcase":
             return ".NaN";
         }
-      } else if (Number.POSITIVE_INFINITY === object3) {
+      } else if (Number.POSITIVE_INFINITY === object4) {
         switch (style) {
           case "lowercase":
             return ".inf";
@@ -1186,7 +1186,7 @@ var require_float = __commonJS({
           case "camelcase":
             return ".Inf";
         }
-      } else if (Number.NEGATIVE_INFINITY === object3) {
+      } else if (Number.NEGATIVE_INFINITY === object4) {
         switch (style) {
           case "lowercase":
             return "-.inf";
@@ -1195,14 +1195,14 @@ var require_float = __commonJS({
           case "camelcase":
             return "-.Inf";
         }
-      } else if (common.isNegativeZero(object3)) {
+      } else if (common.isNegativeZero(object4)) {
         return "-0.0";
       }
-      const res = object3.toString(10);
+      const res = object4.toString(10);
       return SCIENTIFIC_WITHOUT_DOT.test(res) ? res.replace("e", ".e") : res;
     }
-    function isFloat(object3) {
-      return Object.prototype.toString.call(object3) === "[object Number]" && (object3 % 1 !== 0 || common.isNegativeZero(object3));
+    function isFloat(object4) {
+      return Object.prototype.toString.call(object4) === "[object Number]" && (object4 % 1 !== 0 || common.isNegativeZero(object4));
     }
     module2.exports = new Type("tag:yaml.org,2002:float", {
       kind: "scalar",
@@ -1287,8 +1287,8 @@ var require_timestamp = __commonJS({
       if (delta) date.setTime(date.getTime() - delta);
       return date;
     }
-    function representYamlTimestamp(object3) {
-      return object3.toISOString();
+    function representYamlTimestamp(object4) {
+      return object4.toISOString();
     }
     module2.exports = new Type("tag:yaml.org,2002:timestamp", {
       kind: "scalar",
@@ -1361,10 +1361,10 @@ var require_binary = __commonJS({
       }
       return new Uint8Array(result8);
     }
-    function representYamlBinary(object3) {
+    function representYamlBinary(object4) {
       let result8 = "";
       let bits = 0;
-      const max = object3.length;
+      const max = object4.length;
       const map = BASE64_MAP;
       for (let idx = 0; idx < max; idx++) {
         if (idx % 3 === 0 && idx) {
@@ -1373,7 +1373,7 @@ var require_binary = __commonJS({
           result8 += map[bits >> 6 & 63];
           result8 += map[bits & 63];
         }
-        bits = (bits << 8) + object3[idx];
+        bits = (bits << 8) + object4[idx];
       }
       const tail = max % 3;
       if (tail === 0) {
@@ -1417,9 +1417,9 @@ var require_omap = __commonJS({
     function resolveYamlOmap(data) {
       if (data === null) return true;
       const objectKeys = {};
-      const object3 = data;
-      for (let index = 0, length = object3.length; index < length; index += 1) {
-        const pair = object3[index];
+      const object4 = data;
+      for (let index = 0, length = object4.length; index < length; index += 1) {
+        const pair = object4[index];
         let pairHasKey = false;
         if (_toString.call(pair) !== "[object Object]") return false;
         let pairKey;
@@ -1454,10 +1454,10 @@ var require_pairs = __commonJS({
     var _toString = Object.prototype.toString;
     function resolveYamlPairs(data) {
       if (data === null) return true;
-      const object3 = data;
-      const result8 = new Array(object3.length);
-      for (let index = 0, length = object3.length; index < length; index += 1) {
-        const pair = object3[index];
+      const object4 = data;
+      const result8 = new Array(object4.length);
+      for (let index = 0, length = object4.length; index < length; index += 1) {
+        const pair = object4[index];
         if (_toString.call(pair) !== "[object Object]") return false;
         const keys = Object.keys(pair);
         if (keys.length !== 1) return false;
@@ -1467,10 +1467,10 @@ var require_pairs = __commonJS({
     }
     function constructYamlPairs(data) {
       if (data === null) return [];
-      const object3 = data;
-      const result8 = new Array(object3.length);
-      for (let index = 0, length = object3.length; index < length; index += 1) {
-        const pair = object3[index];
+      const object4 = data;
+      const result8 = new Array(object4.length);
+      for (let index = 0, length = object4.length; index < length; index += 1) {
+        const pair = object4[index];
         const keys = Object.keys(pair);
         result8[index] = [keys[0], pair[keys[0]]];
       }
@@ -1492,10 +1492,10 @@ var require_set = __commonJS({
     var _hasOwnProperty = Object.prototype.hasOwnProperty;
     function resolveYamlSet(data) {
       if (data === null) return true;
-      const object3 = data;
-      for (const key in object3) {
-        if (_hasOwnProperty.call(object3, key)) {
-          if (object3[key] !== null) return false;
+      const object4 = data;
+      for (const key in object4) {
+        if (_hasOwnProperty.call(object4, key)) {
+          if (object4[key] !== null) return false;
         }
       }
       return true;
@@ -1645,16 +1645,16 @@ var require_loader = __commonJS({
         (c - 65536 & 1023) + 56320
       );
     }
-    function setProperty(object3, key, value) {
+    function setProperty(object4, key, value) {
       if (key === "__proto__") {
-        Object.defineProperty(object3, key, {
+        Object.defineProperty(object4, key, {
           configurable: true,
           enumerable: true,
           writable: true,
           value
         });
       } else {
-        object3[key] = value;
+        object4[key] = value;
       }
     }
     var simpleEscapeCheck = new Array(256);
@@ -3062,10 +3062,10 @@ var require_dumper = __commonJS({
     function generateNextLine(state, level) {
       return "\n" + common.repeat(" ", state.indent * level);
     }
-    function testImplicitResolving(state, str3) {
+    function testImplicitResolving(state, str4) {
       for (let index = 0, length = state.implicitTypes.length; index < length; index += 1) {
         const type = state.implicitTypes[index];
-        if (type.resolve(str3)) {
+        if (type.resolve(str4)) {
           return true;
         }
       }
@@ -3288,13 +3288,13 @@ var require_dumper = __commonJS({
       }
       return result8;
     }
-    function writeFlowSequence(state, level, object3) {
+    function writeFlowSequence(state, level, object4) {
       let _result = "";
       const _tag = state.tag;
-      for (let index = 0, length = object3.length; index < length; index += 1) {
-        let value = object3[index];
+      for (let index = 0, length = object4.length; index < length; index += 1) {
+        let value = object4[index];
         if (state.replacer) {
-          value = state.replacer.call(object3, String(index), value);
+          value = state.replacer.call(object4, String(index), value);
         }
         if (writeNode(state, level, value, false, false) || typeof value === "undefined" && writeNode(state, level, null, false, false)) {
           if (_result !== "") _result += "," + (!state.condenseFlow ? " " : "");
@@ -3304,13 +3304,13 @@ var require_dumper = __commonJS({
       state.tag = _tag;
       state.dump = "[" + _result + "]";
     }
-    function writeBlockSequence(state, level, object3, compact) {
+    function writeBlockSequence(state, level, object4, compact) {
       let _result = "";
       const _tag = state.tag;
-      for (let index = 0, length = object3.length; index < length; index += 1) {
-        let value = object3[index];
+      for (let index = 0, length = object4.length; index < length; index += 1) {
+        let value = object4[index];
         if (state.replacer) {
-          value = state.replacer.call(object3, String(index), value);
+          value = state.replacer.call(object4, String(index), value);
         }
         if (writeNode(state, level + 1, value, true, true, false, true) || typeof value === "undefined" && writeNode(state, level + 1, null, true, true, false, true)) {
           if (!compact || _result !== "") {
@@ -3327,18 +3327,18 @@ var require_dumper = __commonJS({
       state.tag = _tag;
       state.dump = _result || "[]";
     }
-    function writeFlowMapping(state, level, object3) {
+    function writeFlowMapping(state, level, object4) {
       let _result = "";
       const _tag = state.tag;
-      const objectKeyList = Object.keys(object3);
+      const objectKeyList = Object.keys(object4);
       for (let index = 0, length = objectKeyList.length; index < length; index += 1) {
         let pairBuffer = "";
         if (_result !== "") pairBuffer += ", ";
         if (state.condenseFlow) pairBuffer += '"';
         const objectKey = objectKeyList[index];
-        let objectValue = object3[objectKey];
+        let objectValue = object4[objectKey];
         if (state.replacer) {
-          objectValue = state.replacer.call(object3, objectKey, objectValue);
+          objectValue = state.replacer.call(object4, objectKey, objectValue);
         }
         if (!writeNode(state, level, objectKey, false, false)) {
           continue;
@@ -3354,10 +3354,10 @@ var require_dumper = __commonJS({
       state.tag = _tag;
       state.dump = "{" + _result + "}";
     }
-    function writeBlockMapping(state, level, object3, compact) {
+    function writeBlockMapping(state, level, object4, compact) {
       let _result = "";
       const _tag = state.tag;
-      const objectKeyList = Object.keys(object3);
+      const objectKeyList = Object.keys(object4);
       if (state.sortKeys === true) {
         objectKeyList.sort();
       } else if (typeof state.sortKeys === "function") {
@@ -3371,9 +3371,9 @@ var require_dumper = __commonJS({
           pairBuffer += generateNextLine(state, level);
         }
         const objectKey = objectKeyList[index];
-        let objectValue = object3[objectKey];
+        let objectValue = object4[objectKey];
         if (state.replacer) {
-          objectValue = state.replacer.call(object3, objectKey, objectValue);
+          objectValue = state.replacer.call(object4, objectKey, objectValue);
         }
         if (!writeNode(state, level + 1, objectKey, true, true, true)) {
           continue;
@@ -3404,14 +3404,14 @@ var require_dumper = __commonJS({
       state.tag = _tag;
       state.dump = _result || "{}";
     }
-    function detectType(state, object3, explicit) {
+    function detectType(state, object4, explicit) {
       const typeList = explicit ? state.explicitTypes : state.implicitTypes;
       for (let index = 0, length = typeList.length; index < length; index += 1) {
         const type = typeList[index];
-        if ((type.instanceOf || type.predicate) && (!type.instanceOf || typeof object3 === "object" && object3 instanceof type.instanceOf) && (!type.predicate || type.predicate(object3))) {
+        if ((type.instanceOf || type.predicate) && (!type.instanceOf || typeof object4 === "object" && object4 instanceof type.instanceOf) && (!type.predicate || type.predicate(object4))) {
           if (explicit) {
             if (type.multi && type.representName) {
-              state.tag = type.representName(object3);
+              state.tag = type.representName(object4);
             } else {
               state.tag = type.tag;
             }
@@ -3422,9 +3422,9 @@ var require_dumper = __commonJS({
             const style = state.styleMap[type.tag] || type.defaultStyle;
             let _result;
             if (_toString.call(type.represent) === "[object Function]") {
-              _result = type.represent(object3, style);
+              _result = type.represent(object4, style);
             } else if (_hasOwnProperty.call(type.represent, style)) {
-              _result = type.represent[style](object3, style);
+              _result = type.represent[style](object4, style);
             } else {
               throw new YAMLException("!<" + type.tag + '> tag resolver accepts not "' + style + '" style');
             }
@@ -3435,11 +3435,11 @@ var require_dumper = __commonJS({
       }
       return false;
     }
-    function writeNode(state, level, object3, block, compact, iskey, isblockseq) {
+    function writeNode(state, level, object4, block, compact, iskey, isblockseq) {
       state.tag = null;
-      state.dump = object3;
-      if (!detectType(state, object3, false)) {
-        detectType(state, object3, true);
+      state.dump = object4;
+      if (!detectType(state, object4, false)) {
+        detectType(state, object4, true);
       }
       const type = _toString.call(state.dump);
       const inblock = block;
@@ -3450,7 +3450,7 @@ var require_dumper = __commonJS({
       let duplicateIndex;
       let duplicate;
       if (objectOrArray) {
-        duplicateIndex = state.duplicates.indexOf(object3);
+        duplicateIndex = state.duplicates.indexOf(object4);
         duplicate = duplicateIndex !== -1;
       }
       if (state.tag !== null && state.tag !== "?" || duplicate || state.indent !== 2 && level > 0) {
@@ -3516,33 +3516,33 @@ var require_dumper = __commonJS({
       }
       return true;
     }
-    function getDuplicateReferences(object3, state) {
+    function getDuplicateReferences(object4, state) {
       const objects = [];
       const duplicatesIndexes = [];
-      inspectNode(object3, objects, duplicatesIndexes);
+      inspectNode(object4, objects, duplicatesIndexes);
       const length = duplicatesIndexes.length;
       for (let index = 0; index < length; index += 1) {
         state.duplicates.push(objects[duplicatesIndexes[index]]);
       }
       state.usedDuplicates = new Array(length);
     }
-    function inspectNode(object3, objects, duplicatesIndexes) {
-      if (object3 !== null && typeof object3 === "object") {
-        const index = objects.indexOf(object3);
+    function inspectNode(object4, objects, duplicatesIndexes) {
+      if (object4 !== null && typeof object4 === "object") {
+        const index = objects.indexOf(object4);
         if (index !== -1) {
           if (duplicatesIndexes.indexOf(index) === -1) {
             duplicatesIndexes.push(index);
           }
         } else {
-          objects.push(object3);
-          if (Array.isArray(object3)) {
-            for (let i = 0, length = object3.length; i < length; i += 1) {
-              inspectNode(object3[i], objects, duplicatesIndexes);
+          objects.push(object4);
+          if (Array.isArray(object4)) {
+            for (let i = 0, length = object4.length; i < length; i += 1) {
+              inspectNode(object4[i], objects, duplicatesIndexes);
             }
           } else {
-            const objectKeyList = Object.keys(object3);
+            const objectKeyList = Object.keys(object4);
             for (let i = 0, length = objectKeyList.length; i < length; i += 1) {
-              inspectNode(object3[objectKeyList[i]], objects, duplicatesIndexes);
+              inspectNode(object4[objectKeyList[i]], objects, duplicatesIndexes);
             }
           }
         }
@@ -3607,10 +3607,10 @@ var require_js_yaml = __commonJS({
 
 // src/domains/kernel/yaml-loader.ts
 function pluginLocalScriptsRoots() {
-  const own2 = findPluginRoot(__dirname);
+  const own3 = findPluginRoot(__dirname);
   return [
     // The package this code shipped in, whatever the bundle depth (runtime/scripts).
-    ...own2 === null ? [] : [path3.join(own2, "scripts")],
+    ...own3 === null ? [] : [path3.join(own3, "scripts")],
     // Source TS layout (src/domains/<id>) and the bundled agent-team hook layout
     // (hooks/agent-team/dist) both sit three levels under plugin/.
     path3.resolve(__dirname, "..", "..", "..", "scripts"),
@@ -5563,8 +5563,8 @@ function hostKindToRegistryId(hk) {
   const s = String(hk);
   const normalized = normalizeHostId(s);
   if (normalized) return normalized;
-  for (const { prefix, id: id2 } of PREFIX_COLLAPSE) {
-    if (s.startsWith(prefix)) return id2;
+  for (const { prefix, id: id3 } of PREFIX_COLLAPSE) {
+    if (s.startsWith(prefix)) return id3;
   }
   return null;
 }
@@ -5573,8 +5573,8 @@ function normalizeHostId(value) {
   if (HOST_ID_SET2.has(s)) return s;
   return LEGACY_HOST_ALIASES[s] ?? null;
 }
-function registryIdToCanonicalHostKind(id2) {
-  switch (id2) {
+function registryIdToCanonicalHostKind(id3) {
+  switch (id3) {
     case "claude-code-cli":
       return "claude";
     case "codex-cli":
@@ -5935,27 +5935,27 @@ var init_host_profiles_validate = __esm({
 function deriveCapabilityRow(row) {
   return row.capabilities;
 }
-function getRegistryEntry(id2) {
-  return HOST_REGISTRY_ROWS[id2] ?? null;
+function getRegistryEntry(id3) {
+  return HOST_REGISTRY_ROWS[id3] ?? null;
 }
 function getRegistryEntryForHostKind(hk) {
-  const id2 = hostKindToRegistryId(hk);
-  return id2 === null ? null : getRegistryEntry(id2);
+  const id3 = hostKindToRegistryId(hk);
+  return id3 === null ? null : getRegistryEntry(id3);
 }
 function resultAdapterForFamily(family) {
   return FAMILY_TO_ROW[family]?.result_adapter ?? false;
 }
-function resultAdapterForHostId(id2) {
-  return getRegistryEntry(id2)?.result_adapter ?? false;
+function resultAdapterForHostId(id3) {
+  return getRegistryEntry(id3)?.result_adapter ?? false;
 }
 function resultAdapterForHostKind(hk) {
   return getRegistryEntryForHostKind(hk)?.result_adapter ?? false;
 }
-function dispatchSelectableForHostId(id2) {
-  return getRegistryEntry(id2)?.dispatch_selectable ?? false;
+function dispatchSelectableForHostId(id3) {
+  return getRegistryEntry(id3)?.dispatch_selectable ?? false;
 }
-function installabilityForHostId(id2) {
-  return getRegistryEntry(id2)?.installability ?? "none";
+function installabilityForHostId(id3) {
+  return getRegistryEntry(id3)?.installability ?? "none";
 }
 var DERIVED_HOST_CAPABILITY_ROWS, FAMILY_TO_ROW;
 var init_host_registry = __esm({
@@ -5964,8 +5964,8 @@ var init_host_registry = __esm({
     init_host_id_namespace();
     DERIVED_HOST_CAPABILITY_ROWS = (() => {
       const out = {};
-      for (const id2 of HOST_IDS) {
-        out[id2] = deriveCapabilityRow(HOST_REGISTRY_ROWS[id2]);
+      for (const id3 of HOST_IDS) {
+        out[id3] = deriveCapabilityRow(HOST_REGISTRY_ROWS[id3]);
       }
       out["claude"] = out["claude-code-cli"];
       out["codex"] = out["codex-cli"];
@@ -5976,8 +5976,8 @@ var init_host_registry = __esm({
     })();
     FAMILY_TO_ROW = (() => {
       const out = {};
-      for (const id2 of HOST_IDS) {
-        const row = HOST_REGISTRY_ROWS[id2];
+      for (const id3 of HOST_IDS) {
+        const row = HOST_REGISTRY_ROWS[id3];
         const existing = out[row.family];
         if (!existing || !existing.result_adapter && row.result_adapter) {
           out[row.family] = row;
@@ -6953,12 +6953,12 @@ function resolveMainRepoRoot(cwd) {
   return path12.resolve(cwd);
 }
 function sha256Files(filePaths) {
-  const hash2 = (0, import_node_crypto.createHash)("sha256");
+  const hash3 = (0, import_node_crypto.createHash)("sha256");
   for (const p of [...filePaths].sort()) {
-    hash2.update(p + "\n");
-    hash2.update(fs10.readFileSync(p));
+    hash3.update(p + "\n");
+    hash3.update(fs10.readFileSync(p));
   }
-  return hash2.digest("hex");
+  return hash3.digest("hex");
 }
 function getFingerprint(db, tableName) {
   try {
@@ -7034,9 +7034,9 @@ function ensureWikiFtsIndex(cwd, config) {
       for (const mdFile of mdFiles) {
         try {
           const content = fs10.readFileSync(mdFile, "utf8");
-          const relPath2 = path12.relative(repoRoot, mdFile);
+          const relPath3 = path12.relative(repoRoot, mdFile);
           const title = extractTitle(content, mdFile);
-          ins.run(relPath2, title, content);
+          ins.run(relPath3, title, content);
         } catch {
         }
       }
@@ -7449,7 +7449,7 @@ function scopedPaths(guildDir, _scope, configFile) {
       if (head === "sources") return durable("durable-record", DURABLE_SUBTREES.sources, ...rest);
       return durable("canonical", DURABLE_SUBTREES.definitionsRoot, ...parts);
     },
-    initiative: (status, id2) => durable("durable-record", DURABLE_SUBTREES.initiatives, status, id2),
+    initiative: (status, id3) => durable("durable-record", DURABLE_SUBTREES.initiatives, status, id3),
     runRecord: (runId, ...segments) => durable("durable-record", DURABLE_SUBTREES.runs, runId, ...segments),
     artifact: (...segments) => durable("durable-record", DURABLE_SUBTREES.artifacts, ...segments)
   };
@@ -7457,8 +7457,8 @@ function scopedPaths(guildDir, _scope, configFile) {
 function detectProfile(cwd, activeRoot) {
   const d = discoverGuild(cwd);
   if (d.level === "workspace") {
-    const own2 = path15.join(activeRoot, ".guild", DURABLE_SUBTREES.knowledge);
-    return fs12.existsSync(own2) ? "hybrid" : "workspace-only";
+    const own3 = path15.join(activeRoot, ".guild", DURABLE_SUBTREES.knowledge);
+    return fs12.existsSync(own3) ? "hybrid" : "workspace-only";
   }
   return d.workspaceRoot ? "child" : "standalone";
 }
@@ -7784,8 +7784,8 @@ function splitInlineValue(rawValue) {
     const rest = text.slice(i + 1).trim();
     return { value: text.slice(1, i), comment: rest.startsWith("#") ? rest : null };
   }
-  const hash2 = rawValue.search(/[ \t]#/);
-  if (hash2 >= 0) return { value: rawValue.slice(0, hash2).trim(), comment: rawValue.slice(hash2 + 1).trim() };
+  const hash3 = rawValue.search(/[ \t]#/);
+  if (hash3 >= 0) return { value: rawValue.slice(0, hash3).trim(), comment: rawValue.slice(hash3 + 1).trim() };
   return { value: rawValue.trim(), comment: null };
 }
 function scanLines(lines) {
@@ -8391,25 +8391,25 @@ var init_upgrade_steps = __esm({
       affects: [".guild/loops", ".guild/workflows", ".guild/agents/registry.yaml", ".guild/skills/registry.yaml"],
       apply(ctx) {
         const changed = [];
-        for (const relPath2 of DERIVED_REGISTRIES) {
-          const abs = path16.join(ctx.guildDir, relPath2);
+        for (const relPath3 of DERIVED_REGISTRIES) {
+          const abs = path16.join(ctx.guildDir, relPath3);
           if (!lstatSafe(abs)) continue;
-          if (classifyPath(relPath2) !== "derived") continue;
+          if (classifyPath(relPath3) !== "derived") continue;
           if (!ctx.dryRun) fs13.rmSync(abs, { force: true });
           changed.push(rel(ctx, abs));
         }
-        for (const relPath2 of AUTHORED_REGISTRIES) {
-          const abs = path16.join(ctx.guildDir, relPath2);
+        for (const relPath3 of AUTHORED_REGISTRIES) {
+          const abs = path16.join(ctx.guildDir, relPath3);
           const text = readIfFile(abs);
           if (text === null) continue;
-          const target = path16.join(ctx.guildDir, "artifacts", "legacy", relPath2.replace("/", "-"));
+          const target = path16.join(ctx.guildDir, "artifacts", "legacy", relPath3.replace("/", "-"));
           if (lstatSafe(target)) {
             if (readIfFile(target) !== text) {
               return {
                 status: "blocked_confirm",
-                detail: `.guild/${relPath2} differs from its preserved copy ${rel(ctx, target)}`,
+                detail: `.guild/${relPath3} differs from its preserved copy ${rel(ctx, target)}`,
                 paths: [rel(ctx, abs), rel(ctx, target)],
-                question: `registry-yaml-retire found .guild/${relPath2} and a different preserved copy at ${rel(ctx, target)}. Keep which one?`
+                question: `registry-yaml-retire found .guild/${relPath3} and a different preserved copy at ${rel(ctx, target)}. Keep which one?`
               };
             }
             if (!ctx.dryRun) fs13.rmSync(abs, { force: true });
@@ -9260,11 +9260,11 @@ function buildSessionContext(input) {
     run_binding: { ...input.run_binding }
   };
 }
-function blockFromVerified(id2) {
-  const asAdapter = id2;
+function blockFromVerified(id3) {
+  const asAdapter = id3;
   return {
-    family: id2.family,
-    surface: id2.surface ?? "unknown",
+    family: id3.family,
+    surface: id3.surface ?? "unknown",
     adapter_id: asAdapter.adapter_id ?? "unknown",
     adapter_version: asAdapter.adapter_version ?? "unknown"
   };
@@ -9501,7 +9501,7 @@ function redactHomeDirPaths(input) {
 function redactKeyValueSecrets(input) {
   return input.replace(
     KV_SECRET_PATTERN,
-    (_match, key, sep22) => `${key}${sep22}${KV_REDACTED}`
+    (_match, key, sep23) => `${key}${sep23}${KV_REDACTED}`
   );
 }
 function allWordsWordish(words) {
@@ -10512,8 +10512,8 @@ function parseScalarToken(c) {
     const leap = y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
     const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     const dateOk = mo >= 1 && mo <= 12 && d >= 1 && d <= daysInMonth[mo - 1];
-    const time2 = dt[1] ? tok.slice(11, 19).split(":").map(Number) : null;
-    const timeOk = !time2 || time2[0] < 24 && time2[1] < 60 && time2[2] <= 60;
+    const time3 = dt[1] ? tok.slice(11, 19).split(":").map(Number) : null;
+    const timeOk = !time3 || time3[0] < 24 && time3[1] < 60 && time3[2] <= 60;
     const offset = /[+-](\d{2}):(\d{2})$/.exec(tok.slice(10));
     const offsetOk = !offset || Number(offset[1]) < 24 && Number(offset[2]) < 60;
     if (dateOk && timeOk && offsetOk) return tok;
@@ -10580,12 +10580,12 @@ function parseValue(c, ctx) {
       const value = parseValue(c, ctx);
       assignKey(table, keyPath, value, ctx, { insideClosed: true });
       skipInlineWs(c);
-      const sep22 = c.next();
-      if (sep22 === ",") {
+      const sep23 = c.next();
+      if (sep23 === ",") {
         skipInlineWs(c);
         continue;
       }
-      if (sep22 === "}") return table;
+      if (sep23 === "}") return table;
       c.fail("expected ',' or '}' in inline table");
     }
   }
@@ -10715,17 +10715,17 @@ function parseNativeToml(raw) {
   }
 }
 function claudeConfigRoots(opts) {
-  const join80 = opts.joiner ?? ((...parts) => parts.join("/"));
+  const join82 = opts.joiner ?? ((...parts) => parts.join("/"));
   const roots = [];
   const override = opts.claudeConfigDir?.trim();
   if (override) roots.push(override);
-  roots.push(join80(opts.homedir, ".claude"), join80(opts.homedir, ".config", "claude"));
+  roots.push(join82(opts.homedir, ".claude"), join82(opts.homedir, ".config", "claude"));
   return roots;
 }
 function codexConfigHome(opts) {
-  const join80 = opts.joiner ?? ((...parts) => parts.join("/"));
+  const join82 = opts.joiner ?? ((...parts) => parts.join("/"));
   const override = opts.codexHome?.trim();
-  return override ? override : join80(opts.homedir, ".codex");
+  return override ? override : join82(opts.homedir, ".codex");
 }
 function classifyEntry(alias, entry) {
   let present3 = 0;
@@ -12196,9 +12196,9 @@ function parseSelector(raw) {
     throw new Error(`selector_malformed: empty or non-string selector`);
   }
   if (raw.startsWith("id:")) {
-    const id2 = raw.slice(3);
-    if (!id2) throw new Error(`selector_malformed: "id:" needs a canonical_id (got "${raw}")`);
-    return { form: "id", canonical_id: id2 };
+    const id3 = raw.slice(3);
+    if (!id3) throw new Error(`selector_malformed: "id:" needs a canonical_id (got "${raw}")`);
+    return { form: "id", canonical_id: id3 };
   }
   if (raw.startsWith("alias:")) {
     const alias = raw.slice(6);
@@ -13085,14 +13085,14 @@ function crossHostAvailable() {
   const s = v.trim().toLowerCase();
   return !(s === "0" || s === "false" || s === "no" || s === "off");
 }
-function isValidInitiativeId(id2) {
-  if (!id2 || !id2.trim()) return false;
-  if (id2.includes("\0")) return false;
-  if (id2.startsWith("/") || id2.startsWith("\\")) return false;
-  if (id2.includes("/") || id2.includes("\\")) return false;
-  if (id2 === ".") return false;
-  if (id2 === ".." || id2.startsWith("..")) return false;
-  if (id2.includes("..")) return false;
+function isValidInitiativeId(id3) {
+  if (!id3 || !id3.trim()) return false;
+  if (id3.includes("\0")) return false;
+  if (id3.startsWith("/") || id3.startsWith("\\")) return false;
+  if (id3.includes("/") || id3.includes("\\")) return false;
+  if (id3 === ".") return false;
+  if (id3 === ".." || id3.startsWith("..")) return false;
+  if (id3.includes("..")) return false;
   return true;
 }
 function isContainedIn(candidatePath, baseDir) {
@@ -13100,9 +13100,9 @@ function isContainedIn(candidatePath, baseDir) {
   const resolvedBase = path29.resolve(baseDir);
   return resolved.startsWith(resolvedBase + path29.sep);
 }
-function initiativeIsWorkspaceScoped(workspaceRoot2, id2) {
+function initiativeIsWorkspaceScoped(workspaceRoot2, id3) {
   try {
-    if (!isValidInitiativeId(id2)) return false;
+    if (!isValidInitiativeId(id3)) return false;
     const registryPath = path29.join(
       durableGuildDir(workspaceRoot2),
       "indexes",
@@ -13118,7 +13118,7 @@ function initiativeIsWorkspaceScoped(workspaceRoot2, id2) {
             for (const entry of list) {
               if (!isPlainObject7(entry)) continue;
               const rec = entry;
-              if (rec["id"] === id2) {
+              if (rec["id"] === id3) {
                 return rec["scope"] === "workspace";
               }
             }
@@ -13132,13 +13132,13 @@ function initiativeIsWorkspaceScoped(workspaceRoot2, id2) {
     const activePath = path29.join(
       initiativesBase,
       "active",
-      id2,
+      id3,
       "initiative.yaml"
     );
     const archivedPath = path29.join(
       initiativesBase,
       "archived",
-      id2,
+      id3,
       "initiative.yaml"
     );
     const activeBase = path29.join(initiativesBase, "active");
@@ -13354,7 +13354,7 @@ var init_settings_reader = __esm({
     VALID_RIGOR = /* @__PURE__ */ new Set(["quick", "standard", "deep"]);
     VALID_REVIEW = /* @__PURE__ */ new Set(["local", "cross", "off"]);
     DISPATCH_HOST_IDS = new Set(
-      HOST_IDS.filter((id2) => HOST_REGISTRY_ROWS[id2].dispatch_selectable === true)
+      HOST_IDS.filter((id3) => HOST_REGISTRY_ROWS[id3].dispatch_selectable === true)
     );
     VALID_AGENT_MODE = /* @__PURE__ */ new Set(["team", "agent", "subagent", "auto"]);
     VALID_CACHE_TTL = /* @__PURE__ */ new Set(["1h", "5m", "off"]);
@@ -13720,45 +13720,45 @@ function singleflight(store, key, discoverers) {
 }
 async function singleflightDiscover(store, key, discover, opts = {}) {
   assertMintedKey(key);
-  const hash2 = key.hash;
+  const hash3 = key.hash;
   const lockWaitMs = opts.lockWaitMs ?? UNCACHED_DISCOVERY_BUDGET_MS;
   const pollIntervalMs = opts.pollIntervalMs ?? 25;
   const isFresh = opts.isFresh ?? (() => true);
   const now = opts.now ?? Date.now;
   const sleep = opts.sleep ?? defaultSleep;
   const fresh = () => {
-    const snap = store.read(hash2);
+    const snap = store.read(hash3);
     return snap && isFresh(snap) ? snap : null;
   };
   const cached = fresh();
   if (cached) return { snapshot: cached, role: "cached", discovery_ran: false };
   const deadline = now() + lockWaitMs;
-  let locked = store.tryLock(hash2);
+  let locked = store.tryLock(hash3);
   while (!locked) {
     const published = fresh();
     if (published) return { snapshot: published, role: "coalesced", discovery_ran: false };
-    if (now() >= deadline) return { snapshot: degradedRead(store, hash2), role: "degraded", discovery_ran: false };
+    if (now() >= deadline) return { snapshot: degradedRead(store, hash3), role: "degraded", discovery_ran: false };
     await sleep(pollIntervalMs);
-    locked = store.tryLock(hash2);
+    locked = store.tryLock(hash3);
   }
   try {
     const published = fresh();
     if (published) return { snapshot: published, role: "coalesced", discovery_ran: false };
     const discovered = await discover();
-    const current = store.read(hash2);
+    const current = store.read(hash3);
     const snapshot = stampScope(key, {
       ...discovered,
       generation: (current?.generation ?? 0) + 1
     });
-    store.casPublish(hash2, snapshot);
-    const shared = store.read(hash2) ?? snapshot;
+    store.casPublish(hash3, snapshot);
+    const shared = store.read(hash3) ?? snapshot;
     return { snapshot: shared, role: "winner", discovery_ran: true };
   } finally {
-    store.unlock(hash2);
+    store.unlock(hash3);
   }
 }
-function degradedRead(store, hash2) {
-  const cached = store.read(hash2);
+function degradedRead(store, hash3) {
+  const cached = store.read(hash3);
   if (cached) return { ...cached, degraded: true, probe_issued: false };
   return { degraded: true, probe_issued: false, evidence_state: "unknown" };
 }
@@ -13969,7 +13969,7 @@ var init_catalog_cache = __esm({
         }
       }
     };
-    defaultSleep = (ms) => new Promise((resolve47) => setTimeout(resolve47, ms));
+    defaultSleep = (ms) => new Promise((resolve48) => setTimeout(resolve48, ms));
   }
 });
 
@@ -14111,15 +14111,15 @@ function rollupCompatibilityUsage(input) {
   const knownIds = readArray(opts["known_asset_ids"]);
   if (knownIds === null) return unusableRollup("known_asset_ids must be a dense plain array");
   const seenKnown = /* @__PURE__ */ new Set();
-  for (const id2 of knownIds) {
-    if (!isCanonicalId(id2)) return unusableRollup(`known_asset_ids entry is not a canonical id: ${String(id2)}`);
-    if (seenKnown.has(id2)) return unusableRollup(`known_asset_ids contains duplicate id: ${id2}`);
-    seenKnown.add(id2);
+  for (const id3 of knownIds) {
+    if (!isCanonicalId(id3)) return unusableRollup(`known_asset_ids entry is not a canonical id: ${String(id3)}`);
+    if (seenKnown.has(id3)) return unusableRollup(`known_asset_ids contains duplicate id: ${id3}`);
+    seenKnown.add(id3);
   }
   const records = readArray(opts["records"]);
   if (records === null) return unusableRollup("records must be a dense plain array");
   const byAsset = {};
-  for (const id2 of seenKnown) byAsset[id2] = 0;
+  for (const id3 of seenKnown) byAsset[id3] = 0;
   const observed = /* @__PURE__ */ new Set();
   let total = 0;
   for (const raw of records) {
@@ -14130,7 +14130,7 @@ function rollupCompatibilityUsage(input) {
     byAsset[record.asset_id] = (byAsset[record.asset_id] ?? 0) + 1;
     total += 1;
   }
-  const removable = [...seenKnown].filter((id2) => (byAsset[id2] ?? 0) === 0).sort();
+  const removable = [...seenKnown].filter((id3) => (byAsset[id3] ?? 0) === 0).sort();
   return Object.freeze({
     window_start_release: startRelease,
     window_end_release: endRelease,
@@ -14150,11 +14150,11 @@ function evaluateG5(input) {
   if (requiredRaw === null) return blocked("required_asset_ids must be a dense plain array");
   const required = [];
   const seenRequired = /* @__PURE__ */ new Set();
-  for (const id2 of requiredRaw) {
-    if (!isCanonicalId(id2)) return blocked(`required_asset_ids entry is not a canonical id: ${String(id2)}`);
-    if (seenRequired.has(id2)) return blocked(`required_asset_ids contains duplicate id: ${id2}`);
-    seenRequired.add(id2);
-    required.push(id2);
+  for (const id3 of requiredRaw) {
+    if (!isCanonicalId(id3)) return blocked(`required_asset_ids entry is not a canonical id: ${String(id3)}`);
+    if (seenRequired.has(id3)) return blocked(`required_asset_ids contains duplicate id: ${id3}`);
+    seenRequired.add(id3);
+    required.push(id3);
   }
   if (required.length === 0) {
     blockers.push("empty required_asset_ids \u2014 a removal gate over zero assets cannot pass");
@@ -14229,9 +14229,9 @@ function evaluateG5(input) {
   }
   const observed = /* @__PURE__ */ new Set();
   for (const snap of snapshots) {
-    for (const id2 of snap.observed ?? []) if (typeof id2 === "string") observed.add(id2);
+    for (const id3 of snap.observed ?? []) if (typeof id3 === "string") observed.add(id3);
   }
-  const uninstrumented = required.filter((id2) => !observed.has(id2)).sort();
+  const uninstrumented = required.filter((id3) => !observed.has(id3)).sort();
   if (uninstrumented.length > 0) {
     blockers.push(
       `${uninstrumented.length} required asset(s) never instrumented (a false zero): ${uninstrumented.join(", ")}`
@@ -14928,32 +14928,32 @@ function buildCompatibilityCatalog(opts) {
   const root = path32.resolve(pluginRoot);
   const problems = [];
   const entries = [];
-  const push = (kind, id2, abs) => {
+  const push = (kind, id3, abs) => {
     const rel2 = toCanonicalRelPath(abs, root);
     if (rel2 === null) {
-      problems.push(`${kind} "${id2}": path is not canonical plugin-relative (${abs})`);
+      problems.push(`${kind} "${id3}": path is not canonical plugin-relative (${abs})`);
       return;
     }
     let bytes;
     try {
       const st = fs26.lstatSync(abs);
       if (st.isSymbolicLink()) {
-        problems.push(`${kind} "${id2}": symlink, refusing to catalog`);
+        problems.push(`${kind} "${id3}": symlink, refusing to catalog`);
         return;
       }
       if (!st.isFile()) {
-        problems.push(`${kind} "${id2}": not a regular file`);
+        problems.push(`${kind} "${id3}": not a regular file`);
         return;
       }
       bytes = fs26.readFileSync(abs);
     } catch (err) {
-      problems.push(`${kind} "${id2}": unreadable (${err.message})`);
+      problems.push(`${kind} "${id3}": unreadable (${err.message})`);
       return;
     }
     entries.push(
       Object.freeze({
         kind,
-        id: id2,
+        id: id3,
         path: rel2,
         content_hash: crypto10.createHash("sha256").update(bytes).digest("hex"),
         deprecation,
@@ -14967,12 +14967,12 @@ function buildCompatibilityCatalog(opts) {
       (a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0
     )) {
       if (!e.isFile() || !e.name.endsWith(".md")) continue;
-      const id2 = e.name.slice(0, -3);
-      if (!isCanonicalId3(id2)) {
+      const id3 = e.name.slice(0, -3);
+      if (!isCanonicalId3(id3)) {
         problems.push(`shipped_template "${e.name}": file stem is not a canonical id`);
         continue;
       }
-      push("shipped_template", id2, path32.join(templateDir, e.name));
+      push("shipped_template", id3, path32.join(templateDir, e.name));
     }
   } catch (err) {
     problems.push(`templates/specialists unreadable (${err.message})`);
@@ -14999,8 +14999,8 @@ function buildCompatibilityCatalog(opts) {
   const skillIds = entries.filter((e) => e.kind === "shipped_domain_skill").map((e) => e.id);
   const skillCount = skillIds.length;
   const frozenSkillIds = new Set(SHIPPED_DOMAIN_SKILL_IDS);
-  const missingSkillIds = SHIPPED_DOMAIN_SKILL_IDS.filter((id2) => !skillIds.includes(id2));
-  const unexpectedSkillIds = skillIds.filter((id2) => !frozenSkillIds.has(id2));
+  const missingSkillIds = SHIPPED_DOMAIN_SKILL_IDS.filter((id3) => !skillIds.includes(id3));
+  const unexpectedSkillIds = skillIds.filter((id3) => !frozenSkillIds.has(id3));
   if (missingSkillIds.length > 0) {
     problems.push(`shipped_domain_skill census missing frozen id(s): ${missingSkillIds.join(", ")}`);
   }
@@ -15021,12 +15021,12 @@ function readCatalogEntry(raw) {
   if (e === null) return null;
   const kind = e["kind"];
   if (kind !== "shipped_template" && kind !== "shipped_domain_skill") return null;
-  const id2 = e["id"];
-  if (!isCanonicalId3(id2)) return null;
+  const id3 = e["id"];
+  if (!isCanonicalId3(id3)) return null;
   const p = e["path"];
   if (typeof p !== "string" || !isCanonicalCatalogPath(p)) return null;
-  const hash2 = e["content_hash"];
-  if (typeof hash2 !== "string" || !SHA256_HEX2.test(hash2)) return null;
+  const hash3 = e["content_hash"];
+  if (typeof hash3 !== "string" || !SHA256_HEX2.test(hash3)) return null;
   const dep = e["deprecation"];
   if (typeof dep !== "string" || !DEPRECATION_STATE_SET.has(dep)) return null;
   const by = e["deprecated_by"];
@@ -15036,9 +15036,9 @@ function readCatalogEntry(raw) {
   if (dep !== "active" && by === null) return null;
   return Object.freeze({
     kind,
-    id: id2,
+    id: id3,
     path: p,
-    content_hash: hash2,
+    content_hash: hash3,
     deprecation: dep,
     deprecated_by: by
   });
@@ -15242,21 +15242,21 @@ function requiredAssetIdsForG5(catalog, opts) {
     };
   }
   const truthById = new Map(truth.entries.map((e) => [e.id, e]));
-  for (const [id2, entry] of byId) {
-    const real = truthById.get(id2);
+  for (const [id3, entry] of byId) {
+    const real = truthById.get(id3);
     if (real === void 0) {
-      return { status: "refused", detail: `catalog names "${id2}", which the shipped tree does not contain` };
+      return { status: "refused", detail: `catalog names "${id3}", which the shipped tree does not contain` };
     }
     if (real.content_hash !== entry.content_hash || real.path !== entry.path || real.kind !== entry.kind) {
       return {
         status: "refused",
-        detail: `catalog entry "${id2}" does not match the shipped asset (path/kind/content_hash disagree)`
+        detail: `catalog entry "${id3}" does not match the shipped asset (path/kind/content_hash disagree)`
       };
     }
   }
-  for (const id2 of truthById.keys()) {
-    if (!byId.has(id2)) {
-      return { status: "refused", detail: `the shipped tree contains "${id2}", which the catalog omits` };
+  for (const id3 of truthById.keys()) {
+    if (!byId.has(id3)) {
+      return { status: "refused", detail: `the shipped tree contains "${id3}", which the catalog omits` };
     }
   }
   ids.sort();
@@ -16610,11 +16610,11 @@ function buildModelInspection(input) {
     if (age === null) unknowns.push("catalog_age");
     const models = Array.isArray(snapshot["models"]) ? snapshot["models"].map((m) => {
       const row = asRecord(m) ?? {};
-      const evidence2 = asRecord(row["evidence"]);
+      const evidence3 = asRecord(row["evidence"]);
       return {
         canonical_id: str(row["canonical_id"], "unknown"),
         tier: str(row["tier"], "unknown"),
-        evidence_state: str(evidence2?.["state"], "unknown")
+        evidence_state: str(evidence3?.["state"], "unknown")
       };
     }) : null;
     catalog = {
@@ -16869,14 +16869,14 @@ function loadJson(absPath) {
     return null;
   }
 }
-function loadVerifiedM0Reports(evidence2) {
-  if (!evidence2 || typeof evidence2.root !== "string" || typeof evidence2.run_id !== "string") {
+function loadVerifiedM0Reports(evidence3) {
+  if (!evidence3 || typeof evidence3.root !== "string" || typeof evidence3.run_id !== "string") {
     return [];
   }
-  const binding = lifecycleApi3().readRunBindingRecord({ root: evidence2.root, run_id: evidence2.run_id });
+  const binding = lifecycleApi3().readRunBindingRecord({ root: evidence3.root, run_id: evidence3.run_id });
   if (binding.status !== "ok") return [];
-  const runDir2 = path36.resolve(durableGuildDir(evidence2.root), "runs", evidence2.run_id);
-  const refs = Array.isArray(evidence2.m0?.inspection_report_refs) ? evidence2.m0.inspection_report_refs : [];
+  const runDir2 = path36.resolve(durableGuildDir(evidence3.root), "runs", evidence3.run_id);
+  const refs = Array.isArray(evidence3.m0?.inspection_report_refs) ? evidence3.m0.inspection_report_refs : [];
   const out = [];
   for (const ref of refs) {
     if (typeof ref !== "string") continue;
@@ -16886,38 +16886,38 @@ function loadVerifiedM0Reports(evidence2) {
     if (!report) continue;
     if (report["schema_version"] !== "guild.model_inspection.v1") continue;
     if (report["state"] !== "ok") continue;
-    if (report["run_id"] !== evidence2.run_id) continue;
+    if (report["run_id"] !== evidence3.run_id) continue;
     out.push(report);
   }
   return out;
 }
-function gateM2(flags, evidence2) {
+function gateM2(flags, evidence3) {
   if (flags["model_routing.enabled"] !== "on") {
     return { active: false, reason: "model_routing.enabled is off (M2 is opt-in)" };
   }
-  if (!evidence2 || typeof evidence2.root !== "string" || typeof evidence2.run_id !== "string") {
+  if (!evidence3 || typeof evidence3.root !== "string" || typeof evidence3.run_id !== "string") {
     return {
       active: false,
       reason: "M0 not evidenced: no evidence refs supplied \u2014 v2 routing stays off"
     };
   }
-  const binding = lifecycleApi3().readRunBindingRecord({ root: evidence2.root, run_id: evidence2.run_id });
+  const binding = lifecycleApi3().readRunBindingRecord({ root: evidence3.root, run_id: evidence3.run_id });
   if (binding.status !== "ok") {
     return {
       active: false,
-      reason: `run binding ${binding.status} for ${evidence2.run_id}: evidence in an unbound run tree proves nothing \u2014 v2 routing stays off`
+      reason: `run binding ${binding.status} for ${evidence3.run_id}: evidence in an unbound run tree proves nothing \u2014 v2 routing stays off`
     };
   }
-  const runDir2 = path36.resolve(durableGuildDir(evidence2.root), "runs", evidence2.run_id);
-  const m0Refs = Array.isArray(evidence2.m0?.inspection_report_refs) ? evidence2.m0.inspection_report_refs : [];
-  const m0Valid = loadVerifiedM0Reports(evidence2).length;
+  const runDir2 = path36.resolve(durableGuildDir(evidence3.root), "runs", evidence3.run_id);
+  const m0Refs = Array.isArray(evidence3.m0?.inspection_report_refs) ? evidence3.m0.inspection_report_refs : [];
+  const m0Valid = loadVerifiedM0Reports(evidence3).length;
   if (m0Valid === 0) {
     return {
       active: false,
-      reason: `M0 not evidenced: 0 of ${m0Refs.length} inspection ref(s) loaded as a valid guild.model_inspection.v1 report bound to ${evidence2.run_id} \u2014 v2 routing stays off`
+      reason: `M0 not evidenced: 0 of ${m0Refs.length} inspection ref(s) loaded as a valid guild.model_inspection.v1 report bound to ${evidence3.run_id} \u2014 v2 routing stays off`
     };
   }
-  const m1Refs = Array.isArray(evidence2.m1?.shadow_comparison_refs) ? evidence2.m1.shadow_comparison_refs : [];
+  const m1Refs = Array.isArray(evidence3.m1?.shadow_comparison_refs) ? evidence3.m1.shadow_comparison_refs : [];
   let m1Valid = 0;
   for (const ref of m1Refs) {
     if (typeof ref !== "string") continue;
@@ -16926,7 +16926,7 @@ function gateM2(flags, evidence2) {
     const cmp = loadJson(abs);
     if (!cmp) continue;
     if (cmp["schema_version"] !== "guild.shadow_comparison.v1") continue;
-    if (cmp["run_id"] !== evidence2.run_id) continue;
+    if (cmp["run_id"] !== evidence3.run_id) continue;
     if (cmp["comparable"] !== true) continue;
     const storedHash = cmp["comparison_hash"];
     if (typeof storedHash !== "string" || !/^[0-9a-f]{64}$/.test(storedHash)) continue;
@@ -16936,7 +16936,7 @@ function gateM2(flags, evidence2) {
   if (m1Valid === 0) {
     return {
       active: false,
-      reason: `M1 not evidenced: 0 of ${m1Refs.length} shadow-comparison ref(s) loaded as a comparable, hash-verified guild.shadow_comparison.v1 record bound to ${evidence2.run_id} \u2014 v2 routing stays off`
+      reason: `M1 not evidenced: 0 of ${m1Refs.length} shadow-comparison ref(s) loaded as a comparable, hash-verified guild.shadow_comparison.v1 record bound to ${evidence3.run_id} \u2014 v2 routing stays off`
     };
   }
   return {
@@ -18105,7 +18105,7 @@ function availableRegistryRows(detection) {
   for (const p of detection.providers) {
     if (p.selectable || p.detected && p.kind !== "host") families.add(p.family);
   }
-  return HOST_IDS.map((id2) => HOST_REGISTRY_ROWS[id2]).filter((row) => families.has(row.family));
+  return HOST_IDS.map((id3) => HOST_REGISTRY_ROWS[id3]).filter((row) => families.has(row.family));
 }
 function resolveRolesForRun(detection) {
   const roles = resolveRoles({ available: availableRegistryRows(detection) });
@@ -18457,8 +18457,8 @@ function composePrompt(base, extensions, host_family, model_family) {
     }
   }
   const text = parts.map((p) => p.text.trimEnd()).join("\n\n");
-  const hash2 = crypto12.createHash("sha256").update(`${host_family}\0${model_family}\0${text}`).digest("hex");
-  return { text, dialect_id, overlay_ids: parts.map((p) => p.id), hash: hash2, skipped };
+  const hash3 = crypto12.createHash("sha256").update(`${host_family}\0${model_family}\0${text}`).digest("hex");
+  return { text, dialect_id, overlay_ids: parts.map((p) => p.id), hash: hash3, skipped };
 }
 function loadPromptExtensions(guildDir, model_family) {
   const dir = path39.join(guildDir, PROMPTS_DIRNAME);
@@ -18999,14 +18999,14 @@ var init_init_config_copy = __esm({
 
 // src/domains/config/host-open-preflight.ts
 function detectGuildState(cwd) {
-  const evidence2 = [];
+  const evidence3 = [];
   const guildDir = durableGuildDir(cwd);
   const guildDirPresent = safeIsDir(guildDir);
-  evidence2.push({ kind: "guild_dir", path: guildDir, present: guildDirPresent });
+  evidence3.push({ kind: "guild_dir", path: guildDir, present: guildDirPresent });
   const cwdManifestPath = path40.join(guildDir, "workspace.json");
   const cwdParsed = parseWorkspaceManifest(cwdManifestPath);
   if (cwdParsed.status === "parse_error") {
-    evidence2.push({
+    evidence3.push({
       kind: "workspace_json",
       path: cwdManifestPath,
       present: true,
@@ -19016,11 +19016,11 @@ function detectGuildState(cwd) {
       cwd,
       "workspace_root",
       { problem: "malformed_workspace_json", path: cwdManifestPath, detail: cwdParsed.error },
-      evidence2
+      evidence3
     );
   }
   if (cwdParsed.status === "not_workspace") {
-    evidence2.push({
+    evidence3.push({
       kind: "workspace_json",
       path: cwdManifestPath,
       present: true,
@@ -19034,37 +19034,37 @@ function detectGuildState(cwd) {
         path: cwdManifestPath,
         detail: "workspace.json present but is_workspace !== true"
       },
-      evidence2
+      evidence3
     );
   }
   if (cwdParsed.status === "workspace") {
-    evidence2.push({
+    evidence3.push({
       kind: "workspace_json",
       path: cwdManifestPath,
       present: true,
       detail: "is_workspace:true"
     });
-    return verifyFloor(cwd, "workspace_root", cwd, evidence2);
+    return verifyFloor(cwd, "workspace_root", cwd, evidence3);
   }
-  evidence2.push({ kind: "workspace_json", path: cwdManifestPath, present: false });
+  evidence3.push({ kind: "workspace_json", path: cwdManifestPath, present: false });
   const ancestor = discoverWorkspace(cwd);
   if (ancestor) {
     const ancestorManifestPath = path40.join(durableGuildDir(ancestor.rootDir), "workspace.json");
-    evidence2.push({
+    evidence3.push({
       kind: "ancestor_workspace",
       path: ancestorManifestPath,
       present: true,
       detail: "is_workspace:true"
     });
     if (guildDirPresent) {
-      return verifyFloor(cwd, "workspace_child", ancestor.rootDir, evidence2);
+      return verifyFloor(cwd, "workspace_child", ancestor.rootDir, evidence3);
     }
-    return notInstalledResult(cwd, ancestor.rootDir, evidence2);
+    return notInstalledResult(cwd, ancestor.rootDir, evidence3);
   }
   if (guildDirPresent) {
-    return verifyFloor(cwd, "single_project", null, evidence2);
+    return verifyFloor(cwd, "single_project", null, evidence3);
   }
-  return notInstalledResult(cwd, null, evidence2);
+  return notInstalledResult(cwd, null, evidence3);
 }
 function safeStat(p) {
   try {
@@ -19086,13 +19086,13 @@ function resolveEntryPath(root, entry) {
   const segments = entry.path.replace(/\/+$/, "").split("/");
   return path40.join(root, ...segments);
 }
-function verifyFloor(cwd, mode, workspaceRoot2, evidence2) {
+function verifyFloor(cwd, mode, workspaceRoot2, evidence3) {
   const checkedRequired = requiredEntriesFor(mode);
   let firstMissing = null;
   for (const entry of checkedRequired) {
     const abs = resolveEntryPath(cwd, entry);
     const present3 = safeExistsForEntry(abs, entry.kind);
-    evidence2.push({ kind: "manifest_entry", path: abs, present: present3, detail: entry.path });
+    evidence3.push({ kind: "manifest_entry", path: abs, present: present3, detail: entry.path });
     if (!present3 && firstMissing === null) firstMissing = entry;
   }
   if (firstMissing !== null) {
@@ -19104,7 +19104,7 @@ function verifyFloor(cwd, mode, workspaceRoot2, evidence2) {
       projectRoot: cwd,
       workspaceRoot: workspaceRoot2,
       checkedRequired,
-      evidence: evidence2,
+      evidence: evidence3,
       problem: {
         problem: "missing_required_manifest_entry",
         path: missingAbs,
@@ -19120,11 +19120,11 @@ function verifyFloor(cwd, mode, workspaceRoot2, evidence2) {
     projectRoot: cwd,
     workspaceRoot: workspaceRoot2,
     checkedRequired,
-    evidence: evidence2,
+    evidence: evidence3,
     problem: null
   };
 }
-function repairResult(cwd, mode, problem, evidence2) {
+function repairResult(cwd, mode, problem, evidence3) {
   return {
     schema_version: GUILD_STATE_SCHEMA_VERSION,
     state: "installed_needs_repair",
@@ -19132,11 +19132,11 @@ function repairResult(cwd, mode, problem, evidence2) {
     projectRoot: cwd,
     workspaceRoot: mode === "workspace_root" ? cwd : null,
     checkedRequired: requiredEntriesFor(mode),
-    evidence: evidence2,
+    evidence: evidence3,
     problem
   };
 }
-function notInstalledResult(cwd, workspaceRoot2, evidence2) {
+function notInstalledResult(cwd, workspaceRoot2, evidence3) {
   return {
     schema_version: GUILD_STATE_SCHEMA_VERSION,
     state: "not_installed",
@@ -19144,7 +19144,7 @@ function notInstalledResult(cwd, workspaceRoot2, evidence2) {
     projectRoot: null,
     workspaceRoot: workspaceRoot2,
     checkedRequired: [],
-    evidence: evidence2,
+    evidence: evidence3,
     problem: null
   };
 }
@@ -20306,12 +20306,12 @@ function neutralCanonicalJson(value) {
   return `{${parts.join(",")}}`;
 }
 function fnv1a32(input, seed) {
-  let hash2 = seed >>> 0;
+  let hash3 = seed >>> 0;
   for (let i = 0; i < input.length; i += 1) {
-    hash2 = (hash2 ^ input.charCodeAt(i)) >>> 0;
-    hash2 = (hash2 << 1 >>> 0) + (hash2 << 4 >>> 0) + (hash2 << 7 >>> 0) + (hash2 << 8 >>> 0) + (hash2 << 24 >>> 0) + hash2 >>> 0;
+    hash3 = (hash3 ^ input.charCodeAt(i)) >>> 0;
+    hash3 = (hash3 << 1 >>> 0) + (hash3 << 4 >>> 0) + (hash3 << 7 >>> 0) + (hash3 << 8 >>> 0) + (hash3 << 24 >>> 0) + hash3 >>> 0;
   }
-  return hash2 >>> 0;
+  return hash3 >>> 0;
 }
 function hex8(value) {
   let out = (value >>> 0).toString(16);
@@ -21332,7 +21332,7 @@ function handleToolBefore(state, event) {
     ) : [],
     approval_supplied: event.input.approval_supplied === true
   };
-  const admission = evaluateNeutralAdmission({
+  const admission2 = evaluateNeutralAdmission({
     request,
     snapshot: context.snapshot,
     policy: context.policy,
@@ -21343,36 +21343,36 @@ function handleToolBefore(state, event) {
     operation: request.operation,
     operation_class: request.operation_class,
     caller_supplied_verdict_ignored: suppliedVerdict !== void 0,
-    admission_outcome_type: admission.type,
-    admission_disposition: admission.disposition,
-    admission_reason_code: admission.reason_code,
+    admission_outcome_type: admission2.type,
+    admission_disposition: admission2.disposition,
+    admission_reason_code: admission2.reason_code,
     // Stated in the facts as well as the binding, so a receipt reader can see
     // WHICH snapshot produced the answer without trusting the binding merge.
     evaluated_capability_snapshot_hash: evaluatedSnapshotHash ?? null,
     run_bound_capability_snapshot_hash: state.capability_snapshot_hash
   };
   const evaluatedBinding = { capability_snapshot_hash: evaluatedSnapshotHash };
-  if (admission.disposition !== "succeeded") {
+  if (admission2.disposition !== "succeeded") {
     return neutralFreeze({
       state,
       state_changed: false,
       outcome: neutralOutcome({
-        type: admission.type,
-        disposition: admission.disposition,
-        reason_code: admission.reason_code,
+        type: admission2.type,
+        disposition: admission2.disposition,
+        reason_code: admission2.reason_code,
         assertions: [
-          ...admission.assertions,
+          ...admission2.assertions,
           "the outcome names the capability snapshot that was evaluated"
         ],
         // Order matters: `bindingFor` supplies the run/operation identity, and
         // `evaluatedBinding` then RE-asserts the evaluated snapshot hash so the
         // state's own field can never overwrite it (that overwrite was the
         // defect — the claimed hash won over the evaluated one).
-        binding: { ...admission.binding, ...bindingFor2(state, event), ...evaluatedBinding },
+        binding: { ...admission2.binding, ...bindingFor2(state, event), ...evaluatedBinding },
         facts: {
           event_name: event.name,
           side_effect: false,
-          ...admission.facts,
+          ...admission2.facts,
           ...sharedFacts
         }
       })
@@ -21574,7 +21574,7 @@ function handleRunStop(state, event) {
     "terminal receipt is last in logical order"
   ];
   const missingObservations = state.required_observations.filter(
-    (id2) => state.observations[id2] === void 0
+    (id3) => state.observations[id3] === void 0
   );
   if (missingObservations.length > 0) {
     return refuse2(
@@ -21586,7 +21586,7 @@ function handleRunStop(state, event) {
     );
   }
   const failedObservations = state.required_observations.filter(
-    (id2) => !isNeutralCleanObservation(state.observations[id2]?.state)
+    (id3) => !isNeutralCleanObservation(state.observations[id3]?.state)
   );
   if (failedObservations.length > 0) {
     return refuse2(
@@ -21598,12 +21598,12 @@ function handleRunStop(state, event) {
     );
   }
   const unruled = [];
-  for (const id2 of state.required_observations) {
-    const record = state.observations[id2];
+  for (const id3 of state.required_observations) {
+    const record = state.observations[id3];
     if (record === void 0 || record.state !== "not_applicable") continue;
-    const resolved = resolveNotApplicableRule(state, id2, record.not_applicable_rule_id);
+    const resolved = resolveNotApplicableRule(state, id3, record.not_applicable_rule_id);
     if (resolved.reason !== void 0) {
-      unruled.push({ observation: id2, reason: resolved.reason, rule_id: record.not_applicable_rule_id });
+      unruled.push({ observation: id3, reason: resolved.reason, rule_id: record.not_applicable_rule_id });
     }
   }
   if (unruled.length > 0) {
@@ -21622,7 +21622,7 @@ function handleRunStop(state, event) {
     );
   }
   const missingGateIds = state.required_gate_ids.filter(
-    (id2) => state.gate_outcomes[id2] !== "succeeded"
+    (id3) => state.gate_outcomes[id3] !== "succeeded"
   );
   if (missingGateIds.length > 0) {
     return refuse2(
@@ -21865,23 +21865,23 @@ function unrecognizedNeutralHostFields(identity) {
   }
   return offenders;
 }
-function neutralJournalGenesis(authority) {
+function neutralJournalGenesis(authority2) {
   const canonical = {
     schema: NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA,
     anchor: "journal_genesis",
-    journal: authority.receipt_journal_id,
-    first_sequence: authority.receipt_sequence_range?.first ?? null
+    journal: authority2.receipt_journal_id,
+    first_sequence: authority2.receipt_sequence_range?.first ?? null
   };
   for (const field of NEUTRAL_EVIDENCE_IDENTITY_FIELDS) {
-    canonical[field] = authority.identity[field] ?? null;
+    canonical[field] = authority2.identity[field] ?? null;
   }
   return `nec1:${neutralFingerprint(canonical).slice("nfp1:".length)}`;
 }
-function neutralJournalEntryCommitment(authority, previous, entry) {
+function neutralJournalEntryCommitment(authority2, previous, entry) {
   const canonical = {
     schema: NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA,
     anchor: "journal_entry",
-    journal: authority.receipt_journal_id,
+    journal: authority2.receipt_journal_id,
     previous,
     sequence: entry.sequence,
     scenario_id: entry.scenario_id,
@@ -21890,27 +21890,27 @@ function neutralJournalEntryCommitment(authority, previous, entry) {
     reason_code: entry.reason_code ?? null
   };
   for (const field of NEUTRAL_EVIDENCE_IDENTITY_FIELDS) {
-    canonical[field] = authority.identity[field] ?? null;
+    canonical[field] = authority2.identity[field] ?? null;
   }
   return `nec1:${neutralFingerprint(canonical).slice("nfp1:".length)}`;
 }
-function neutralAttestationDigest(authority, attestation) {
+function neutralAttestationDigest(authority2, attestation) {
   const canonical = {
     schema: NEUTRAL_ATTESTATION_REF_SCHEMA,
     attestor: attestation.attestor_id,
-    journal: authority.receipt_journal_id,
+    journal: authority2.receipt_journal_id,
     root: attestation.attested_journal_root,
     entry_count: attestation.attested_entry_count,
-    first_sequence: authority.receipt_sequence_range?.first ?? null,
-    last_sequence: authority.receipt_sequence_range?.last ?? null
+    first_sequence: authority2.receipt_sequence_range?.first ?? null,
+    last_sequence: authority2.receipt_sequence_range?.last ?? null
   };
   for (const field of NEUTRAL_EVIDENCE_IDENTITY_FIELDS) {
-    canonical[field] = authority.identity[field] ?? null;
+    canonical[field] = authority2.identity[field] ?? null;
   }
   return `nad1:${neutralCanonicalDigest(canonical)}`;
 }
-function neutralAttestationReference(authority, attestation) {
-  return `${NEUTRAL_ATTESTATION_REF_SCHEMA}:${attestation.attestor_id}@${neutralAttestationDigest(authority, attestation)}`;
+function neutralAttestationReference(authority2, attestation) {
+  return `${NEUTRAL_ATTESTATION_REF_SCHEMA}:${attestation.attestor_id}@${neutralAttestationDigest(authority2, attestation)}`;
 }
 function neutralAttestorVerificationKey(attestorId) {
   const pinned = NEUTRAL_ATTESTOR_TRUST_ROOT.find((key) => key.attestor_id === attestorId);
@@ -21987,12 +21987,12 @@ function neutralVerifyAttestationSignature(verificationRoot, digest, signature) 
   }
   return node === verificationRoot;
 }
-function neutralAttestationVerifies(authority, attestation) {
+function neutralAttestationVerifies(authority2, attestation) {
   const publicKey = neutralAttestorVerificationKey(attestation?.attestor_id);
   if (publicKey === null) return false;
   return neutralVerifyAttestationSignature(
     publicKey,
-    neutralAttestationDigest(authority, attestation),
+    neutralAttestationDigest(authority2, attestation),
     attestation?.attestation_signature
   );
 }
@@ -22020,22 +22020,22 @@ function attestationWellFormed(attestation) {
   }
   return typeof attestation.attestation_ref === "string" && NEUTRAL_ATTESTATION_REF_PATTERN.test(attestation.attestation_ref);
 }
-function authorityWellFormed(authority) {
-  if (authority === void 0 || authority === null || typeof authority !== "object") return false;
-  if (authority.schema_version !== NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA) return false;
-  if (!identityComplete(authority.identity)) return false;
-  if (typeof authority.receipt_journal_id !== "string" || !NEUTRAL_JOURNAL_ID_PATTERN.test(authority.receipt_journal_id)) {
+function authorityWellFormed(authority2) {
+  if (authority2 === void 0 || authority2 === null || typeof authority2 !== "object") return false;
+  if (authority2.schema_version !== NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA) return false;
+  if (!identityComplete(authority2.identity)) return false;
+  if (typeof authority2.receipt_journal_id !== "string" || !NEUTRAL_JOURNAL_ID_PATTERN.test(authority2.receipt_journal_id)) {
     return false;
   }
-  const range = authority.receipt_sequence_range;
+  const range = authority2.receipt_sequence_range;
   if (range === void 0 || range === null || typeof range !== "object") return false;
   if (typeof range.first !== "number" || typeof range.last !== "number") return false;
   if (!Number.isInteger(range.first) || !Number.isInteger(range.last)) return false;
   if (range.first < 0 || range.last < range.first) return false;
-  const entries = authority.observed_entries;
+  const entries = authority2.observed_entries;
   if (!Array.isArray(entries) || entries.length === 0) return false;
   if (!entries.every((entry) => entryWellFormed(entry))) return false;
-  const attestations = authority.attestations;
+  const attestations = authority2.attestations;
   if (!Array.isArray(attestations) || attestations.length === 0) return false;
   return attestations.every((attestation) => attestationWellFormed(attestation));
 }
@@ -22048,20 +22048,20 @@ function refuseConformance(reason, assertions, facts) {
     facts: { ...facts, may_promote_conformant: false }
   });
 }
-function evaluateNeutralConformanceDecision(evidence2, authority) {
+function evaluateNeutralConformanceDecision(evidence3, authority2) {
   const scenarios = NEUTRAL_CORE_SCENARIOS;
-  const required = evidence2?.required_scenario_ids ?? [];
-  const results = evidence2?.results ?? [];
+  const required = evidence3?.required_scenario_ids ?? [];
+  const results = evidence3?.results ?? [];
   const expectedRequired = NEUTRAL_REQUIRED_CORE_SCENARIO_IDS;
   const baseFacts = {
     suite_id: NEUTRAL_SCENARIO_SUITE_ID,
     suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
-    submitted_suite_id: evidence2?.suite_id ?? null,
-    submitted_suite_version: evidence2?.suite_version ?? null,
+    submitted_suite_id: evidence3?.suite_id ?? null,
+    submitted_suite_version: evidence3?.suite_version ?? null,
     required_count: required.length,
     result_count: results.length
   };
-  if (!authorityWellFormed(authority)) {
+  if (!authorityWellFormed(authority2)) {
     return refuseConformance(
       "scenario_evidence_authority_missing",
       [
@@ -22069,10 +22069,10 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
         "a bundle that agrees only with itself proves consistency, never conformance",
         `an authority declares ${NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA}, one complete identity, one journal id, and one observed sequence range`
       ],
-      { ...baseFacts, submitted_authority_schema: authority?.schema_version ?? null }
+      { ...baseFacts, submitted_authority_schema: authority2?.schema_version ?? null }
     );
   }
-  const authorityUnrecognized = unrecognizedNeutralIdentityFields(authority.identity);
+  const authorityUnrecognized = unrecognizedNeutralIdentityFields(authority2.identity);
   if (authorityUnrecognized.length > 0) {
     return refuseConformance(
       "scenario_source_identity_unrecognized",
@@ -22083,7 +22083,7 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
       { ...baseFacts, scope: "authority", unrecognized_identity_fields: authorityUnrecognized }
     );
   }
-  const authorityHostUnrecognized = unrecognizedNeutralHostFields(authority.identity);
+  const authorityHostUnrecognized = unrecognizedNeutralHostFields(authority2.identity);
   if (authorityHostUnrecognized.length > 0) {
     return refuseConformance(
       "scenario_host_identity_unrecognized",
@@ -22099,7 +22099,7 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
       }
     );
   }
-  if (authority.identity.contract_version !== NEUTRAL_CONTRACT_VERSION) {
+  if (authority2.identity.contract_version !== NEUTRAL_CONTRACT_VERSION) {
     return refuseConformance(
       "scenario_contract_version_unrecognized",
       [
@@ -22111,12 +22111,12 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
         scope: "authority",
         recognized_contract_version: NEUTRAL_CONTRACT_VERSION,
         unrecognized_contract_versions: [
-          { scope: "authority", contract_version: authority.identity.contract_version ?? null }
+          { scope: "authority", contract_version: authority2.identity.contract_version ?? null }
         ]
       }
     );
   }
-  if (!isNeutralRecognizedRuntimeVersion(authority.identity.runtime_version)) {
+  if (!isNeutralRecognizedRuntimeVersion(authority2.identity.runtime_version)) {
     return refuseConformance(
       "scenario_runtime_version_unrecognized",
       [
@@ -22129,13 +22129,13 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
         recognized_runtime_major: NEUTRAL_RECOGNIZED_RUNTIME_MAJOR,
         recognized_runtime_majors: [...NEUTRAL_RECOGNIZED_RUNTIME_MAJORS],
         unrecognized_runtime_versions: [
-          { scope: "authority", runtime_version: authority.identity.runtime_version ?? null }
+          { scope: "authority", runtime_version: authority2.identity.runtime_version ?? null }
         ]
       }
     );
   }
-  const entries = authority.observed_entries;
-  const range = authority.receipt_sequence_range;
+  const entries = authority2.observed_entries;
+  const range = authority2.receipt_sequence_range;
   const expectedEntryCount = range.last - range.first + 1;
   const coverageFaults = [];
   if (entries.length !== expectedEntryCount) {
@@ -22156,7 +22156,7 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
       });
     }
   }
-  let previousCommitment = neutralJournalGenesis(authority);
+  let previousCommitment = neutralJournalGenesis(authority2);
   for (let index = 0; index < entries.length; index += 1) {
     const entry = entries[index];
     if (entry.previous_commitment !== previousCommitment) {
@@ -22169,7 +22169,7 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
       });
       break;
     }
-    const expectedCommitment = neutralJournalEntryCommitment(authority, previousCommitment, entry);
+    const expectedCommitment = neutralJournalEntryCommitment(authority2, previousCommitment, entry);
     if (entry.entry_commitment !== expectedCommitment) {
       coverageFaults.push({
         reason: "entry_commitment_mismatch",
@@ -22192,9 +22192,9 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
       ],
       {
         ...baseFacts,
-        authority_journal_id: authority.receipt_journal_id,
+        authority_journal_id: authority2.receipt_journal_id,
         authority_sequence_range: range,
-        journal_genesis: neutralJournalGenesis(authority),
+        journal_genesis: neutralJournalGenesis(authority2),
         journal_chain_faults: coverageFaults
       }
     );
@@ -22202,7 +22202,7 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
   const journalRoot = previousCommitment;
   const attestationFaults = [];
   const acceptedAttestors = [];
-  for (const attestation of authority.attestations) {
+  for (const attestation of authority2.attestations) {
     if (NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS.indexOf(attestation.attestor_id) === -1) {
       attestationFaults.push({ attestor_id: attestation.attestor_id, reason: "attestor_unrecognized" });
       continue;
@@ -22229,7 +22229,7 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
       });
       continue;
     }
-    const expectedRef = neutralAttestationReference(authority, attestation);
+    const expectedRef = neutralAttestationReference(authority2, attestation);
     if (attestation.attestation_ref !== expectedRef) {
       attestationFaults.push({
         attestor_id: attestation.attestor_id,
@@ -22259,9 +22259,9 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
       }
     );
   }
-  const claimantId = evidence2?.claimant_id;
+  const claimantId = evidence3?.claimant_id;
   const claimantNamed = typeof claimantId === "string" && NEUTRAL_CLAIMANT_ID_PATTERN.test(claimantId);
-  const claimantIsAttestor = claimantNamed && (authority.attestations.some((attestation) => attestation.attestor_id === claimantId) || NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS.indexOf(claimantId) !== -1);
+  const claimantIsAttestor = claimantNamed && (authority2.attestations.some((attestation) => attestation.attestor_id === claimantId) || NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS.indexOf(claimantId) !== -1);
   if (!claimantNamed || claimantIsAttestor) {
     return refuseConformance(
       "scenario_claimant_not_independent",
@@ -22273,12 +22273,12 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
       {
         ...baseFacts,
         submitted_claimant_id: claimantId ?? null,
-        attesting_parties: authority.attestations.map((attestation) => attestation.attestor_id),
+        attesting_parties: authority2.attestations.map((attestation) => attestation.attestor_id),
         claimant_is_attestor: claimantIsAttestor
       }
     );
   }
-  if (evidence2?.suite_id !== NEUTRAL_SCENARIO_SUITE_ID || evidence2?.suite_version !== NEUTRAL_SCENARIO_SUITE_VERSION) {
+  if (evidence3?.suite_id !== NEUTRAL_SCENARIO_SUITE_ID || evidence3?.suite_version !== NEUTRAL_SCENARIO_SUITE_VERSION) {
     return refuseConformance(
       "scenario_suite_version_mismatch",
       [
@@ -22288,10 +22288,10 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
       baseFacts
     );
   }
-  const fullSuiteTupleSatisfied = required.length === NEUTRAL_FULL_SUITE_SCENARIO_IDS.length && NEUTRAL_FULL_SUITE_SCENARIO_IDS.every((id2, index) => required[index] === id2);
-  const missingRequired = expectedRequired.filter((id2) => required.indexOf(id2) === -1);
-  const extraRequired = required.filter((id2) => expectedRequired.indexOf(id2) === -1);
-  const tupleMisordered = required.length === expectedRequired.length && missingRequired.length === 0 && extraRequired.length === 0 && expectedRequired.some((id2, index) => required[index] !== id2);
+  const fullSuiteTupleSatisfied = required.length === NEUTRAL_FULL_SUITE_SCENARIO_IDS.length && NEUTRAL_FULL_SUITE_SCENARIO_IDS.every((id3, index) => required[index] === id3);
+  const missingRequired = expectedRequired.filter((id3) => required.indexOf(id3) === -1);
+  const extraRequired = required.filter((id3) => expectedRequired.indexOf(id3) === -1);
+  const tupleMisordered = required.length === expectedRequired.length && missingRequired.length === 0 && extraRequired.length === 0 && expectedRequired.some((id3, index) => required[index] !== id3);
   if (!fullSuiteTupleSatisfied && (required.length !== expectedRequired.length || missingRequired.length > 0 || extraRequired.length > 0 || tupleMisordered)) {
     return refuseConformance(
       "scenario_required_set_mismatch",
@@ -22320,7 +22320,7 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
       { ...baseFacts, declared_required_scenario_ids: [...expectedRequired] }
     );
   }
-  const outOfOrder = required.map((id2, index) => ({ index, expected: id2, observed: results[index]?.stable_id ?? null })).filter((entry) => entry.expected !== entry.observed);
+  const outOfOrder = required.map((id3, index) => ({ index, expected: id3, observed: results[index]?.stable_id ?? null })).filter((entry) => entry.expected !== entry.observed);
   if (outOfOrder.length > 0) {
     return refuseConformance(
       "scenario_results_unordered",
@@ -22418,7 +22418,7 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
       { ...baseFacts, duplicate_receipt_references: duplicateReceipts }
     );
   }
-  const activatedContractVersion = evidence2.activated_runtime?.contract_version;
+  const activatedContractVersion = evidence3.activated_runtime?.contract_version;
   const contractOffenders = [
     ...activatedContractVersion === NEUTRAL_CONTRACT_VERSION ? [] : [{ scope: "activated_runtime", contract_version: activatedContractVersion ?? null }],
     ...results.filter((result8) => result8.evidence_identity?.contract_version !== NEUTRAL_CONTRACT_VERSION).map((result8) => ({
@@ -22441,10 +22441,10 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
     );
   }
   const runtimeOffenders = [
-    ...isNeutralRecognizedRuntimeVersion(evidence2.activated_runtime?.runtime_version) ? [] : [
+    ...isNeutralRecognizedRuntimeVersion(evidence3.activated_runtime?.runtime_version) ? [] : [
       {
         scope: "activated_runtime",
-        runtime_version: evidence2.activated_runtime?.runtime_version ?? null
+        runtime_version: evidence3.activated_runtime?.runtime_version ?? null
       }
     ],
     ...results.filter((result8) => !isNeutralRecognizedRuntimeVersion(result8.evidence_identity?.runtime_version)).map((result8) => ({
@@ -22468,7 +22468,7 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
     );
   }
   const incomplete = [
-    ...identityComplete(evidence2.activated_runtime) ? [] : ["activated_runtime"],
+    ...identityComplete(evidence3.activated_runtime) ? [] : ["activated_runtime"],
     ...results.filter((result8) => !identityComplete(result8.evidence_identity)).map((result8) => result8.stable_id)
   ];
   if (incomplete.length > 0) {
@@ -22482,12 +22482,12 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
         ...baseFacts,
         required_identity_fields: [...NEUTRAL_EVIDENCE_IDENTITY_FIELDS],
         incomplete_identities: incomplete,
-        activated_runtime: evidence2.activated_runtime ?? null
+        activated_runtime: evidence3.activated_runtime ?? null
       }
     );
   }
   const unrecognizedIdentity = [
-    ...unrecognizedNeutralIdentityFields(evidence2.activated_runtime).map((entry) => ({
+    ...unrecognizedNeutralIdentityFields(evidence3.activated_runtime).map((entry) => ({
       scope: "activated_runtime",
       ...entry
     })),
@@ -22509,7 +22509,7 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
     );
   }
   const unrecognizedHost = [
-    ...unrecognizedNeutralHostFields(evidence2.activated_runtime).map((entry) => ({
+    ...unrecognizedNeutralHostFields(evidence3.activated_runtime).map((entry) => ({
       scope: "activated_runtime",
       ...entry
     })),
@@ -22534,7 +22534,7 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
       }
     );
   }
-  const bundleDrift = differingIdentityFields(evidence2.activated_runtime, authority.identity);
+  const bundleDrift = differingIdentityFields(evidence3.activated_runtime, authority2.identity);
   if (bundleDrift.length > 0) {
     return refuseConformance(
       "scenario_identity_binding_mismatch",
@@ -22544,16 +22544,16 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
       ],
       {
         ...baseFacts,
-        authority_identity: authority.identity,
-        claimed_identity: evidence2.activated_runtime,
+        authority_identity: authority2.identity,
+        claimed_identity: evidence3.activated_runtime,
         differing_identity_fields: [...bundleDrift]
       }
     );
   }
-  const misbound = results.filter((result8) => !sameIdentity(result8.evidence_identity, authority.identity)).map((result8) => ({
+  const misbound = results.filter((result8) => !sameIdentity(result8.evidence_identity, authority2.identity)).map((result8) => ({
     stable_id: result8.stable_id,
     differing_identity_fields: [
-      ...differingIdentityFields(result8.evidence_identity, authority.identity)
+      ...differingIdentityFields(result8.evidence_identity, authority2.identity)
     ]
   }));
   if (misbound.length > 0) {
@@ -22563,7 +22563,7 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
         "every result must have been produced under the exact authoritative identity",
         "evidence from another source revision, package, release, or runtime cannot be reused"
       ],
-      { ...baseFacts, authority_identity: authority.identity, misbound_results: misbound }
+      { ...baseFacts, authority_identity: authority2.identity, misbound_results: misbound }
     );
   }
   const unbound = [];
@@ -22578,11 +22578,11 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
     const journal = parsed[1];
     const sequence = parseInt(parsed[2], 10);
     const commitment = parsed[3];
-    if (journal !== authority.receipt_journal_id) {
+    if (journal !== authority2.receipt_journal_id) {
       unbound.push({ stable_id: result8.stable_id, reason: "foreign_journal", journal });
       continue;
     }
-    if (sequence < authority.receipt_sequence_range.first || sequence > authority.receipt_sequence_range.last) {
+    if (sequence < authority2.receipt_sequence_range.first || sequence > authority2.receipt_sequence_range.last) {
       unbound.push({ stable_id: result8.stable_id, reason: "sequence_outside_observed_range", sequence });
       continue;
     }
@@ -22642,8 +22642,8 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
       ],
       {
         ...baseFacts,
-        authority_journal_id: authority.receipt_journal_id,
-        authority_sequence_range: authority.receipt_sequence_range,
+        authority_journal_id: authority2.receipt_journal_id,
+        authority_sequence_range: authority2.receipt_sequence_range,
         journal_root: journalRoot,
         unbound_receipt_references: unbound
       }
@@ -22680,17 +22680,17 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
   }
   const signatureFaults = [];
   const verifiedAttestors = [];
-  for (const attestation of authority.attestations) {
+  for (const attestation of authority2.attestations) {
     if (acceptedAttestors.indexOf(attestation.attestor_id) === -1) continue;
     if (verifiedAttestors.indexOf(attestation.attestor_id) !== -1) continue;
-    if (neutralAttestationVerifies(authority, attestation)) {
+    if (neutralAttestationVerifies(authority2, attestation)) {
       verifiedAttestors.push(attestation.attestor_id);
       continue;
     }
     signatureFaults.push({
       attestor_id: attestation.attestor_id,
       reason: "attestation_signature_did_not_verify",
-      signed_digest: neutralAttestationDigest(authority, attestation)
+      signed_digest: neutralAttestationDigest(authority2, attestation)
     });
   }
   if (verifiedAttestors.length < NEUTRAL_MINIMUM_ATTESTOR_QUORUM) {
@@ -22735,10 +22735,10 @@ function evaluateNeutralConformanceDecision(evidence2, authority) {
       // the full frozen suite (the release emitter and the promotion gate)
       // must not read a core-5 verdict as a 31-scenario one.
       required_tuple_scope: fullSuiteTupleSatisfied ? "full_suite_31" : "core_5",
-      activated_runtime: evidence2.activated_runtime,
-      authority_identity: authority.identity,
-      authority_journal_id: authority.receipt_journal_id,
-      claimant_id: evidence2.claimant_id,
+      activated_runtime: evidence3.activated_runtime,
+      authority_identity: authority2.identity,
+      authority_journal_id: authority2.receipt_journal_id,
+      claimant_id: evidence3.claimant_id,
       journal_root: journalRoot,
       journal_entry_count: entries.length,
       attesting_parties: acceptedAttestors,
@@ -24592,7 +24592,7 @@ function assertSourceOwnedRegistry() {
       `neutral-conformance-assembly: the ${OWNER_MH02} ids disagree with the core scenario registry (${spineDeclared} vs ${coreDeclared})`
     );
   }
-  if (NEUTRAL_FULL_SUITE_SCENARIO_IDS.length !== NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS.length || NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS.some((id2, index) => NEUTRAL_FULL_SUITE_SCENARIO_IDS[index] !== id2)) {
+  if (NEUTRAL_FULL_SUITE_SCENARIO_IDS.length !== NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS.length || NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS.some((id3, index) => NEUTRAL_FULL_SUITE_SCENARIO_IDS[index] !== id3)) {
     throw new Error(
       "neutral-conformance-assembly: the suite tuple disagrees with the core's full-suite decision tuple"
     );
@@ -25053,7 +25053,7 @@ function assembleNeutralConformanceEvidence(request) {
     }
     orderedResults.push(copyResult(results[position]));
   }
-  const evidence2 = neutralFreeze({
+  const evidence3 = neutralFreeze({
     suite_id: NEUTRAL_SCENARIO_SUITE_ID,
     suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
     required_scenario_ids: [...NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS],
@@ -25085,7 +25085,7 @@ function assembleNeutralConformanceEvidence(request) {
         claimant_id: claimantId
       }
     }),
-    evidence: evidence2
+    evidence: evidence3
   };
 }
 function controlIdentityWith(overrides) {
@@ -25363,12 +25363,12 @@ var init_neutral_conformance_assembly = __esm({
         title: "six valid packets assemble into the 31 required ids, in contract order",
         check: (implementation) => {
           const shuffled = controlPackets().reverse();
-          const evidence2 = acceptedEvidence(implementation, shuffled, CONTROL_CLAIM);
-          if (evidence2 === null) return false;
+          const evidence3 = acceptedEvidence(implementation, shuffled, CONTROL_CLAIM);
+          if (evidence3 === null) return false;
           return sameIdList(
-            evidence2.results.map((result8) => result8.stable_id),
+            evidence3.results.map((result8) => result8.stable_id),
             NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS
-          ) && sameIdList(evidence2.required_scenario_ids, NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS);
+          ) && sameIdList(evidence3.required_scenario_ids, NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS);
         }
       },
       {
@@ -25535,13 +25535,13 @@ var init_neutral_conformance_assembly = __esm({
         id: "A21S-C13-output-immutability",
         title: "the aggregate is deeply frozen, so no consumer can edit it after the fact",
         check: (implementation) => {
-          const evidence2 = acceptedEvidence(implementation, controlPackets(), CONTROL_CLAIM);
-          if (evidence2 === null) return false;
-          if (!Object.isFrozen(evidence2)) return false;
-          if (!Object.isFrozen(evidence2.results)) return false;
-          if (!Object.isFrozen(evidence2.required_scenario_ids)) return false;
-          if (!Object.isFrozen(evidence2.activated_runtime)) return false;
-          for (const result8 of evidence2.results) {
+          const evidence3 = acceptedEvidence(implementation, controlPackets(), CONTROL_CLAIM);
+          if (evidence3 === null) return false;
+          if (!Object.isFrozen(evidence3)) return false;
+          if (!Object.isFrozen(evidence3.results)) return false;
+          if (!Object.isFrozen(evidence3.required_scenario_ids)) return false;
+          if (!Object.isFrozen(evidence3.activated_runtime)) return false;
+          for (const result8 of evidence3.results) {
             if (!Object.isFrozen(result8)) return false;
             if (!Object.isFrozen(result8.evidence_identity)) return false;
           }
@@ -25739,10 +25739,10 @@ var init_neutral_conformance_assembly = __esm({
           if (!refusesSafely(implementation, controlPacketsWith(OWNER_MH08, null), CONTROL_CLAIM)) {
             return false;
           }
-          const evidence2 = acceptedEvidence(implementation, controlPackets(), CONTROL_CLAIM);
-          if (evidence2 === null) return false;
+          const evidence3 = acceptedEvidence(implementation, controlPackets(), CONTROL_CLAIM);
+          if (evidence3 === null) return false;
           return sameIdList(
-            evidence2.results.map((result8) => result8.stable_id),
+            evidence3.results.map((result8) => result8.stable_id),
             NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS
           );
         }
@@ -26277,7 +26277,7 @@ function evaluateNeutralModuleBoundaries(request) {
   const graph = mh07ScanDependencyGraph(root, port.extractNeutralImportEdges, moduleIds);
   const roleOf = (unit) => unit === null ? null : (domainsShape ? MH07_DOMAIN_TREE_ROLES[unit] : MH07_MODULE_ROLES[unit]) ?? null;
   const classifiedUnits = domainsShape ? Object.keys(MH07_DOMAIN_TREE_ROLES) : moduleIds;
-  const unclassifiedModules = domainsShape ? moduleIds.filter((id2) => MH07_MODULE_FOLD_INDEX[id2] === void 0) : moduleIds.filter((id2) => roleOf(id2) === null);
+  const unclassifiedModules = domainsShape ? moduleIds.filter((id3) => MH07_MODULE_FOLD_INDEX[id3] === void 0) : moduleIds.filter((id3) => roleOf(id3) === null);
   const unclassifiedSources = domainsShape ? mh07UnclassifiedSources(root) : [];
   const modulesWithRole = (role) => classifiedUnits.filter((unit) => roleOf(unit) === role);
   const coreModules = modulesWithRole("neutral_core");
@@ -26460,7 +26460,7 @@ function evaluateNeutralModuleBoundaries(request) {
     "MHRC-MOD-003": mod003Satisfied,
     "MHRC-MOD-004": mod004Satisfied
   };
-  const evidence2 = MH07_SCENARIO_IDS.map((stableId) => ({
+  const evidence3 = MH07_SCENARIO_IDS.map((stableId) => ({
     stable_id: stableId,
     satisfied: satisfaction[stableId],
     observed: observations[stableId]
@@ -26503,7 +26503,7 @@ function evaluateNeutralModuleBoundaries(request) {
         owner_key: MH07_OWNER_KEY,
         suite_id: NEUTRAL_SCENARIO_SUITE_ID,
         suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
-        evidence: evidence2,
+        evidence: evidence3,
         source_binding: sourceBinding
       }
     }),
@@ -27149,11 +27149,11 @@ function appendMigrationDecision(handle, input) {
       comparison,
       previous_hash: previousHash
     };
-    const hash2 = computeRecordHash(base);
+    const hash3 = computeRecordHash(base);
     const record = neutralFreeze({
       schema_version: MH08_DECISION_SCHEMA,
       ...base,
-      record_hash: hash2
+      record_hash: hash3
     });
     const tmp = `${file}.${sequence}.tmp`;
     const priorContent = fs38.existsSync(file) ? fs38.readFileSync(file, "utf8") : "";
@@ -27205,15 +27205,15 @@ function hasSideEffectAuthorityShape(value) {
 }
 function runMh08Scenario(handle, runId, baseScope, stableId, request) {
   const scope = scenarioScope(baseScope, stableId);
-  const evidence2 = scenarioEvidenceFor(request, stableId);
-  if (evidence2 === null) {
+  const evidence3 = scenarioEvidenceFor(request, stableId);
+  if (evidence3 === null) {
     return { disposition: "refused", reason_code: MH08_EVIDENCE_INCOMPLETE_REASON_CODE };
   }
   if (stableId === "MHRC-STR-001") {
-    if (!hasSideEffectAuthorityShape(evidence2.side_effect_authority)) {
+    if (!hasSideEffectAuthorityShape(evidence3.side_effect_authority)) {
       return { disposition: "refused", reason_code: MH08_EVIDENCE_INCOMPLETE_REASON_CODE };
     }
-    const comparison2 = compareMigrationOutcomes(evidence2.legacy_outcome, evidence2.candidate_outcome);
+    const comparison2 = compareMigrationOutcomes(evidence3.legacy_outcome, evidence3.candidate_outcome);
     appendMigrationDecision(handle, {
       operation_id: `${runId}:${stableId}:shadow`,
       mode: "shadow",
@@ -27225,11 +27225,11 @@ function runMh08Scenario(handle, runId, baseScope, stableId, request) {
     if (!comparison2.equivalent) {
       return { disposition: "refused", reason_code: MH08_DIVERGENCE_REASON_CODE };
     }
-    const authorityOk = sideEffectAuthorityProvesNoCandidateCommit(evidence2.side_effect_authority);
+    const authorityOk = sideEffectAuthorityProvesNoCandidateCommit(evidence3.side_effect_authority);
     return authorityOk ? { disposition: "succeeded", reason_code: null } : { disposition: "refused", reason_code: MH08_RESULT_MISMATCH_REASON_CODE };
   }
   if (stableId === "MHRC-STR-002") {
-    const comparison2 = compareMigrationOutcomes(evidence2.legacy_outcome, evidence2.candidate_outcome);
+    const comparison2 = compareMigrationOutcomes(evidence3.legacy_outcome, evidence3.candidate_outcome);
     appendMigrationDecision(handle, {
       operation_id: `${runId}:${stableId}:shadow`,
       mode: "shadow",
@@ -27256,7 +27256,7 @@ function runMh08Scenario(handle, runId, baseScope, stableId, request) {
     return { disposition: ok ? "succeeded" : "refused", reason_code: ok ? null : MH08_RESULT_MISMATCH_REASON_CODE };
   }
   if (stableId === "MHRC-STR-003") {
-    const comparison2 = compareMigrationOutcomes(evidence2.legacy_outcome, evidence2.candidate_outcome);
+    const comparison2 = compareMigrationOutcomes(evidence3.legacy_outcome, evidence3.candidate_outcome);
     appendMigrationDecision(handle, {
       operation_id: `${runId}:${stableId}:shadow`,
       mode: "shadow",
@@ -27290,7 +27290,7 @@ function runMh08Scenario(handle, runId, baseScope, stableId, request) {
     const ok = effective === "legacy" && scenarioRecordCount === 3;
     return { disposition: ok ? "succeeded" : "refused", reason_code: ok ? null : MH08_RESULT_MISMATCH_REASON_CODE };
   }
-  const comparison = compareMigrationOutcomes(evidence2.legacy_outcome, evidence2.candidate_outcome);
+  const comparison = compareMigrationOutcomes(evidence3.legacy_outcome, evidence3.candidate_outcome);
   appendMigrationDecision(handle, {
     operation_id: `${runId}:${stableId}:shadow`,
     mode: "shadow",
@@ -27474,12 +27474,12 @@ function safeArrayLength(value) {
 function isObjectLike(value) {
   return typeof value === "object" && value !== null && !safeIsArray(value);
 }
-function issue(path87, code, message) {
-  return { path: path87, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
+function issue(path89, code, message) {
+  return { path: path89, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
 }
-function pushIssue(issues, path87, code, message) {
+function pushIssue(issues, path89, code, message) {
   if (issues.length >= MAX_ISSUES) return;
-  issues.push(issue(path87, code, message));
+  issues.push(issue(path89, code, message));
 }
 function sortIssues(issues) {
   return [...issues].sort(
@@ -27490,15 +27490,15 @@ function canonicalDocumentJson(value) {
   const errors = [];
   const active = /* @__PURE__ */ new Set();
   let nodes = 0;
-  const walk = (node, path87, depth) => {
+  const walk = (node, path89, depth) => {
     if (errors.length >= MAX_ISSUES) return null;
     if (depth > MAX_CANONICAL_DEPTH) {
-      pushIssue(errors, path87, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
+      pushIssue(errors, path89, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
       return null;
     }
     nodes += 1;
     if (nodes > MAX_CANONICAL_NODES) {
-      pushIssue(errors, path87, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
+      pushIssue(errors, path89, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
       return null;
     }
     if (node === null) return "null";
@@ -27507,7 +27507,7 @@ function canonicalDocumentJson(value) {
     if (kind === "string") {
       const text = node;
       if (text.length > MAX_STRING_LENGTH) {
-        pushIssue(errors, path87, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
+        pushIssue(errors, path89, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
         return null;
       }
       return JSON.stringify(text);
@@ -27515,17 +27515,17 @@ function canonicalDocumentJson(value) {
     if (kind === "number") {
       const num = node;
       if (!Number.isFinite(num)) {
-        pushIssue(errors, path87, "non_finite_number", "numbers must be finite");
+        pushIssue(errors, path89, "non_finite_number", "numbers must be finite");
         return null;
       }
       return Object.is(num, -0) ? "0" : String(num);
     }
     if (kind !== "object") {
-      pushIssue(errors, path87, "unsupported_type", `${kind} has no canonical JSON form`);
+      pushIssue(errors, path89, "unsupported_type", `${kind} has no canonical JSON form`);
       return null;
     }
     if (active.has(node)) {
-      pushIssue(errors, path87, "cycle_detected", "value contains a cycle");
+      pushIssue(errors, path89, "cycle_detected", "value contains a cycle");
       return null;
     }
     active.add(node);
@@ -27533,26 +27533,26 @@ function canonicalDocumentJson(value) {
       if (safeIsArray(node)) {
         const length = safeArrayLength(node);
         if (length.ok === false) {
-          pushIssue(errors, path87, "array_length_unreadable", length.reason);
+          pushIssue(errors, path89, "array_length_unreadable", length.reason);
           return null;
         }
         if (length.length > MAX_ARRAY_ITEMS) {
-          pushIssue(errors, path87, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
+          pushIssue(errors, path89, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
           return null;
         }
         const parts2 = [];
         for (let index = 0; index < length.length; index += 1) {
           const key = String(index);
           if (!safeHasOwn(node, key)) {
-            pushIssue(errors, `${path87}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
+            pushIssue(errors, `${path89}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
             return null;
           }
           const read = safeGet(node, key);
           if (read.ok === false) {
-            pushIssue(errors, `${path87}[${index}]`, "property_read_threw", read.reason);
+            pushIssue(errors, `${path89}[${index}]`, "property_read_threw", read.reason);
             return null;
           }
-          const encoded = walk(read.value, `${path87}[${index}]`, depth + 1);
+          const encoded = walk(read.value, `${path89}[${index}]`, depth + 1);
           if (encoded === null) return null;
           parts2.push(encoded);
         }
@@ -27560,11 +27560,11 @@ function canonicalDocumentJson(value) {
       }
       const keys = safeOwnKeys(node);
       if (keys.ok === false) {
-        pushIssue(errors, path87, "own_keys_threw", keys.reason);
+        pushIssue(errors, path89, "own_keys_threw", keys.reason);
         return null;
       }
       if (keys.keys.length > MAX_OBJECT_KEYS) {
-        pushIssue(errors, path87, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
+        pushIssue(errors, path89, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
         return null;
       }
       const sorted = [...keys.keys].sort();
@@ -27572,14 +27572,14 @@ function canonicalDocumentJson(value) {
       for (const key of sorted) {
         const read = safeGet(node, key);
         if (read.ok === false) {
-          pushIssue(errors, `${path87}.${key}`, "property_read_threw", read.reason);
+          pushIssue(errors, `${path89}.${key}`, "property_read_threw", read.reason);
           return null;
         }
         if (read.value === void 0) {
-          pushIssue(errors, `${path87}.${key}`, "undefined_value", "undefined has no canonical JSON form");
+          pushIssue(errors, `${path89}.${key}`, "undefined_value", "undefined has no canonical JSON form");
           return null;
         }
-        const encoded = walk(read.value, `${path87}.${key}`, depth + 1);
+        const encoded = walk(read.value, `${path89}.${key}`, depth + 1);
         if (encoded === null) return null;
         parts.push(`${JSON.stringify(key)}:${encoded}`);
       }
@@ -27635,38 +27635,38 @@ var init_document_safe = __esm({
 });
 
 // src/domains/lifecycle/document-records.ts
-function readShape(issues, value, path87, allowed) {
+function readShape(issues, value, path89, allowed) {
   if (value === null || typeof value !== "object") {
-    pushIssue(issues, path87, "not_an_object", `${path87} must be an object`);
+    pushIssue(issues, path89, "not_an_object", `${path89} must be an object`);
     return false;
   }
   if (safeIsArray(value)) {
-    pushIssue(issues, path87, "not_an_object", `${path87} must be an object, not an array`);
+    pushIssue(issues, path89, "not_an_object", `${path89} must be an object, not an array`);
     return false;
   }
   const keys = safeOwnKeys(value);
   if (keys.ok === false) {
-    pushIssue(issues, path87, "own_keys_threw", `${path87}: ${keys.reason}`);
+    pushIssue(issues, path89, "own_keys_threw", `${path89}: ${keys.reason}`);
     return false;
   }
   const allowedSet = new Set(allowed);
   let ok = true;
   for (const key of [...keys.keys].sort()) {
     if (!allowedSet.has(key)) {
-      pushIssue(issues, `${path87}.${key}`, "unexpected_key", `${path87}.${key} is not part of the closed schema`);
+      pushIssue(issues, `${path89}.${key}`, "unexpected_key", `${path89}.${key} is not part of the closed schema`);
       ok = false;
     }
   }
   for (const key of allowed) {
     if (!safeHasOwn(value, key)) {
-      pushIssue(issues, `${path87}.${key}`, "missing_field", `${path87}.${key} is required`);
+      pushIssue(issues, `${path89}.${key}`, "missing_field", `${path89}.${key} is required`);
       ok = false;
     }
   }
   return ok;
 }
-function readString(issues, parent, path87, key, options = {}) {
-  const fieldPath = `${path87}.${key}`;
+function readString(issues, parent, path89, key, options = {}) {
+  const fieldPath = `${path89}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -27701,8 +27701,8 @@ function readString(issues, parent, path87, key, options = {}) {
   }
   return value;
 }
-function readArray3(issues, parent, path87, key, options = {}) {
-  const fieldPath = `${path87}.${key}`;
+function readArray3(issues, parent, path89, key, options = {}) {
+  const fieldPath = `${path89}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -27745,10 +27745,10 @@ function readArray3(issues, parent, path87, key, options = {}) {
   }
   return ok ? items : null;
 }
-function readStringArray(issues, parent, path87, key, options = {}) {
-  const items = readArray3(issues, parent, path87, key, options);
+function readStringArray(issues, parent, path89, key, options = {}) {
+  const items = readArray3(issues, parent, path89, key, options);
   if (items === null) return null;
-  const fieldPath = `${path87}.${key}`;
+  const fieldPath = `${path89}.${key}`;
   const out = [];
   let ok = true;
   for (let index = 0; index < items.length; index += 1) {
@@ -27774,10 +27774,10 @@ function readStringArray(issues, parent, path87, key, options = {}) {
   }
   return ok ? out : null;
 }
-function readItemArray(issues, parent, path87, key, options, readItem) {
-  const items = readArray3(issues, parent, path87, key, options);
+function readItemArray(issues, parent, path89, key, options, readItem) {
+  const items = readArray3(issues, parent, path89, key, options);
   if (items === null) return null;
-  const fieldPath = `${path87}.${key}`;
+  const fieldPath = `${path89}.${key}`;
   const out = [];
   const firstIndexById = /* @__PURE__ */ new Map();
   let ok = true;
@@ -27804,13 +27804,13 @@ function readItemArray(issues, parent, path87, key, options, readItem) {
   }
   return ok ? out : null;
 }
-function readProvenance(issues, parent, path87) {
+function readProvenance(issues, parent, path89) {
   const read = safeGet(parent, "provenance");
   if (read.ok === false) {
-    pushIssue(issues, `${path87}.provenance`, "property_read_threw", `${path87}.provenance: property read threw`);
+    pushIssue(issues, `${path89}.provenance`, "property_read_threw", `${path89}.provenance: property read threw`);
     return null;
   }
-  const provenancePath = `${path87}.provenance`;
+  const provenancePath = `${path89}.provenance`;
   if (!readShape(issues, read.value, provenancePath, PROVENANCE_KEYS)) return null;
   const source = read.value;
   const authorId = readString(issues, source, provenancePath, "author_id", {
@@ -27851,88 +27851,88 @@ function readProvenance(issues, parent, path87) {
     source: provenanceSource
   };
 }
-function readPlanBody(issues, body, path87) {
-  if (!readShape(issues, body, path87, ["objectives", "steps"])) return null;
-  const objectives = readStringArray(issues, body, path87, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
-  const steps = readItemArray(issues, body, path87, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
+function readPlanBody(issues, body, path89) {
+  if (!readShape(issues, body, path89, ["objectives", "steps"])) return null;
+  const objectives = readStringArray(issues, body, path89, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
+  const steps = readItemArray(issues, body, path89, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
     if (!readShape(itemIssues, item, itemPath, ["id", "title", "status"])) return null;
-    const id2 = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
+    const id3 = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
     const title = readString(itemIssues, item, itemPath, "title", { maxLength: 500 });
     const status = readString(itemIssues, item, itemPath, "status", { enumOf: PLAN_STEP_STATUSES });
-    if (id2 === null || title === null || status === null) return null;
-    return { id: id2, title, status };
+    if (id3 === null || title === null || status === null) return null;
+    return { id: id3, title, status };
   });
   if (objectives === null || steps === null) return null;
   return { objectives, steps };
 }
-function readSpecBody(issues, body, path87) {
-  if (!readShape(issues, body, path87, ["requirements"])) return null;
+function readSpecBody(issues, body, path89) {
+  if (!readShape(issues, body, path89, ["requirements"])) return null;
   const requirements = readItemArray(
     issues,
     body,
-    path87,
+    path89,
     "requirements",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
       if (!readShape(itemIssues, item, itemPath, ["id", "statement", "priority"])) return null;
-      const id2 = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
+      const id3 = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
       const statement = readString(itemIssues, item, itemPath, "statement", { maxLength: 2e3 });
       const priority = readString(itemIssues, item, itemPath, "priority", {
         enumOf: SPEC_REQUIREMENT_PRIORITIES
       });
-      if (id2 === null || statement === null || priority === null) return null;
-      return { id: id2, statement, priority };
+      if (id3 === null || statement === null || priority === null) return null;
+      return { id: id3, statement, priority };
     }
   );
   if (requirements === null) return null;
   return { requirements };
 }
-function readHandoffBody(issues, body, path87) {
-  if (!readShape(issues, body, path87, ["task_id", "status", "artifacts", "issues"])) return null;
-  const taskId = readString(issues, body, path87, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
-  const status = readString(issues, body, path87, "status", { enumOf: HANDOFF_STATUSES });
-  const artifacts = readStringArray(issues, body, path87, "artifacts", { max: 256, itemMaxLength: 1e3 });
-  const handoffIssues = readStringArray(issues, body, path87, "issues", { max: 256, itemMaxLength: 1e3 });
+function readHandoffBody(issues, body, path89) {
+  if (!readShape(issues, body, path89, ["task_id", "status", "artifacts", "issues"])) return null;
+  const taskId = readString(issues, body, path89, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
+  const status = readString(issues, body, path89, "status", { enumOf: HANDOFF_STATUSES });
+  const artifacts = readStringArray(issues, body, path89, "artifacts", { max: 256, itemMaxLength: 1e3 });
+  const handoffIssues = readStringArray(issues, body, path89, "issues", { max: 256, itemMaxLength: 1e3 });
   if (taskId === null || status === null || artifacts === null || handoffIssues === null) return null;
   return { task_id: taskId, status, artifacts, issues: handoffIssues };
 }
-function readReviewBody(issues, body, path87) {
-  if (!readShape(issues, body, path87, ["verdict", "findings"])) return null;
-  const verdict = readString(issues, body, path87, "verdict", { enumOf: REVIEW_VERDICTS });
+function readReviewBody(issues, body, path89) {
+  if (!readShape(issues, body, path89, ["verdict", "findings"])) return null;
+  const verdict = readString(issues, body, path89, "verdict", { enumOf: REVIEW_VERDICTS });
   const findings = readItemArray(
     issues,
     body,
-    path87,
+    path89,
     "findings",
     { max: 256 },
     (itemIssues, item, itemPath) => {
       if (!readShape(itemIssues, item, itemPath, ["id", "severity", "statement"])) return null;
-      const id2 = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
+      const id3 = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
       const severity = readString(itemIssues, item, itemPath, "severity", { enumOf: REVIEW_SEVERITIES });
       const statement = readString(itemIssues, item, itemPath, "statement", { maxLength: 2e3 });
-      if (id2 === null || severity === null || statement === null) return null;
-      return { id: id2, severity, statement };
+      if (id3 === null || severity === null || statement === null) return null;
+      return { id: id3, severity, statement };
     }
   );
   if (verdict === null || findings === null) return null;
   return { verdict, findings };
 }
-function readVerifyBody(issues, body, path87) {
-  if (!readShape(issues, body, path87, ["outcome", "checks"])) return null;
-  const outcome = readString(issues, body, path87, "outcome", { enumOf: VERIFY_OUTCOMES });
+function readVerifyBody(issues, body, path89) {
+  if (!readShape(issues, body, path89, ["outcome", "checks"])) return null;
+  const outcome = readString(issues, body, path89, "outcome", { enumOf: VERIFY_OUTCOMES });
   const checks = readItemArray(
     issues,
     body,
-    path87,
+    path89,
     "checks",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
       if (!readShape(itemIssues, item, itemPath, ["id", "name", "result"])) return null;
-      const id2 = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
+      const id3 = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
       const name = readString(itemIssues, item, itemPath, "name", { maxLength: 500 });
       const result8 = readString(itemIssues, item, itemPath, "result", { enumOf: VERIFY_CHECK_RESULTS });
-      if (id2 === null || name === null || result8 === null) return null;
-      return { id: id2, name, result: result8 };
+      if (id3 === null || name === null || result8 === null) return null;
+      return { id: id3, name, result: result8 };
     }
   );
   if (outcome === null || checks === null) return null;
@@ -27953,7 +27953,7 @@ function validateDocumentRecord(input) {
       enumOf: [DOCUMENT_SCHEMA_VERSION]
     });
     const kind = readString(errors, input, "$", "kind", { enumOf: DOCUMENT_KINDS });
-    const id2 = readString(errors, input, "$", "id", { pattern: DOCUMENT_ID_PATTERN });
+    const id3 = readString(errors, input, "$", "id", { pattern: DOCUMENT_ID_PATTERN });
     const title = readString(errors, input, "$", "title", { maxLength: 500 });
     const provenance = readProvenance(errors, input, "$");
     const bodyRead = safeGet(input, "body");
@@ -27961,10 +27961,10 @@ function validateDocumentRecord(input) {
       pushIssue(errors, "$.body", "property_read_threw", "$.body: property read threw");
       return failure(errors);
     }
-    if (schemaVersion === null || kind === null || id2 === null || title === null || provenance === null) {
+    if (schemaVersion === null || kind === null || id3 === null || title === null || provenance === null) {
       return failure(errors);
     }
-    const base = { schema_version: DOCUMENT_SCHEMA_VERSION, id: id2, title, provenance };
+    const base = { schema_version: DOCUMENT_SCHEMA_VERSION, id: id3, title, provenance };
     let record = null;
     if (kind === "plan") {
       const body = readPlanBody(errors, bodyRead.value, "$.body");
@@ -28219,7 +28219,7 @@ function present(value) {
 }
 function resolveDocumentAuthority(sources) {
   const refusals = [];
-  const evidence2 = [];
+  const evidence3 = [];
   try {
     if (sources === null || typeof sources !== "object") {
       return { authority: "none", record: null, refusals: ["sources_not_an_object"], evidence: [] };
@@ -28241,12 +28241,12 @@ function resolveDocumentAuthority(sources) {
       const validation = validateDocumentRecord(recordSource);
       if (!validation.valid || validation.record === null) {
         refusals.push("record_invalid");
-        evidence2.push(...validation.errors);
+        evidence3.push(...validation.errors);
         return {
           authority: "none",
           record: null,
           refusals: [...new Set(refusals)].sort(),
-          evidence: sortIssues(evidence2)
+          evidence: sortIssues(evidence3)
         };
       }
       if (present(projectionSource)) {
@@ -28257,7 +28257,7 @@ function resolveDocumentAuthority(sources) {
         authority: "canonical_record",
         record: validation.record,
         refusals: [...new Set(refusals)].sort(),
-        evidence: sortIssues(evidence2)
+        evidence: sortIssues(evidence3)
       };
     }
     if (present(projectionSource)) {
@@ -28265,7 +28265,7 @@ function resolveDocumentAuthority(sources) {
       const shape2 = validateDocumentProjection(projectionSource);
       if (!shape2.valid) {
         refusals.push("projection_malformed");
-        evidence2.push(...shape2.errors);
+        evidence3.push(...shape2.errors);
       }
     }
     if (present(read["legacy_record"])) refusals.push("legacy_record_is_not_canonical");
@@ -28276,7 +28276,7 @@ function resolveDocumentAuthority(sources) {
       authority: "none",
       record: null,
       refusals: [...new Set(refusals)].sort(),
-      evidence: sortIssues(evidence2)
+      evidence: sortIssues(evidence3)
     };
   } catch {
     return { authority: "none", record: null, refusals: ["internal_guard"], evidence: [] };
@@ -28433,10 +28433,10 @@ function requiredRecord(errors, parent, key) {
   }
   return value;
 }
-function requiredString(errors, parent, path87, key) {
+function requiredString(errors, parent, path89, key) {
   const value = parent[key];
   if (typeof value !== "string" || value.length === 0) {
-    pushIssue(errors, `${path87}.${key}`, "missing_field", `${key} must be a non-empty string`);
+    pushIssue(errors, `${path89}.${key}`, "missing_field", `${key} must be a non-empty string`);
     return null;
   }
   return value;
@@ -28449,23 +28449,23 @@ function requiredArray(errors, parent, key) {
   }
   return value;
 }
-function validateStringArray2(errors, values, path87) {
+function validateStringArray2(errors, values, path89) {
   if (values === null) return;
   values.forEach((value, index) => {
     if (typeof value !== "string" || value.length === 0) {
-      pushIssue(errors, `${path87}[${index}]`, "wrong_type", `${path87} entries must be non-empty strings`);
+      pushIssue(errors, `${path89}[${index}]`, "wrong_type", `${path89} entries must be non-empty strings`);
     }
   });
 }
-function canonicalReceiptInstant(errors, value, path87) {
+function canonicalReceiptInstant(errors, value, path89) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) {
-    pushIssue(errors, path87, "invalid_timestamp", `${path87} must be an ISO-8601 timestamp`);
+    pushIssue(errors, path89, "invalid_timestamp", `${path89} must be an ISO-8601 timestamp`);
     return null;
   }
   const parsed = Date.parse(value);
   const expectedCanonical = value.includes(".") ? value : value.replace(/Z$/, ".000Z");
   if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== expectedCanonical) {
-    pushIssue(errors, path87, "invalid_timestamp", `${path87} must name a real UTC calendar instant`);
+    pushIssue(errors, path89, "invalid_timestamp", `${path89} must name a real UTC calendar instant`);
     return null;
   }
   return expectedCanonical;
@@ -28545,8 +28545,8 @@ function receiptProvenance(document, fields, errors) {
       pushIssue(errors, `${base}.sha256_after`, "invalid_hash", "sha256_after must be null or a SHA-256 digest");
     }
   });
-  const evidence2 = requiredArray(errors, document, "evidence");
-  evidence2?.forEach((value, index) => {
+  const evidence3 = requiredArray(errors, document, "evidence");
+  evidence3?.forEach((value, index) => {
     const entry = plainRecord(value);
     const base = `$.frontmatter.evidence[${index}]`;
     if (entry === null) {
@@ -28863,7 +28863,7 @@ function readReceiptEvidence(runDir2) {
   } catch {
     return [];
   }
-  const evidence2 = [];
+  const evidence3 = [];
   for (const name of names.sort()) {
     if (!name.endsWith(".md")) continue;
     const stem = name.slice(0, -".md".length);
@@ -28877,7 +28877,7 @@ function readReceiptEvidence(runDir2) {
       text = null;
     }
     const decision = decideFromReceiptDocument(text);
-    evidence2.push({
+    evidence3.push({
       stem,
       authority: decision.authority,
       disposition: decision.disposition,
@@ -28885,7 +28885,7 @@ function readReceiptEvidence(runDir2) {
       trusted: decision.authority === "canonical_record" && decision.gate_signal !== "refuse"
     });
   }
-  return evidence2;
+  return evidence3;
 }
 function isStalled(status, receiptClearsStall, signalAgeMs, timeoutMs) {
   if (receiptClearsStall) return false;
@@ -28909,7 +28909,7 @@ function sweepLaneLiveness(runDir2, timeoutMs = DEFAULT_HEARTBEAT_TIMEOUT_MS, no
       const status = typeof lane.status === "string" ? lane.status : "unknown";
       const receiptStem = receipts.find((s) => s.endsWith(`-${laneId2}`));
       const receiptPresent = receiptStem !== void 0 || typeof lane.receipt_ref === "string" && lane.receipt_ref.length > 0;
-      const evidence2 = receiptStem !== void 0 ? evidenceByStem.get(receiptStem) ?? NO_RECEIPT : NO_RECEIPT;
+      const evidence3 = receiptStem !== void 0 ? evidenceByStem.get(receiptStem) ?? NO_RECEIPT : NO_RECEIPT;
       let hbKey;
       if (heartbeats.has(laneId2)) {
         hbKey = laneId2;
@@ -28934,11 +28934,11 @@ function sweepLaneLiveness(runDir2, timeoutMs = DEFAULT_HEARTBEAT_TIMEOUT_MS, no
         lane: laneId2,
         status,
         receipt_present: receiptPresent,
-        receipt_authority: evidence2.authority,
-        receipt_disposition: evidence2.disposition,
-        receipt_refusals: evidence2.refusals,
+        receipt_authority: evidence3.authority,
+        receipt_disposition: evidence3.disposition,
+        receipt_refusals: evidence3.refusals,
         heartbeat_age_ms: heartbeatAgeMs,
-        stalled: isStalled(status, evidence2.trusted, signalAgeMs, timeoutMs)
+        stalled: isStalled(status, evidence3.trusted, signalAgeMs, timeoutMs)
       });
     }
   } else {
@@ -28964,16 +28964,16 @@ function sweepLaneLiveness(runDir2, timeoutMs = DEFAULT_HEARTBEAT_TIMEOUT_MS, no
   for (const [stem, ageMs] of heartbeats) {
     if (consumedHeartbeats.has(stem)) continue;
     const matchedStem = receipts.find((s) => s === stem || s.startsWith(`${stem}-`));
-    const evidence2 = matchedStem !== void 0 ? evidenceByStem.get(matchedStem) ?? NO_RECEIPT : NO_RECEIPT;
+    const evidence3 = matchedStem !== void 0 ? evidenceByStem.get(matchedStem) ?? NO_RECEIPT : NO_RECEIPT;
     rows.push({
       lane: stem,
       status: "unknown",
       receipt_present: matchedStem !== void 0,
-      receipt_authority: evidence2.authority,
-      receipt_disposition: evidence2.disposition,
-      receipt_refusals: evidence2.refusals,
+      receipt_authority: evidence3.authority,
+      receipt_disposition: evidence3.disposition,
+      receipt_refusals: evidence3.refusals,
       heartbeat_age_ms: ageMs,
-      stalled: isStalled("unknown", evidence2.trusted, ageMs, timeoutMs)
+      stalled: isStalled("unknown", evidence3.trusted, ageMs, timeoutMs)
     });
   }
   return {
@@ -29037,20 +29037,20 @@ var init_check_lane_liveness = __esm({
 });
 
 // src/domains/lifecycle/event-log-schema.ts
-function isSafeRunId(id2) {
-  return RUN_ID_RE.test(id2) && id2 !== "." && id2 !== "..";
+function isSafeRunId(id3) {
+  return RUN_ID_RE.test(id3) && id3 !== "." && id3 !== "..";
 }
-function isSafeLaneId(id2) {
-  return LANE_ID_RE.test(id2) && id2 !== "." && id2 !== "..";
+function isSafeLaneId(id3) {
+  return LANE_ID_RE.test(id3) && id3 !== "." && id3 !== "..";
 }
-function assertSafeRunId(id2) {
-  if (!isSafeRunId(id2)) {
-    throw new Error(`log-jsonl: invalid run_id ${JSON.stringify(id2)}`);
+function assertSafeRunId(id3) {
+  if (!isSafeRunId(id3)) {
+    throw new Error(`log-jsonl: invalid run_id ${JSON.stringify(id3)}`);
   }
 }
-function assertSafeLaneId(id2) {
-  if (!isSafeLaneId(id2)) {
-    throw new Error(`log-jsonl: invalid lane_id ${JSON.stringify(id2)}`);
+function assertSafeLaneId(id3) {
+  if (!isSafeLaneId(id3)) {
+    throw new Error(`log-jsonl: invalid lane_id ${JSON.stringify(id3)}`);
   }
 }
 function validateEventIds(event) {
@@ -29127,11 +29127,11 @@ function exclusionSentinelPath(runDir2) {
   return (0, import_node_path.join)(runDir2, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir2) {
-  const path87 = stableLockPath(runDir2);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path87), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path87)) return;
+  const path89 = stableLockPath(runDir2);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path89), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path89)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path87, "wx");
+    const fd = (0, import_node_fs.openSync)(path89, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -29229,9 +29229,9 @@ function appendEvent(runDir2, event, opts = {}) {
   const line = JSON.stringify(withV2) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId2 = opts.laneId ?? "global";
-    const path87 = laneFallbackPath(runDir2, laneId2);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path87), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path87, "a");
+    const path89 = laneFallbackPath(runDir2, laneId2);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path89), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path89, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -29803,7 +29803,7 @@ function readPlanOwnerTaskIds(guildRoot, slug) {
 function readPlanTaskIdSet(guildRoot, slug) {
   const ids = /* @__PURE__ */ new Set();
   for (const taskIds of readPlanOwnerTaskIds(guildRoot, slug).values()) {
-    for (const id2 of taskIds) ids.add(id2);
+    for (const id3 of taskIds) ids.add(id3);
   }
   return ids;
 }
@@ -30132,7 +30132,7 @@ function assertWithinRunTree(runDir2, p, label = "path") {
   }
 }
 function buildTaskAssignmentV2(input) {
-  const lineage2 = attemptLineage(input);
+  const lineage3 = attemptLineage(input);
   const lead = leadBinding(input);
   const paths = taskCellPaths(
     {
@@ -30153,7 +30153,7 @@ function buildTaskAssignmentV2(input) {
     heartbeat_path: paths.heartbeat_path,
     cancel_channel: paths.cancel_channel
   };
-  return { ...base, ...lineage2, ...lead };
+  return { ...base, ...lineage3, ...lead };
 }
 function isBudgets(v) {
   if (v === null || typeof v !== "object") return false;
@@ -30224,10 +30224,10 @@ function validateTaskAssignmentV2(obj2) {
   if (!isProjection(o["projection"])) return null;
   if (!isBudgets(o["budgets"])) return null;
   if (!(o["deadline"] === null || typeof o["deadline"] === "string")) return null;
-  let lineage2;
+  let lineage3;
   let lead;
   try {
-    lineage2 = attemptLineage({
+    lineage3 = attemptLineage({
       attempt: o["attempt"],
       previous_attempt_id: o["previous_attempt_id"] ?? null,
       retry_reason: o["retry_reason"] ?? null
@@ -30243,7 +30243,7 @@ function validateTaskAssignmentV2(obj2) {
     const expected = taskCellPaths({
       run_id: o["run_id"],
       logical_task_id: o["logical_task_id"],
-      attempt: lineage2.attempt,
+      attempt: lineage3.attempt,
       instance_id: o["instance_id"]
     });
     if (o["assignment_path"] !== expected.assignment_path) return null;
@@ -30253,7 +30253,7 @@ function validateTaskAssignmentV2(obj2) {
   } catch {
     return null;
   }
-  return { ...o, ...lineage2, ...lead };
+  return { ...o, ...lineage3, ...lead };
 }
 var path51, TASK_CELL_STATES, TERMINAL_STATES, TERMINAL_SET, LEGAL_TRANSITIONS, TASK_ASSIGNMENT_V2_SCHEMA, SAFE_SEGMENT, isStr, isStrArr, TASK_ASSIGNMENT_V2_FIELDS, ACCEPTANCE_AUTHORITIES;
 var init_task_cell_backend = __esm({
@@ -30936,7 +30936,7 @@ function acquireJournalAuthority(journalPath2, io = defaultJournalIo, lockOption
   if (pinned) return failClosed(pinned);
   const held = verify("when the lock was taken");
   if (held) return failClosed(held);
-  const authority = {
+  const authority2 = {
     identity,
     get handle() {
       return handle;
@@ -30977,7 +30977,7 @@ function acquireJournalAuthority(journalPath2, io = defaultJournalIo, lockOption
     },
     release
   };
-  return { ok: true, authority, identity, failure: null };
+  return { ok: true, authority: authority2, identity, failure: null };
 }
 function analyzeReceiptRecords(records) {
   const seen = /* @__PURE__ */ new Map();
@@ -31189,15 +31189,15 @@ function appendReceipt(paths, input, io = defaultJournalIo, lockOptions = {}, op
   if (invalid) return failed(input, "invalid_record", invalid);
   const acquired = acquireJournalAuthority(paths.journal, io, lockOptions, "append", paths.checkpoint);
   if (!acquired.ok) return failed(input, acquired.failure.code, acquired.failure.message);
-  const authority = acquired.authority;
+  const authority2 = acquired.authority;
   try {
-    return appendLocked({ journal: authority.identity.path, checkpoint: paths.checkpoint }, input, io, authority, options);
+    return appendLocked({ journal: authority2.identity.path, checkpoint: paths.checkpoint }, input, io, authority2, options);
   } finally {
-    authority.release();
+    authority2.release();
   }
 }
-function appendLocked(paths, input, io, authority, options) {
-  const bound = authority.bind(io);
+function appendLocked(paths, input, io, authority2, options) {
+  const bound = authority2.bind(io);
   const scan = scanReceiptJournal(paths.journal, bound);
   if (scan.integrity !== "intact" && scan.integrity !== "absent") {
     return failed(
@@ -31242,7 +31242,7 @@ function appendLocked(paths, input, io, authority, options) {
     );
   }
   const record = sealReceiptRecord({ ...input, sequence: scan.last_sequence + 1 });
-  const beforeAppend = authority.verify("before the append");
+  const beforeAppend = authority2.verify("before the append");
   if (beforeAppend) return failed(input, beforeAppend.code, beforeAppend.message);
   try {
     bound.appendLine(paths.journal, `${JSON.stringify(record)}
@@ -31253,7 +31253,7 @@ function appendLocked(paths, input, io, authority, options) {
     }
     return failed(input, "journal_append_failed", err instanceof Error ? err.message : String(err));
   }
-  const afterAppend = authority.adopt("after the append");
+  const afterAppend = authority2.adopt("after the append");
   if (afterAppend) return failed(input, afterAppend.code, afterAppend.message);
   const after = scanReceiptJournal(paths.journal, bound);
   const landed = after.records.find((r) => r.sequence === record.sequence && r.event_id === record.event_id);
@@ -31280,7 +31280,7 @@ function appendLocked(paths, input, io, authority, options) {
     updated_at: record.recorded_at,
     contract_version: RECEIPT_CONTRACT_VERSION
   };
-  const beforeCheckpoint = authority.verify("before the checkpoint replacement");
+  const beforeCheckpoint = authority2.verify("before the checkpoint replacement");
   if (beforeCheckpoint) return failed(input, beforeCheckpoint.code, beforeCheckpoint.message);
   try {
     bound.writeCheckpoint(paths.checkpoint, `${JSON.stringify(checkpoint, null, 2)}
@@ -31299,7 +31299,7 @@ function appendLocked(paths, input, io, authority, options) {
       `checkpoint on disk reads "${persisted.state}" and does not match the checkpoint written for sequence ${record.sequence}`
     );
   }
-  const beforeClaim = authority.verify("before the durable claim");
+  const beforeClaim = authority2.verify("before the durable claim");
   if (beforeClaim) return failed(input, beforeClaim.code, beforeClaim.message);
   const blocked = input.observation_state === "not_observed" || input.observation_state === "observation_failed";
   return {
@@ -31622,11 +31622,11 @@ function reconcileReceiptJournal(opts) {
       null
     );
   }
-  const authority = acquired.authority;
+  const authority2 = acquired.authority;
   try {
-    return reconcileWithin(opts, io, null, authority.identity.path, authority);
+    return reconcileWithin(opts, io, null, authority2.identity.path, authority2);
   } finally {
-    authority.release();
+    authority2.release();
   }
 }
 function identityDenial(failure2) {
@@ -31640,8 +31640,8 @@ function accessDenial(failure2) {
   if (failure2.code === "journal_lock_failed") return { code: "repair_lock_failed", message: failure2.message };
   return identityDenial({ code: failure2.code, message: failure2.message });
 }
-function reconcileWithin(opts, io, denial, journalPath2, authority) {
-  const journalIo = authority !== null ? authority.bind(io) : io;
+function reconcileWithin(opts, io, denial, journalPath2, authority2) {
+  const journalIo = authority2 !== null ? authority2.bind(io) : io;
   const scan = scanReceiptJournal(journalPath2, journalIo);
   const checkpointRead = readCheckpointState(opts.checkpointPath, io);
   const checkpoint_before = checkpointRead.checkpoint;
@@ -31751,7 +31751,7 @@ function reconcileWithin(opts, io, denial, journalPath2, authority) {
       actual: opts.producerCheckpoint.record_count
     });
   }
-  const foreignRun = mergedAnalysis.run_ids.find((id2) => id2 !== opts.run_id);
+  const foreignRun = mergedAnalysis.run_ids.find((id3) => id3 !== opts.run_id);
   if (foreignRun !== void 0) {
     checkpoint_disagreements.push({
       code: "merged_run_identity_mismatch",
@@ -31779,7 +31779,7 @@ function reconcileWithin(opts, io, denial, journalPath2, authority) {
     residual_disagreements: [],
     failure: null
   };
-  const lostAuthority = checkpoint_repair.requested && !denial && authority !== null ? authority.verify("before the checkpoint repair") : null;
+  const lostAuthority = checkpoint_repair.requested && !denial && authority2 !== null ? authority2.verify("before the checkpoint repair") : null;
   if (checkpoint_repair.requested && (denial || lostAuthority)) {
     const refusal3 = denial ?? identityDenial(lostAuthority);
     checkpoint_repair.failure = { code: refusal3.code, message: refusal3.message };
@@ -31801,7 +31801,7 @@ function reconcileWithin(opts, io, denial, journalPath2, authority) {
     if (opts.producerCheckpoint.last_sequence !== checkpoint_after.last_sequence || opts.producerCheckpoint.record_count !== checkpoint_after.record_count) {
       blockers.push("producer checkpoint does not describe the merged view");
     }
-    const stillHeldToWrite = blockers.length === 0 && authority !== null ? authority.verify("before the repair write") : null;
+    const stillHeldToWrite = blockers.length === 0 && authority2 !== null ? authority2.verify("before the repair write") : null;
     if (blockers.length > 0) {
       checkpoint_repair.failure = {
         code: "repair_not_permitted",
@@ -31831,7 +31831,7 @@ function reconcileWithin(opts, io, denial, journalPath2, authority) {
         const reread = readCheckpointState(opts.checkpointPath, io);
         const identical = reread.checkpoint !== null && checkpointsIdentical(reread.checkpoint, checkpoint_after);
         checkpoint_repair.residual_disagreements = compareCheckpointToJournal(reread, currentScan, opts.run_id);
-        const stillHeld = authority !== null ? authority.verify("before the repair is reported verified") : null;
+        const stillHeld = authority2 !== null ? authority2.verify("before the repair is reported verified") : null;
         checkpoint_repair.verified = identical && checkpoint_repair.residual_disagreements.length === 0 && stillHeld === null;
         if (!checkpoint_repair.verified) {
           checkpoint_repair.failure = stillHeld ? identityDenial(stillHeld) : {
@@ -32533,7 +32533,7 @@ function evaluateReceiptJournalConformance(request) {
   } finally {
     removeQuietly(workspace);
   }
-  const evidence2 = MH06_SCENARIO_IDS.map((stableId) => ({
+  const evidence3 = MH06_SCENARIO_IDS.map((stableId) => ({
     stable_id: stableId,
     satisfied: verdicts[stableId].satisfied,
     observed: verdicts[stableId].observed
@@ -32577,7 +32577,7 @@ function evaluateReceiptJournalConformance(request) {
         owner_key: MH06_OWNER_KEY,
         suite_id: MH06_SUITE_ID,
         suite_version: MH06_SUITE_VERSION,
-        evidence: evidence2
+        evidence: evidence3
       }
     }),
     packet: freezeDeep(packet)
@@ -33445,11 +33445,427 @@ var init_run_analysis = __esm({
         return hasOnlyKeys(v, keysOf("assessed_input_hash", "assessed_input_ref", "instructions", "instructions_complete", "clarification_required_tasks", "required_phases")) && hashRef(v["assessed_input_hash"]) && nonEmptyString(v["assessed_input_ref"]) && instructions !== null && instructions.every((item) => hasOnlyKeys(item, /* @__PURE__ */ new Set(["instruction_id", "requirement_hash"])) && typeof item["instruction_id"] === "string" && SAFE_ID.test(item["instruction_id"]) && hashRef(item["requirement_hash"])) && new Set(instructions.map((item) => item["instruction_id"])).size === instructions.length && typeof v["instructions_complete"] === "boolean" && arrayOf(v["clarification_required_tasks"], nonEmptyString) && arrayOf(v["required_phases"], nonEmptyString);
       },
       "guild.instruction_evidence.v1": (v, runId) => hasOnlyKeys(v, keysOf("instruction_id", "requirement_hash", "verifier_kind", "verifier_ref", "result", "verified_input_hash", "verification_input_ref", "evidence_refs")) && typeof v["instruction_id"] === "string" && SAFE_ID.test(v["instruction_id"]) && hashRef(v["requirement_hash"]) && ["done_when", "configured_check", "review_gate"].includes(String(v["verifier_kind"])) && runEvidenceRef(runId)(v["verifier_ref"]) && ["passed", "failed", "unobservable"].includes(String(v["result"])) && hashRef(v["verified_input_hash"]) && nonEmptyString(v["verification_input_ref"]) && arrayOf(v["evidence_refs"], runEvidenceRef(runId)),
-      "guild.outcome_record.v1": (v) => hasOnlyKeys(v, keysOf("kind", "result", "verified_input_hash", "reopen_transitions", "findings_complete", "unresolved_finding_ids")) && ["review", "verify"].includes(String(v["kind"])) && ["passed", "failed"].includes(String(v["result"])) && hashRef(v["verified_input_hash"]) && integerAtLeast(v["reopen_transitions"], 0) && typeof v["findings_complete"] === "boolean" && arrayOf(v["unresolved_finding_ids"], (id2) => typeof id2 === "string" && SAFE_ID.test(id2)),
+      "guild.outcome_record.v1": (v) => hasOnlyKeys(v, keysOf("kind", "result", "verified_input_hash", "reopen_transitions", "findings_complete", "unresolved_finding_ids")) && ["review", "verify"].includes(String(v["kind"])) && ["passed", "failed"].includes(String(v["result"])) && hashRef(v["verified_input_hash"]) && integerAtLeast(v["reopen_transitions"], 0) && typeof v["findings_complete"] === "boolean" && arrayOf(v["unresolved_finding_ids"], (id3) => typeof id3 === "string" && SAFE_ID.test(id3)),
       "guild.capability_evidence.v1": (v, runId) => hasOnlyKeys(v, keysOf("action_signature", "owner", "capability_kind", "target", "evidence_refs")) && typeof v["action_signature"] === "string" && /^\S{1,256}$/.test(v["action_signature"]) && (v["owner"] === "project" && String(v["capability_kind"]) in PROJECT_CAPABILITY_KINDS || v["owner"] === "plugin" && String(v["capability_kind"]) in PLUGIN_CAPABILITY_KINDS) && typeof v["target"] === "string" && SAFE_ID.test(v["target"]) && arrayOf(v["evidence_refs"], runEvidenceRef(runId)),
       "guild.lookup_result.v1": (v, runId) => hasOnlyKeys(v, keysOf("outcome", "result_ref")) && ["hit", "miss"].includes(String(v["outcome"])) && runEvidenceRef(runId)(v["result_ref"]),
       "guild.prompt_context.v1": (v) => hasOnlyKeys(v, keysOf("prompt_hash", "context_hash", "retry_authorized")) && nonEmptyString(v["prompt_hash"]) && hashRef(v["context_hash"]) && typeof v["retry_authorized"] === "boolean",
       "guild.phase_cursor.v1": (v) => hasOnlyKeys(v, keysOf("visited_phases", "bypassed_phases")) && arrayOf(v["visited_phases"], nonEmptyString) && arrayOf(v["bypassed_phases"], nonEmptyString)
+    });
+  }
+});
+
+// src/domains/telemetry/trace-analysis-v3.ts
+function isRfc3339(v) {
+  const m = TIME_RE.exec(v);
+  if (!m) return false;
+  const [y, mo, d, h, mi, s] = m.slice(1, 7).map(Number);
+  const daysIn = [31, y % 4 === 0 && y % 100 !== 0 || y % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (mo < 1 || mo > 12 || d < 1 || d > daysIn[mo - 1] || h > 23 || mi > 59 || s > 59) return false;
+  if (m[7] !== void 0 && (Number(m[7]) > 23 || Number(m[8]) > 59)) return false;
+  return true;
+}
+var TRACE_ANALYSIS_V3_SCHEMA, TRACE_EVENT_CLASSES, TRACE_ID_RE, HASH_RE, TIME_RE, REL_PATH_RE, own, isObj, fail, cpLength, id, hash, time, str2, int0, num0, bool, konst, oneOf, nullable, relPath, array, object2, evidence, coverage, lineage, pins, interval, usage, shape, TRACE_V3_CHECKS;
+var init_trace_analysis_v3 = __esm({
+  "src/domains/telemetry/trace-analysis-v3.ts"() {
+    TRACE_ANALYSIS_V3_SCHEMA = "guild.trace.analysis.v3";
+    TRACE_EVENT_CLASSES = Object.freeze([
+      "prompt",
+      "dispatch",
+      "request_started",
+      "request_completed",
+      "handoff",
+      "phase",
+      "obligation",
+      "transfer",
+      "knowledge",
+      "retrieval",
+      "loss"
+    ]);
+    TRACE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+    HASH_RE = /^sha256:[a-f0-9]{64}$/;
+    TIME_RE = /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:[Zz]|[+-](\d{2}):(\d{2}))$/;
+    REL_PATH_RE = /^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*[\\%\x00-\x1f])[^:]+$/u;
+    own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+    isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+    fail = (errs, at, msg) => {
+      errs.push(`${at}: ${msg}`);
+    };
+    cpLength = (s) => [...s].length;
+    id = (v, at, e) => {
+      if (typeof v !== "string" || !TRACE_ID_RE.test(v)) fail(e, at, "not an id");
+    };
+    hash = (v, at, e) => {
+      if (typeof v !== "string" || !HASH_RE.test(v)) fail(e, at, "not a sha256 hash");
+    };
+    time = (v, at, e) => {
+      if (typeof v !== "string" || !isRfc3339(v)) fail(e, at, "not a date-time");
+    };
+    str2 = (v, at, e) => {
+      if (typeof v !== "string" || cpLength(v) < 1 || cpLength(v) > 4096) fail(e, at, "not a bounded string");
+    };
+    int0 = (v, at, e) => {
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 0) fail(e, at, "not a non-negative integer");
+    };
+    num0 = (v, at, e) => {
+      if (typeof v !== "number" || !Number.isFinite(v) || v < 0) fail(e, at, "not a non-negative number");
+    };
+    bool = (v, at, e) => {
+      if (typeof v !== "boolean") fail(e, at, "not a boolean");
+    };
+    konst = (c) => (v, at, e) => {
+      if (v !== c) fail(e, at, `must equal ${c}`);
+    };
+    oneOf = (...vals) => (v, at, e) => {
+      if (typeof v !== "string" || !vals.includes(v)) fail(e, at, `not one of ${vals.join("|")}`);
+    };
+    nullable = (c) => (v, at, e) => {
+      if (v !== null) c(v, at, e);
+    };
+    relPath = (v, at, e) => {
+      if (typeof v !== "string" || cpLength(v) < 1 || cpLength(v) > 1024 || !REL_PATH_RE.test(v)) fail(e, at, "not a contained relative path");
+    };
+    array = (item, max) => (v, at, e) => {
+      if (!Array.isArray(v)) return fail(e, at, "not an array");
+      if (v.length > max) fail(e, at, `more than ${max} items`);
+      for (let i = 0; i < v.length; i++) item(v[i], `${at}[${i}]`, e);
+    };
+    object2 = (shape2) => (v, at, e) => {
+      if (!isObj(v)) return fail(e, at, "not an object");
+      for (const k of Object.keys(v)) if (!own(shape2, k)) fail(e, `${at}.${k}`, "unknown field");
+      for (const k of Object.keys(shape2)) {
+        if (!own(v, k)) fail(e, `${at}.${k}`, "required");
+        else shape2[k](v[k], `${at}.${k}`, e);
+      }
+    };
+    evidence = object2({
+      source_id: id,
+      path: relPath,
+      sha256: hash,
+      schema_version: str2,
+      observed_at: time,
+      availability: oneOf("available", "expired", "redacted", "missing", "unsupported"),
+      reason: nullable(str2)
+    });
+    coverage = object2({
+      eligible: nullable(int0),
+      covered: int0,
+      excluded: int0,
+      missing: nullable(int0),
+      state: oneOf("complete", "partial", "unavailable"),
+      reason: nullable(str2),
+      exclusion_reasons: array(object2({ code: id, count: int0 }), 100)
+    });
+    lineage = object2({
+      source_id: id,
+      run_id: id,
+      execution_id: id,
+      host_session_id: nullable(id),
+      initiative_id: nullable(id),
+      goal_id: nullable(id),
+      logical_task_id: nullable(id),
+      attempt_id: nullable(id),
+      agent_instance_id: nullable(id),
+      request_id: nullable(id)
+    });
+    pins = object2({ assignment: hash, definition: hash, configuration: hash, workflow: hash, policy: hash });
+    interval = object2({
+      start: time,
+      end: nullable(time),
+      duration_ms: nullable(num0),
+      clock: object2({ domain: id, basis: oneOf("controller", "local_monotonic", "provider", "unknown"), comparable: bool, skew_bound_ms: nullable(num0) })
+    });
+    usage = object2({
+      granularity: oneOf("leaf_request", "native_session"),
+      observation_id: id,
+      revision: int0,
+      final: bool,
+      accounting_identity: id,
+      parent_accounting_identity: nullable(id),
+      inclusion: oneOf("leaf_exclusive", "parent_inclusive", "session_cumulative"),
+      input_inclusive: nullable(int0),
+      output: nullable(int0),
+      cache_read_subset: nullable(int0),
+      cache_write_subset: nullable(int0),
+      total: nullable(int0),
+      cost_usd: nullable(num0),
+      cost_basis: oneOf("measured", "derived_estimate", "native_estimate", "unavailable"),
+      currency: konst("USD"),
+      pricing_version: nullable(str2),
+      usage_semantics: oneOf("inclusive_input_cache_subset.v1", "provider_session_only.v1", "unknown"),
+      coverage,
+      native_baseline_usd: nullable(num0),
+      native_cumulative_usd: nullable(num0)
+    });
+    shape = object2({
+      schema_version: konst(TRACE_ANALYSIS_V3_SCHEMA),
+      event_id: id,
+      sequence: int0,
+      event_class: oneOf(...TRACE_EVENT_CLASSES),
+      at: time,
+      lineage,
+      operation_id: nullable(id),
+      component_invocation_id: nullable(id),
+      actor_id: id,
+      pins,
+      requested_model: nullable(str2),
+      observed_identity: object2({ provider: nullable(str2), model: nullable(str2), status: oneOf("observed", "unavailable"), reason: nullable(str2) }),
+      usage: nullable(usage),
+      payload_ref: nullable(evidence),
+      prompt_hash: nullable(hash),
+      redaction_version: str2,
+      capture: coverage,
+      interval: nullable(interval)
+    });
+    TRACE_V3_CHECKS = Object.freeze({ id, hash, time, str: str2, int0, num0, bool, konst, oneOf, nullable, relPath, array, object: object2, evidence, coverage, usage });
+  }
+});
+
+// src/domains/telemetry/trace-capture-v3.ts
+function valueEnd(s, i) {
+  const c = s[i];
+  if (c === '"' || c === "'") {
+    for (let j2 = i + 1; j2 < s.length; j2++) {
+      if (s[j2] === "\\") j2++;
+      else if (s[j2] === c) return j2 + 1;
+    }
+    return s.length;
+  }
+  if (c === "{" || c === "[") {
+    let depth = 0;
+    let quote = null;
+    for (let j2 = i; j2 < s.length; j2++) {
+      const ch = s[j2];
+      if (quote) {
+        if (ch === "\\") j2++;
+        else if (ch === quote) quote = null;
+      } else if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === "{" || ch === "[") depth++;
+      else if ((ch === "}" || ch === "]") && --depth === 0) return j2 + 1;
+    }
+    return s.length;
+  }
+  let j = i;
+  while (j < s.length && !/[,}\]\s]/.test(s[j])) j++;
+  return j;
+}
+function redactQuotedKeys(s) {
+  return redactValuesAfter(redactValuesAfter(s, QUOTED_KEY_RE), UNQUOTED_KEY_RE);
+}
+function redactValuesAfter(s, keyRe) {
+  const re = new RegExp(keyRe.source, keyRe.flags);
+  let out = "";
+  let last = 0;
+  let m;
+  while (m = re.exec(s)) {
+    const start = m.index + m[0].length;
+    if (start >= s.length || s.startsWith(REDACTED_VALUE, start)) continue;
+    const end = valueEnd(s, start);
+    if (end === start) continue;
+    out += s.slice(last, start) + REDACTED_VALUE;
+    last = end;
+    re.lastIndex = end;
+  }
+  return out + s.slice(last);
+}
+function bracketDepth(s) {
+  let depth = 0;
+  let max = 0;
+  let quote = null;
+  for (let j = 0; j < s.length; j++) {
+    const ch = s[j];
+    if (quote) {
+      if (ch === "\\") j++;
+      else if (ch === quote) quote = null;
+    } else if (ch === '"') quote = ch;
+    else if (ch === "{" || ch === "[") max = Math.max(max, ++depth);
+    else if (ch === "}" || ch === "]") depth--;
+  }
+  return max;
+}
+function redactStructured(s, privateLiterals, level) {
+  const t = s.trim();
+  if (!(t.startsWith("{") || t.startsWith("[")) || bracketDepth(t) > MAX_CONTENT_DEPTH) return s;
+  let doc;
+  try {
+    doc = JSON.parse(t);
+  } catch {
+    return s;
+  }
+  let changed = false;
+  const walk = (v) => {
+    if (typeof v === "string") {
+      const x = scrubOnce(v, privateLiterals, level + 1);
+      if (x !== v) changed = true;
+      return x;
+    }
+    if (Array.isArray(v)) return v.map(walk);
+    if (!isObj2(v)) return v;
+    const out = {};
+    for (const [k, x] of Object.entries(v)) {
+      const key = scrubOnce(k, privateLiterals, MAX_SERIALIZED_LEVELS);
+      if (key !== k) changed = true;
+      if (CREDENTIAL_KEY_RE.test(k) && x !== "[REDACTED]" && x !== null) {
+        changed = true;
+        out[key] = "[REDACTED]";
+      } else out[key] = walk(x);
+    }
+    return out;
+  };
+  const red = walk(doc);
+  return changed ? JSON.stringify(red) : s;
+}
+function containsJsonCompound(s) {
+  if (parsesAsJsonCompound(s)) return true;
+  let seen = 0;
+  for (let i = nextOpen(s, 0); i !== -1; i = nextOpen(s, i + 1), seen++) {
+    if (seen >= MAX_EMBEDDED_FRAGMENTS) return true;
+    if (parsesAsJsonCompound(s.slice(i, valueEnd(s, i)))) return true;
+  }
+  return false;
+}
+function redactEmbeddedJson(s, privateLiterals, level) {
+  let out = "";
+  let last = 0;
+  let seen = 0;
+  for (let i = nextOpen(s, 0); i !== -1; i = nextOpen(s, i + 1)) {
+    if (i < last) continue;
+    if (seen >= MAX_EMBEDDED_FRAGMENTS) throw new TooDeepToInspect();
+    const end = valueEnd(s, i);
+    const seg = s.slice(i, end);
+    seen++;
+    const red = redactStructured(seg, privateLiterals, level);
+    if (red !== seg) {
+      out += s.slice(last, i) + red;
+      last = end;
+      i = end - 1;
+    }
+  }
+  return out + s.slice(last);
+}
+function scrubOnce(s, privateLiterals, level = 0) {
+  if (level >= MAX_SERIALIZED_LEVELS && containsJsonCompound(s)) throw new TooDeepToInspect();
+  let out = s;
+  if (level < MAX_SERIALIZED_LEVELS) {
+    const t = s.trim();
+    out = t.startsWith("{") || t.startsWith("[") ? redactStructured(s, privateLiterals, level) : s;
+    if (out === s) out = redactEmbeddedJson(s, privateLiterals, level);
+  }
+  out = out.replace(PEM_PRIVATE_KEY_BLOCK_RE, PEM_REDACTED);
+  out = redactQuotedKeys(out);
+  out = redact(out).out;
+  out = redactTokenShapes(out);
+  out = redactKeyValueSecrets(out);
+  out = redactHomeDirPaths(out);
+  for (const lit of privateLiterals) if (lit.length > 0) out = out.split(lit).join("<PRIVATE-REDACTED>");
+  return out;
+}
+function scrub(s, privateLiterals) {
+  let cur = s;
+  try {
+    for (let i = 0; i < 4; i++) {
+      const next = scrubOnce(cur, privateLiterals);
+      if (next === cur) return cur;
+      cur = next;
+    }
+  } catch (error) {
+    if (error instanceof TooDeepToInspect) return null;
+    throw error;
+  }
+  return null;
+}
+function traceStringIsUnsafe(s, privateLiterals) {
+  try {
+    return scrubOnce(s, privateLiterals) !== s;
+  } catch (error) {
+    if (error instanceof TooDeepToInspect) return true;
+    throw error;
+  }
+}
+function truncateUtf8(s, maxBytes) {
+  if (encodedBytes(s) <= maxBytes) return s;
+  let bytes = 0;
+  let out = "";
+  for (const ch of s) {
+    const n = encodedBytes(ch);
+    if (bytes + n > maxBytes) break;
+    bytes += n;
+    out += ch;
+  }
+  return out;
+}
+function cutLiteralPrefixTail(s, privateLiterals) {
+  for (const lit of privateLiterals) {
+    for (let k = lit.length - 1; k >= 4; k--) if (s.endsWith(lit.slice(0, k))) return s.slice(0, s.length - k);
+  }
+  return s;
+}
+function scrubPayload(raw, maxBytes, privateLiterals) {
+  const original_bytes = Buffer.byteLength(raw, "utf8");
+  if (bracketDepth(raw) > MAX_CONTENT_DEPTH) return null;
+  let cur = scrub(raw, privateLiterals);
+  if (cur === null) return null;
+  const redacted = cur !== raw;
+  let truncated = false;
+  for (let i = 0; i < 3 && encodedBytes(cur) > maxBytes; i++) {
+    truncated = true;
+    const cut = cutLiteralPrefixTail(truncateUtf8(cur, maxBytes), privateLiterals);
+    cur = scrub(cut, privateLiterals);
+    if (cur === null) return null;
+  }
+  if (encodedBytes(cur) > maxBytes) return null;
+  return { content: cur, truncated, redacted, original_bytes };
+}
+function scrubTraceText(raw, maxBytes, privateLiterals = []) {
+  return scrubPayload(raw, maxBytes, privateLiterals);
+}
+var TRACE_CAPTURE_LIMITS, DISPATCH_CAPTURE_PATHS, isObj2, SENSITIVE_KEY_SRC, CREDENTIAL_KEY_RE, QUOTED_KEY_RE, REDACTED_VALUE, MAX_CONTENT_DEPTH, UNQUOTED_KEY_RE, MAX_SERIALIZED_LEVELS, PEM_PRIVATE_KEY_BLOCK_RE, PEM_REDACTED, TooDeepToInspect, parsesAsJsonCompound, nextOpen, MAX_EMBEDDED_FRAGMENTS, encodedBytes, USAGE_FAMILY_BY_HOST;
+var init_trace_capture_v3 = __esm({
+  "src/domains/telemetry/trace-capture-v3.ts"() {
+    init_kernel();
+    init_security();
+    init_trace_analysis_v3();
+    init_trace_analysis_v3();
+    TRACE_CAPTURE_LIMITS = Object.freeze({
+      max_host_event_bytes: 256 * 1024,
+      max_sidecar_bytes: 32 * 1024,
+      max_trace_events: 1e5,
+      max_json_depth: 16,
+      lock_wait_ms: 2e3,
+      stale_lock_ms: 3e4
+    });
+    DISPATCH_CAPTURE_PATHS = Object.freeze(["agent", "cmux", "tmux", "remote", "task_cell", "stack_launch", "unknown"]);
+    isObj2 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+    SENSITIVE_KEY_SRC = "(?:[A-Za-z0-9]+[_-])*(?:password|passwd|passphrase|secret|api[_-]?key|apikey|token|authorization|credential|credentials|private[_-]?key|client[_-]?secret|cookie|reasoning|thinking|chain[_-]?of[_-]?thought|redacted[_-]?thinking|encrypted[_-]?reasoning)(?:[_-][A-Za-z0-9]+)*";
+    CREDENTIAL_KEY_RE = new RegExp(`^${SENSITIVE_KEY_SRC}$`, "i");
+    QUOTED_KEY_RE = new RegExp(`(["'])(${SENSITIVE_KEY_SRC})\\1\\s*:\\s*`, "gi");
+    REDACTED_VALUE = '"[REDACTED]"';
+    MAX_CONTENT_DEPTH = 64;
+    UNQUOTED_KEY_RE = new RegExp(`\\b(${SENSITIVE_KEY_SRC})\\s*[:=]\\s*(?=[{\\["'])`, "gi");
+    MAX_SERIALIZED_LEVELS = 3;
+    PEM_PRIVATE_KEY_BLOCK_RE = /-----BEGIN ([A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?)-----[\s\S]*?(?:-----END \1-----|$)/gi;
+    PEM_REDACTED = "<PEM-PRIVATE-KEY-REDACTED>";
+    TooDeepToInspect = class extends Error {
+    };
+    parsesAsJsonCompound = (s) => {
+      const t = s.trim();
+      if (!(t.startsWith("{") || t.startsWith("["))) return false;
+      if (bracketDepth(t) > MAX_CONTENT_DEPTH) return true;
+      try {
+        return typeof JSON.parse(t) === "object";
+      } catch {
+        return false;
+      }
+    };
+    nextOpen = (s, from) => {
+      const a = s.indexOf("{", from);
+      const b = s.indexOf("[", from);
+      return a === -1 ? b : b === -1 ? a : Math.min(a, b);
+    };
+    MAX_EMBEDDED_FRAGMENTS = 1e3;
+    encodedBytes = (s) => Buffer.byteLength(JSON.stringify(s), "utf8") - 2;
+    USAGE_FAMILY_BY_HOST = Object.freeze({
+      claude: "anthropic_messages",
+      codex: "openai_responses"
     });
   }
 });
@@ -33465,6 +33881,7 @@ var init_telemetry = __esm({
     init_guild_trace_events();
     init_task_cell_telemetry();
     init_run_analysis();
+    init_trace_capture_v3();
   }
 });
 
@@ -34189,7 +34606,7 @@ function claimIsolatedLaunches(input) {
         } catch {
         }
       }
-      for (const own2 of created) fs47.rmSync(own2, { force: true });
+      for (const own3 of created) fs47.rmSync(own3, { force: true });
       const label = `attempt ${lane.attempt ?? 1} of ${lane.logicalTaskId}`;
       throw new IsolatedSpawnRefused(
         code === "EEXIST" ? `${label} already launched ${holder}; refusing ${lane.instanceId}. One reservation admits one launch. A relaunch reserves a new attempt.` : `${label} launch claim for ${lane.instanceId} could not be written (${code ?? "error"})`
@@ -35960,15 +36377,15 @@ function parseFrontmatter2(content) {
   if (Array.isArray(refs)) fm.source_refs = refs.map((r) => String(r));
   return fm;
 }
-function isDecisionPath(relPath2) {
-  return /(^|\/)decisions\//.test(relPath2.split("\\").join("/"));
+function isDecisionPath(relPath3) {
+  return /(^|\/)decisions\//.test(relPath3.split("\\").join("/"));
 }
-function isOperatorPath(relPath2) {
-  return OPERATOR_PATH_PATTERNS.some((re) => re.test(relPath2));
+function isOperatorPath(relPath3) {
+  return OPERATOR_PATH_PATTERNS.some((re) => re.test(relPath3));
 }
-function classifyTrustTier(relPath2, content, opts = {}) {
+function classifyTrustTier(relPath3, content, opts = {}) {
   const fm = parseFrontmatter2(content);
-  if (!opts.ignoreOperatorPath && !fm.harvested && !isDecisionPath(relPath2) && isOperatorPath(relPath2)) {
+  if (!opts.ignoreOperatorPath && !fm.harvested && !isDecisionPath(relPath3) && isOperatorPath(relPath3)) {
     return "operator";
   }
   if (fm.owner === "operator") return "trusted";
@@ -36012,14 +36429,14 @@ function foldForTagScan(text) {
   while (i < text.length) {
     let ch = String.fromCodePoint(text.codePointAt(i));
     let end = i + ch.length;
-    const entity = /^&(#x[0-9a-f]+|#[0-9]+|[a-z]+);?/i.exec(text.slice(i, i + 12));
-    if (entity) {
-      const body = entity[1].toLowerCase();
+    const entity2 = /^&(#x[0-9a-f]+|#[0-9]+|[a-z]+);?/i.exec(text.slice(i, i + 12));
+    if (entity2) {
+      const body = entity2[1].toLowerCase();
       const code = body.startsWith("#x") ? parseInt(body.slice(2), 16) : body.startsWith("#") ? parseInt(body.slice(1), 10) : NaN;
       const decoded = Number.isNaN(code) ? NAMED_ENTITIES[body] : code <= 1114111 ? String.fromCodePoint(code) : void 0;
       if (decoded !== void 0) {
         ch = decoded;
-        end = i + entity[0].length;
+        end = i + entity2[0].length;
       }
     }
     for (const c of ch.normalize("NFKC").toLowerCase()) {
@@ -36333,28 +36750,6 @@ var init_decision_catalog = __esm({
   }
 });
 
-// src/domains/knowledge/harvest.ts
-var SCRUBBED_WRITER_BRAND, scrubbedWikiWriter, FORBIDDEN_HARVEST_KEYS;
-var init_harvest = __esm({
-  "src/domains/knowledge/harvest.ts"() {
-    init_security();
-    init_recall_protect();
-    init_security();
-    init_security();
-    init_state();
-    init_harvest_journal();
-    init_wiki_index();
-    init_decision_catalog();
-    init_kernel();
-    SCRUBBED_WRITER_BRAND = "__guild_scrubbed_writer__";
-    scrubbedWikiWriter = Object.assign(
-      (absPath, content, opts) => scrubbedWrite(absPath, content, { surface: "wiki", ...opts }),
-      { [SCRUBBED_WRITER_BRAND]: true }
-    );
-    FORBIDDEN_HARVEST_KEYS = Object.freeze(["labels", "label_taxonomy", "concern"]);
-  }
-});
-
 // src/domains/knowledge/source-basis.ts
 function readWorktreeHead(root) {
   try {
@@ -36394,6 +36789,180 @@ var init_source_basis = __esm({
   }
 });
 
+// src/domains/knowledge/publication.ts
+function publicationDir(indexesDir) {
+  return path65.join(indexesDir, "publication");
+}
+function generationsDir(indexesDir) {
+  return path65.join(publicationDir(indexesDir), "generations");
+}
+function sha(bytes) {
+  return `sha256:${crypto18.createHash("sha256").update(bytes).digest("hex")}`;
+}
+function hex2(g) {
+  return g.slice("sha256:".length);
+}
+function isGenerationHash(v) {
+  return typeof v === "string" && v.startsWith("sha256:") && GEN_DIR.test(v.slice(7));
+}
+function writeDurable(p, bytes, mode = 420) {
+  const fd = fs54.openSync(p, "wx", mode);
+  try {
+    fs54.writeSync(fd, typeof bytes === "string" ? Buffer.from(bytes, "utf8") : bytes);
+    fs54.fsyncSync(fd);
+  } finally {
+    fs54.closeSync(fd);
+  }
+}
+function contained(indexesDir, target, leafFile = false) {
+  const r = checkContained(indexesDir, target, { policy: "physical", requireRegularFileLeaf: leafFile });
+  return isRefused(r) ? `${r.code}: ${r.detail}` : null;
+}
+function parsePointer(file, indexesDir) {
+  const bad = contained(indexesDir, file, true);
+  if (bad) throw new PublicationError("containment", bad);
+  const ptr = JSON.parse(fs54.readFileSync(file, "utf8"));
+  if (!isGenerationHash(ptr?.generation) || !isGenerationHash(ptr.publication_sha256)) throw new PublicationError("corrupt", "pointer malformed");
+  return ptr;
+}
+function successorFile(indexesDir, parent) {
+  return path65.join(publicationDir(indexesDir), "successors", parent ? hex2(parent) : "root");
+}
+function readPointer(indexesDir) {
+  const cur = path65.join(publicationDir(indexesDir), "CURRENT");
+  let ptr = fs54.existsSync(cur) ? parsePointer(cur, indexesDir) : null;
+  if (!ptr) {
+    const root = successorFile(indexesDir, null);
+    if (!fs54.existsSync(root)) return null;
+    ptr = parsePointer(root, indexesDir);
+  }
+  for (let i = 0; i < 1e5; i++) {
+    const next = successorFile(indexesDir, ptr.generation);
+    if (!fs54.existsSync(next)) return ptr;
+    ptr = parsePointer(next, indexesDir);
+  }
+  throw new PublicationError("corrupt", "successor chain does not terminate");
+}
+function readVerified(indexesDir, file, expected) {
+  const bad = contained(indexesDir, file, true);
+  if (bad) throw new PublicationError("containment", bad);
+  const bytes = fs54.readFileSync(file);
+  if (sha(bytes) !== expected) throw new PublicationError("corrupt", `hash mismatch for ${path65.basename(file)}`);
+  return bytes;
+}
+function pinFile(indexesDir, generation) {
+  try {
+    const dir = path65.join(publicationDir(indexesDir), "pins");
+    if (contained(indexesDir, dir)) return null;
+    fs54.mkdirSync(dir, { recursive: true });
+    const id3 = `${process.pid}-${crypto18.randomUUID()}`;
+    const tmp = path65.join(dir, `.tmp-${id3}`);
+    writeDurable(tmp, JSON.stringify({ pid: process.pid, host: HOST, generation }));
+    const f = path65.join(dir, `${id3}.json`);
+    fs54.renameSync(tmp, f);
+    return f;
+  } catch {
+    return null;
+  }
+}
+function readPublicationRecord(indexesDir, opts = {}) {
+  for (let attempt = 0; ; attempt++) {
+    const ptr = readPointer(indexesDir);
+    if (!ptr) return null;
+    const pin = pinFile(indexesDir, ptr.generation);
+    try {
+      const dir = path65.join(generationsDir(indexesDir), hex2(ptr.generation));
+      const record = JSON.parse(readVerified(indexesDir, path65.join(dir, "publication.json"), ptr.publication_sha256).toString("utf8"));
+      if (record.generation !== ptr.generation) throw new PublicationError("corrupt", "record names another generation");
+      if (opts.manifest === false) return { pointer: ptr, record, manifest: null };
+      const manifest = JSON.parse(readVerified(indexesDir, path65.join(dir, "manifest.json"), record.manifest.sha256).toString("utf8"));
+      if (manifest.generation !== ptr.generation) throw new PublicationError("corrupt", "manifest names another generation");
+      return { pointer: ptr, record, manifest };
+    } catch (err) {
+      if (err.code === "ENOENT" && attempt < 3) continue;
+      throw err;
+    } finally {
+      if (pin) fs54.rmSync(pin, { force: true });
+    }
+  }
+}
+var crypto18, fs54, os6, path65, PUBLICATION_FAULT_STEPS, GEN_DIR, HOST, PublicationError, ORPHAN_GRACE_MS;
+var init_publication = __esm({
+  "src/domains/knowledge/publication.ts"() {
+    crypto18 = __toESM(require("node:crypto"));
+    fs54 = __toESM(require("node:fs"));
+    os6 = __toESM(require("node:os"));
+    path65 = __toESM(require("node:path"));
+    init_kernel();
+    init_source_basis();
+    PUBLICATION_FAULT_STEPS = Object.freeze([
+      "lock_acquired",
+      "artifact:knowledge-graph.json",
+      "artifact:knowledge-recall.json",
+      "layers_written",
+      "manifest_written",
+      "record_written",
+      "generation_renamed",
+      "successor_claimed",
+      "pointer_tmp_written",
+      "pointer_renamed",
+      "export:knowledge-graph.json",
+      "export:knowledge-recall.json",
+      "reclaimed"
+    ]);
+    GEN_DIR = /^[a-f0-9]{64}$/;
+    HOST = crypto18.createHash("sha256").update(os6.hostname()).digest("hex").slice(0, 12);
+    PublicationError = class extends Error {
+      constructor(code, detail) {
+        super(`publication ${code}: ${detail}`);
+        this.code = code;
+      }
+      code;
+    };
+    ORPHAN_GRACE_MS = 10 * 6e4;
+  }
+});
+
+// src/domains/knowledge/decision-propagation.ts
+var path66, KIND_HOME;
+var init_decision_propagation = __esm({
+  "src/domains/knowledge/decision-propagation.ts"() {
+    path66 = __toESM(require("node:path"));
+    init_kernel();
+    init_state();
+    init_publication();
+    init_source_basis();
+    KIND_HOME = {
+      plan: { dir: "plan", entity: "knowledge" },
+      summary: { dir: path66.join("memory", "summaries"), entity: "memory" },
+      lesson: { dir: path66.join("memory", "lessons"), entity: "memory" }
+    };
+  }
+});
+
+// src/domains/knowledge/harvest.ts
+var SCRUBBED_WRITER_BRAND, scrubbedWikiWriter, FORBIDDEN_HARVEST_KEYS;
+var init_harvest = __esm({
+  "src/domains/knowledge/harvest.ts"() {
+    init_security();
+    init_recall_protect();
+    init_security();
+    init_security();
+    init_state();
+    init_harvest_journal();
+    init_wiki_index();
+    init_decision_catalog();
+    init_kernel();
+    init_decision_propagation();
+    SCRUBBED_WRITER_BRAND = "__guild_scrubbed_writer__";
+    scrubbedWikiWriter = Object.assign(
+      (absPath, content, opts) => scrubbedWrite(absPath, content, { surface: "wiki", ...opts }),
+      { [SCRUBBED_WRITER_BRAND]: true }
+    );
+    FORBIDDEN_HARVEST_KEYS = Object.freeze(["labels", "label_taxonomy", "concern"]);
+  }
+});
+
 // src/domains/knowledge/working-set.ts
 function estimateTokens(text) {
   return Math.ceil(text.trim().length / 4);
@@ -36403,18 +36972,18 @@ function newestMtime(dir) {
   const walk = (d) => {
     let entries;
     try {
-      entries = fs54.readdirSync(d, { withFileTypes: true });
+      entries = fs55.readdirSync(d, { withFileTypes: true });
     } catch {
       return;
     }
     for (const e of entries) {
-      const p = path65.join(d, e.name);
+      const p = path67.join(d, e.name);
       if (e.isDirectory()) {
         walk(p);
         continue;
       }
       try {
-        const m = fs54.statSync(p).mtimeMs;
+        const m = fs55.statSync(p).mtimeMs;
         if (m > newest) newest = m;
       } catch {
       }
@@ -36425,7 +36994,7 @@ function newestMtime(dir) {
 }
 function hashOpenQuestions(ids) {
   const sorted = [...ids].filter((s) => typeof s === "string").sort();
-  return crypto18.createHash("sha256").update(sorted.join("\n"), "utf8").digest("hex").slice(0, 32);
+  return crypto19.createHash("sha256").update(sorted.join("\n"), "utf8").digest("hex").slice(0, 32);
 }
 function storageFor2(opts) {
   return opts.storage ?? createGuildStorage(opts.cwd ?? process.cwd());
@@ -36438,7 +37007,7 @@ function computeFingerprint(opts = {}) {
   const storage = storageFor2(opts);
   const wiki = wikiDir(storage);
   return {
-    wiki_mtime: wiki && fs54.existsSync(wiki) ? newestMtime(wiki) : 0,
+    wiki_mtime: wiki && fs55.existsSync(wiki) ? newestMtime(wiki) : 0,
     git_head: readWorktreeHead(storage.activeRoot),
     open_questions_hash: hashOpenQuestions(opts.open_question_ids ?? [])
   };
@@ -36453,8 +37022,8 @@ function workingSetCardPath(storage, phase) {
 function readWorkingSet(storage, phase) {
   const p = workingSetCardPath(storage, phase);
   try {
-    if (!fs54.existsSync(p)) return null;
-    const parsed = JSON.parse(fs54.readFileSync(p, "utf8"));
+    if (!fs55.existsSync(p)) return null;
+    const parsed = JSON.parse(fs55.readFileSync(p, "utf8"));
     return parsed && parsed.schema_version === WORKING_SET_SCHEMA ? parsed : null;
   } catch {
     return null;
@@ -36462,8 +37031,8 @@ function readWorkingSet(storage, phase) {
 }
 function writeWorkingSet(storage, card) {
   const p = workingSetCardPath(storage, card.phase);
-  storage.ensureDir(path65.dirname(p));
-  fs54.writeFileSync(p, JSON.stringify(card, null, 2) + "\n", "utf8");
+  storage.ensureDir(path67.dirname(p));
+  fs55.writeFileSync(p, JSON.stringify(card, null, 2) + "\n", "utf8");
   return p;
 }
 function loadWorkingSet(input) {
@@ -36499,12 +37068,12 @@ function buildWorkingSetCard(input) {
   }
   return card;
 }
-var crypto18, fs54, path65, WORKING_SET_SCHEMA, WORKING_SET_TOKEN_CAP;
+var crypto19, fs55, path67, WORKING_SET_SCHEMA, WORKING_SET_TOKEN_CAP;
 var init_working_set = __esm({
   "src/domains/knowledge/working-set.ts"() {
-    crypto18 = __toESM(require("node:crypto"));
-    fs54 = __toESM(require("node:fs"));
-    path65 = __toESM(require("node:path"));
+    crypto19 = __toESM(require("node:crypto"));
+    fs55 = __toESM(require("node:fs"));
+    path67 = __toESM(require("node:path"));
     init_state();
     init_source_basis();
     WORKING_SET_SCHEMA = "guild.working_set.v1";
@@ -36514,12 +37083,12 @@ var init_working_set = __esm({
 
 // src/domains/knowledge/lane-bundle.ts
 function bundleId(cellId, fingerprint2) {
-  return crypto19.createHash("sha256").update(`${cellId}
+  return crypto20.createHash("sha256").update(`${cellId}
 ${fingerprint2}`, "utf8").digest("hex").slice(0, 16);
 }
 function fingerprintOf(ws) {
   const f = ws.fingerprint;
-  return crypto19.createHash("sha256").update(`${f.wiki_mtime}
+  return crypto20.createHash("sha256").update(`${f.wiki_mtime}
 ${f.git_head}
 ${f.open_questions_hash}`, "utf8").digest("hex").slice(0, 16);
 }
@@ -36548,10 +37117,10 @@ function buildLaneBundle(input) {
   }
   return bundle;
 }
-var crypto19, LANE_BUNDLE_SCHEMA, LANE_BUNDLE_TOKEN_CAP;
+var crypto20, LANE_BUNDLE_SCHEMA, LANE_BUNDLE_TOKEN_CAP;
 var init_lane_bundle = __esm({
   "src/domains/knowledge/lane-bundle.ts"() {
-    crypto19 = __toESM(require("node:crypto"));
+    crypto20 = __toESM(require("node:crypto"));
     init_glossary();
     init_working_set();
     LANE_BUNDLE_SCHEMA = "guild.lane_bundle.v1";
@@ -36589,146 +37158,14 @@ var init_freshness_boundary = __esm({
   }
 });
 
-// src/domains/knowledge/publication.ts
-function publicationDir(indexesDir) {
-  return path66.join(indexesDir, "publication");
-}
-function generationsDir(indexesDir) {
-  return path66.join(publicationDir(indexesDir), "generations");
-}
-function sha(bytes) {
-  return `sha256:${crypto20.createHash("sha256").update(bytes).digest("hex")}`;
-}
-function hex2(g) {
-  return g.slice("sha256:".length);
-}
-function isGenerationHash(v) {
-  return typeof v === "string" && v.startsWith("sha256:") && GEN_DIR.test(v.slice(7));
-}
-function writeDurable(p, bytes, mode = 420) {
-  const fd = fs55.openSync(p, "wx", mode);
-  try {
-    fs55.writeSync(fd, typeof bytes === "string" ? Buffer.from(bytes, "utf8") : bytes);
-    fs55.fsyncSync(fd);
-  } finally {
-    fs55.closeSync(fd);
-  }
-}
-function contained(indexesDir, target, leafFile = false) {
-  const r = checkContained(indexesDir, target, { policy: "physical", requireRegularFileLeaf: leafFile });
-  return isRefused(r) ? `${r.code}: ${r.detail}` : null;
-}
-function parsePointer(file, indexesDir) {
-  const bad = contained(indexesDir, file, true);
-  if (bad) throw new PublicationError("containment", bad);
-  const ptr = JSON.parse(fs55.readFileSync(file, "utf8"));
-  if (!isGenerationHash(ptr?.generation) || !isGenerationHash(ptr.publication_sha256)) throw new PublicationError("corrupt", "pointer malformed");
-  return ptr;
-}
-function successorFile(indexesDir, parent) {
-  return path66.join(publicationDir(indexesDir), "successors", parent ? hex2(parent) : "root");
-}
-function readPointer(indexesDir) {
-  const cur = path66.join(publicationDir(indexesDir), "CURRENT");
-  let ptr = fs55.existsSync(cur) ? parsePointer(cur, indexesDir) : null;
-  if (!ptr) {
-    const root = successorFile(indexesDir, null);
-    if (!fs55.existsSync(root)) return null;
-    ptr = parsePointer(root, indexesDir);
-  }
-  for (let i = 0; i < 1e5; i++) {
-    const next = successorFile(indexesDir, ptr.generation);
-    if (!fs55.existsSync(next)) return ptr;
-    ptr = parsePointer(next, indexesDir);
-  }
-  throw new PublicationError("corrupt", "successor chain does not terminate");
-}
-function readVerified(indexesDir, file, expected) {
-  const bad = contained(indexesDir, file, true);
-  if (bad) throw new PublicationError("containment", bad);
-  const bytes = fs55.readFileSync(file);
-  if (sha(bytes) !== expected) throw new PublicationError("corrupt", `hash mismatch for ${path66.basename(file)}`);
-  return bytes;
-}
-function pinFile(indexesDir, generation) {
-  try {
-    const dir = path66.join(publicationDir(indexesDir), "pins");
-    if (contained(indexesDir, dir)) return null;
-    fs55.mkdirSync(dir, { recursive: true });
-    const id2 = `${process.pid}-${crypto20.randomUUID()}`;
-    const tmp = path66.join(dir, `.tmp-${id2}`);
-    writeDurable(tmp, JSON.stringify({ pid: process.pid, host: HOST, generation }));
-    const f = path66.join(dir, `${id2}.json`);
-    fs55.renameSync(tmp, f);
-    return f;
-  } catch {
-    return null;
-  }
-}
-function readPublicationRecord(indexesDir, opts = {}) {
-  for (let attempt = 0; ; attempt++) {
-    const ptr = readPointer(indexesDir);
-    if (!ptr) return null;
-    const pin = pinFile(indexesDir, ptr.generation);
-    try {
-      const dir = path66.join(generationsDir(indexesDir), hex2(ptr.generation));
-      const record = JSON.parse(readVerified(indexesDir, path66.join(dir, "publication.json"), ptr.publication_sha256).toString("utf8"));
-      if (record.generation !== ptr.generation) throw new PublicationError("corrupt", "record names another generation");
-      if (opts.manifest === false) return { pointer: ptr, record, manifest: null };
-      const manifest = JSON.parse(readVerified(indexesDir, path66.join(dir, "manifest.json"), record.manifest.sha256).toString("utf8"));
-      if (manifest.generation !== ptr.generation) throw new PublicationError("corrupt", "manifest names another generation");
-      return { pointer: ptr, record, manifest };
-    } catch (err) {
-      if (err.code === "ENOENT" && attempt < 3) continue;
-      throw err;
-    } finally {
-      if (pin) fs55.rmSync(pin, { force: true });
-    }
-  }
-}
-var crypto20, fs55, os6, path66, PUBLICATION_FAULT_STEPS, GEN_DIR, HOST, PublicationError, ORPHAN_GRACE_MS;
-var init_publication = __esm({
-  "src/domains/knowledge/publication.ts"() {
-    crypto20 = __toESM(require("node:crypto"));
-    fs55 = __toESM(require("node:fs"));
-    os6 = __toESM(require("node:os"));
-    path66 = __toESM(require("node:path"));
-    init_kernel();
-    init_source_basis();
-    PUBLICATION_FAULT_STEPS = Object.freeze([
-      "lock_acquired",
-      "artifact:knowledge-graph.json",
-      "artifact:knowledge-recall.json",
-      "layers_written",
-      "manifest_written",
-      "record_written",
-      "generation_renamed",
-      "successor_claimed",
-      "pointer_tmp_written",
-      "pointer_renamed",
-      "export:knowledge-graph.json",
-      "export:knowledge-recall.json",
-      "reclaimed"
-    ]);
-    GEN_DIR = /^[a-f0-9]{64}$/;
-    HOST = crypto20.createHash("sha256").update(os6.hostname()).digest("hex").slice(0, 12);
-    PublicationError = class extends Error {
-      constructor(code, detail) {
-        super(`publication ${code}: ${detail}`);
-        this.code = code;
-      }
-      code;
-    };
-    ORPHAN_GRACE_MS = 10 * 6e4;
-  }
-});
-
 // src/domains/knowledge/publication-boundary.ts
 var AFTER_EDIT_BUDGET;
 var init_publication_boundary = __esm({
   "src/domains/knowledge/publication-boundary.ts"() {
     init_freshness_boundary();
+    init_decision_propagation();
     init_publication();
+    init_source_basis();
     init_source_basis();
     init_state();
     AFTER_EDIT_BUDGET = Object.freeze({ max_files: 0, max_bytes: 0 });
@@ -36762,7 +37199,7 @@ function walkMd(dir, out) {
     return;
   }
   for (const e of entries) {
-    const full = path67.join(dir, e.name);
+    const full = path68.join(dir, e.name);
     if (e.isDirectory()) walkMd(full, out);
     else if (e.isFile() && e.name.endsWith(".md")) out.push(full);
   }
@@ -36779,13 +37216,13 @@ function supersededWikiPages(wikiDir2) {
   const byRel = /* @__PURE__ */ new Map();
   const bySlug = /* @__PURE__ */ new Map();
   for (const abs of files) {
-    const rel2 = path67.relative(wikiDir2, abs).split(path67.sep).join("/");
+    const rel2 = path68.relative(wikiDir2, abs).split(path68.sep).join("/");
     byRel.set(rel2, abs);
     byRel.set(rel2.slice(0, -3), abs);
-    const slug = path67.basename(abs, ".md");
+    const slug = path68.basename(abs, ".md");
     bySlug.set(slug, [...bySlug.get(slug) ?? [], abs]);
   }
-  const resolve47 = (ref) => {
+  const resolve48 = (ref) => {
     let r = ref.replace(/\\/g, "/");
     if (r.startsWith("decision:")) r = r.slice("decision:".length);
     if (r.startsWith("./")) r = r.slice(2);
@@ -36809,17 +37246,17 @@ function supersededWikiPages(wikiDir2) {
       superseded.add(abs);
     }
     for (const ref of refsOf(fm["supersedes"])) {
-      const target = resolve47(ref);
+      const target = resolve48(ref);
       if (target && target !== abs) superseded.add(target);
     }
   }
   return superseded;
 }
-var fs56, path67;
+var fs56, path68;
 var init_wiki_supersede = __esm({
   "src/domains/knowledge/wiki-supersede.ts"() {
     fs56 = __toESM(require("node:fs"));
-    path67 = __toESM(require("node:path"));
+    path68 = __toESM(require("node:path"));
     init_state();
   }
 });
@@ -36844,11 +37281,11 @@ function safeReadFile(p) {
 function walkFiles(dir, extensions) {
   const out = [];
   for (const entry of safeReadDir(dir)) {
-    const full = path68.join(dir, entry.name);
+    const full = path69.join(dir, entry.name);
     if (entry.isDirectory()) {
       out.push(...walkFiles(full, extensions));
     } else if (entry.isFile()) {
-      const ext = path68.extname(entry.name).toLowerCase();
+      const ext = path69.extname(entry.name).toLowerCase();
       if (extensions.includes(ext)) out.push(full);
     }
   }
@@ -36860,7 +37297,7 @@ function extractTitle2(content, filePath) {
     const m = line.match(/^#\s+(.+?)\s*$/);
     if (m) return m[1].trim();
   }
-  return path68.basename(filePath, path68.extname(filePath));
+  return path69.basename(filePath, path69.extname(filePath));
 }
 function queryTerms(query) {
   return query.toLowerCase().split(/\s+/).map((t) => t.trim()).filter((t) => t.length > 0);
@@ -36893,7 +37330,7 @@ function fsScan(query, guildRoot, opts = {}) {
   const guildDir = durableGuildDir(guildRoot);
   const existingDirs = [];
   for (const rel2 of dirs) {
-    const abs = path68.join(guildDir, rel2);
+    const abs = path69.join(guildDir, rel2);
     try {
       if (fs57.statSync(abs).isDirectory()) existingDirs.push(abs);
     } catch {
@@ -36903,7 +37340,7 @@ function fsScan(query, guildRoot, opts = {}) {
   if (terms.length === 0) {
     return { source: "fs-scanner", hits: [], scannedDirs: existingDirs };
   }
-  const superseded = supersededWikiPages(path68.join(guildDir, "wiki"));
+  const superseded = supersededWikiPages(path69.join(guildDir, "wiki"));
   const scored = [];
   for (const dir of existingDirs) {
     for (const file of walkFiles(dir, extensions)) {
@@ -36968,11 +37405,11 @@ function runFsScannerCli() {
   }
   process.stdout.write(JSON.stringify(result8, null, 2) + "\n");
 }
-var fs57, path68, DEFAULT_LIMIT, DEFAULT_DIRS, DEFAULT_EXTENSIONS, MAX_FILE_BYTES;
+var fs57, path69, DEFAULT_LIMIT, DEFAULT_DIRS, DEFAULT_EXTENSIONS, MAX_FILE_BYTES;
 var init_fs_scanner = __esm({
   "src/domains/knowledge/fs-scanner.ts"() {
     fs57 = __toESM(require("fs"));
-    path68 = __toESM(require("path"));
+    path69 = __toESM(require("path"));
     init_state();
     init_wiki_supersede();
     DEFAULT_LIMIT = 10;
@@ -37000,7 +37437,7 @@ function wikiRecall(query, cwd, config, opts = {}) {
   }
   const { dbPath } = ensureResult;
   const repoRoot = resolveMainRepoRoot(cwd);
-  const superseded = supersededWikiPages(path69.join(durableGuildDir(repoRoot), "wiki"));
+  const superseded = supersededWikiPages(path70.join(durableGuildDir(repoRoot), "wiki"));
   let db;
   try {
     db = openDatabase3(dbPath);
@@ -37015,7 +37452,7 @@ function wikiRecall(query, cwd, config, opts = {}) {
            WHERE  wiki_fts MATCH ?
            ORDER  BY rank   -- bm25() is negative; ASC = most relevant first
            LIMIT  ?`
-      ).all(safeQuery, limit + superseded.size).filter((r) => !superseded.has(path69.join(repoRoot, typeof r["path"] === "string" ? r["path"] : ""))).slice(0, limit);
+      ).all(safeQuery, limit + superseded.size).filter((r) => !superseded.has(path70.join(repoRoot, typeof r["path"] === "string" ? r["path"] : ""))).slice(0, limit);
     } catch {
       db.close();
       return null;
@@ -37023,15 +37460,15 @@ function wikiRecall(query, cwd, config, opts = {}) {
     db.close();
     const rawHits = [];
     for (const r of rows) {
-      const relPath2 = typeof r["path"] === "string" ? r["path"] : "";
-      const absPath = path69.join(cwd, relPath2);
+      const relPath3 = typeof r["path"] === "string" ? r["path"] : "";
+      const absPath = path70.join(cwd, relPath3);
       let content;
       try {
         content = fs58.readFileSync(absPath, "utf8");
       } catch {
         content = typeof r["snippet"] === "string" ? r["snippet"] : "";
       }
-      rawHits.push({ source_path: relPath2, content });
+      rawHits.push({ source_path: relPath3, content });
     }
     const { chunks: protectedChunks, directive } = protectChunks(rawHits, {
       runDir: opts.runDir,
@@ -37099,7 +37536,7 @@ function runWikiRecallCli() {
     process.exit(1);
   }
   if (runId && !runDir2) {
-    runDir2 = path69.join(durableGuildDir(cwd), "runs", runId);
+    runDir2 = path70.join(durableGuildDir(cwd), "runs", runId);
   }
   const indexOff = (process.env["GUILD_INDEX"] ?? "auto") === "off";
   const thresholdOverride = parseInt(process.env["GUILD_WIKI_THRESHOLD"] ?? "", 10);
@@ -37122,11 +37559,11 @@ function runWikiRecallCli() {
   };
   process.stdout.write(JSON.stringify(safeResult, null, 2) + "\n");
 }
-var fs58, path69, DEFAULT_LIMIT2;
+var fs58, path70, DEFAULT_LIMIT2;
 var init_wiki_recall = __esm({
   "src/domains/knowledge/wiki-recall.ts"() {
     fs58 = __toESM(require("node:fs"));
-    path69 = __toESM(require("node:path"));
+    path70 = __toESM(require("node:path"));
     init_state();
     init_wiki_supersede();
     init_recall_protect();
@@ -37143,12 +37580,12 @@ var init_wiki_recall = __esm({
 function lineRefs(refs) {
   return Array.isArray(refs) ? refs.filter((r) => typeof r === "string" && LINE_REF_RE.test(r)) : [];
 }
-function simpleName(id2) {
-  const parts = id2.split(":");
+function simpleName(id3) {
+  const parts = id3.split(":");
   return parts.length > 2 ? parts.slice(2).join(":") : "";
 }
-function nodeRelPath(id2) {
-  const parts = id2.split(":");
+function nodeRelPath(id3) {
+  const parts = id3.split(":");
   return parts.length >= 2 ? parts[1] : "";
 }
 function normRel(p) {
@@ -37279,7 +37716,7 @@ function kgTrace(graph, query, direction = "outbound", depth = 3) {
     }
     frontier = next;
   }
-  const nodes = [...depthOf.entries()].map(([id2, dep]) => toEvidence(byId.get(id2), dep)).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const nodes = [...depthOf.entries()].map(([id3, dep]) => toEvidence(byId.get(id3), dep)).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   tracedEdges.sort((a, b) => {
     const ka = traceEdgeKey(a);
     const kb = traceEdgeKey(b);
@@ -37314,7 +37751,7 @@ function kgNeighbors(graph, query, hops = 1) {
     frontier = next;
   }
   const seedSet = new Set(seeds);
-  const nodes = [...depthOf.entries()].filter(([id2]) => !seedSet.has(id2)).map(([id2, dep]) => toEvidence(byId.get(id2), dep)).sort((a, b) => a.depth - b.depth || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const nodes = [...depthOf.entries()].filter(([id3]) => !seedSet.has(id3)).map(([id3, dep]) => toEvidence(byId.get(id3), dep)).sort((a, b) => a.depth - b.depth || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return { tier: EVIDENCE_TIER, seeds, hops: bound, nodes };
 }
 function kgDeadCode(graph, opts = {}) {
@@ -37335,7 +37772,7 @@ function collectExports(node, out) {
 function manifestEntryPoints(repoRoot, read) {
   let pkg;
   try {
-    pkg = JSON.parse(read(path70.join(repoRoot, "package.json")));
+    pkg = JSON.parse(read(path71.join(repoRoot, "package.json")));
   } catch {
     return [];
   }
@@ -37353,7 +37790,7 @@ function manifestEntryPoints(repoRoot, read) {
 }
 function settingsEntryPoints(guildDir, read) {
   try {
-    const s = JSON.parse(read(path70.join(guildDir, "settings.json")));
+    const s = JSON.parse(read(path71.join(guildDir, "settings.json")));
     const ep = s.models?.entryPoints;
     return Array.isArray(ep) ? ep.filter((x) => typeof x === "string") : [];
   } catch {
@@ -37362,7 +37799,7 @@ function settingsEntryPoints(guildDir, read) {
 }
 function indexEntryPoints(indexesDir, read) {
   try {
-    const j = JSON.parse(read(path70.join(indexesDir, "entry_points.json")));
+    const j = JSON.parse(read(path71.join(indexesDir, "entry_points.json")));
     const arr = Array.isArray(j) ? j : j && typeof j === "object" && Array.isArray(j.entryPoints) ? j.entryPoints : [];
     return arr.filter((x) => typeof x === "string");
   } catch {
@@ -37371,7 +37808,7 @@ function indexEntryPoints(indexesDir, read) {
 }
 function resolveEntryPointConfig(src) {
   const guildDir = src.guildDir ?? durableGuildDir(src.repoRoot);
-  const indexesDir = src.indexesDir ?? path70.join(guildDir, "indexes");
+  const indexesDir = src.indexesDir ?? path71.join(guildDir, "indexes");
   const read = src.readFile ?? ((p) => fs59.readFileSync(p, "utf8"));
   const all = /* @__PURE__ */ new Set();
   for (const m of manifestEntryPoints(src.repoRoot, read)) all.add(normRel(m));
@@ -37380,431 +37817,16 @@ function resolveEntryPointConfig(src) {
   for (const m of src.explicit ?? []) if (typeof m === "string" && m.length > 0) all.add(normRel(m));
   return [...all].sort();
 }
-var fs59, path70, EVIDENCE_TIER, LINE_REF_RE, ENTRY_POINT_NAMES;
+var fs59, path71, EVIDENCE_TIER, LINE_REF_RE, ENTRY_POINT_NAMES;
 var init_graph_query = __esm({
   "src/domains/knowledge/graph-query.ts"() {
     fs59 = __toESM(require("fs"));
     init_kernel();
-    path70 = __toESM(require("path"));
+    path71 = __toESM(require("path"));
     init_state();
     EVIDENCE_TIER = "trusted";
     LINE_REF_RE = /#L\d+-L\d+$/;
     ENTRY_POINT_NAMES = sealSet(["main", "__main__"], "ENTRY_POINT_NAMES");
-  }
-});
-
-// src/domains/telemetry/trace-analysis-v3.ts
-function isRfc3339(v) {
-  const m = TIME_RE.exec(v);
-  if (!m) return false;
-  const [y, mo, d, h, mi, s] = m.slice(1, 7).map(Number);
-  const daysIn = [31, y % 4 === 0 && y % 100 !== 0 || y % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  if (mo < 1 || mo > 12 || d < 1 || d > daysIn[mo - 1] || h > 23 || mi > 59 || s > 59) return false;
-  if (m[7] !== void 0 && (Number(m[7]) > 23 || Number(m[8]) > 59)) return false;
-  return true;
-}
-var TRACE_ANALYSIS_V3_SCHEMA, TRACE_EVENT_CLASSES, TRACE_ID_RE, HASH_RE, TIME_RE, REL_PATH_RE, own, isObj, fail, cpLength, id, hash, time, str2, int0, num0, bool, konst, oneOf, nullable, relPath, array, object2, evidence, coverage, lineage, pins, interval, usage, shape;
-var init_trace_analysis_v3 = __esm({
-  "src/domains/telemetry/trace-analysis-v3.ts"() {
-    TRACE_ANALYSIS_V3_SCHEMA = "guild.trace.analysis.v3";
-    TRACE_EVENT_CLASSES = Object.freeze([
-      "prompt",
-      "dispatch",
-      "request_started",
-      "request_completed",
-      "handoff",
-      "phase",
-      "obligation",
-      "transfer",
-      "knowledge",
-      "retrieval",
-      "loss"
-    ]);
-    TRACE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
-    HASH_RE = /^sha256:[a-f0-9]{64}$/;
-    TIME_RE = /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:[Zz]|[+-](\d{2}):(\d{2}))$/;
-    REL_PATH_RE = /^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*[\\%\x00-\x1f])[^:]+$/u;
-    own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
-    isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
-    fail = (errs, at, msg) => {
-      errs.push(`${at}: ${msg}`);
-    };
-    cpLength = (s) => [...s].length;
-    id = (v, at, e) => {
-      if (typeof v !== "string" || !TRACE_ID_RE.test(v)) fail(e, at, "not an id");
-    };
-    hash = (v, at, e) => {
-      if (typeof v !== "string" || !HASH_RE.test(v)) fail(e, at, "not a sha256 hash");
-    };
-    time = (v, at, e) => {
-      if (typeof v !== "string" || !isRfc3339(v)) fail(e, at, "not a date-time");
-    };
-    str2 = (v, at, e) => {
-      if (typeof v !== "string" || cpLength(v) < 1 || cpLength(v) > 4096) fail(e, at, "not a bounded string");
-    };
-    int0 = (v, at, e) => {
-      if (typeof v !== "number" || !Number.isInteger(v) || v < 0) fail(e, at, "not a non-negative integer");
-    };
-    num0 = (v, at, e) => {
-      if (typeof v !== "number" || !Number.isFinite(v) || v < 0) fail(e, at, "not a non-negative number");
-    };
-    bool = (v, at, e) => {
-      if (typeof v !== "boolean") fail(e, at, "not a boolean");
-    };
-    konst = (c) => (v, at, e) => {
-      if (v !== c) fail(e, at, `must equal ${c}`);
-    };
-    oneOf = (...vals) => (v, at, e) => {
-      if (typeof v !== "string" || !vals.includes(v)) fail(e, at, `not one of ${vals.join("|")}`);
-    };
-    nullable = (c) => (v, at, e) => {
-      if (v !== null) c(v, at, e);
-    };
-    relPath = (v, at, e) => {
-      if (typeof v !== "string" || cpLength(v) < 1 || cpLength(v) > 1024 || !REL_PATH_RE.test(v)) fail(e, at, "not a contained relative path");
-    };
-    array = (item, max) => (v, at, e) => {
-      if (!Array.isArray(v)) return fail(e, at, "not an array");
-      if (v.length > max) fail(e, at, `more than ${max} items`);
-      for (let i = 0; i < v.length; i++) item(v[i], `${at}[${i}]`, e);
-    };
-    object2 = (shape2) => (v, at, e) => {
-      if (!isObj(v)) return fail(e, at, "not an object");
-      for (const k of Object.keys(v)) if (!own(shape2, k)) fail(e, `${at}.${k}`, "unknown field");
-      for (const k of Object.keys(shape2)) {
-        if (!own(v, k)) fail(e, `${at}.${k}`, "required");
-        else shape2[k](v[k], `${at}.${k}`, e);
-      }
-    };
-    evidence = object2({
-      source_id: id,
-      path: relPath,
-      sha256: hash,
-      schema_version: str2,
-      observed_at: time,
-      availability: oneOf("available", "expired", "redacted", "missing", "unsupported"),
-      reason: nullable(str2)
-    });
-    coverage = object2({
-      eligible: nullable(int0),
-      covered: int0,
-      excluded: int0,
-      missing: nullable(int0),
-      state: oneOf("complete", "partial", "unavailable"),
-      reason: nullable(str2),
-      exclusion_reasons: array(object2({ code: id, count: int0 }), 100)
-    });
-    lineage = object2({
-      source_id: id,
-      run_id: id,
-      execution_id: id,
-      host_session_id: nullable(id),
-      initiative_id: nullable(id),
-      goal_id: nullable(id),
-      logical_task_id: nullable(id),
-      attempt_id: nullable(id),
-      agent_instance_id: nullable(id),
-      request_id: nullable(id)
-    });
-    pins = object2({ assignment: hash, definition: hash, configuration: hash, workflow: hash, policy: hash });
-    interval = object2({
-      start: time,
-      end: nullable(time),
-      duration_ms: nullable(num0),
-      clock: object2({ domain: id, basis: oneOf("controller", "local_monotonic", "provider", "unknown"), comparable: bool, skew_bound_ms: nullable(num0) })
-    });
-    usage = object2({
-      granularity: oneOf("leaf_request", "native_session"),
-      observation_id: id,
-      revision: int0,
-      final: bool,
-      accounting_identity: id,
-      parent_accounting_identity: nullable(id),
-      inclusion: oneOf("leaf_exclusive", "parent_inclusive", "session_cumulative"),
-      input_inclusive: nullable(int0),
-      output: nullable(int0),
-      cache_read_subset: nullable(int0),
-      cache_write_subset: nullable(int0),
-      total: nullable(int0),
-      cost_usd: nullable(num0),
-      cost_basis: oneOf("measured", "derived_estimate", "native_estimate", "unavailable"),
-      currency: konst("USD"),
-      pricing_version: nullable(str2),
-      usage_semantics: oneOf("inclusive_input_cache_subset.v1", "provider_session_only.v1", "unknown"),
-      coverage,
-      native_baseline_usd: nullable(num0),
-      native_cumulative_usd: nullable(num0)
-    });
-    shape = object2({
-      schema_version: konst(TRACE_ANALYSIS_V3_SCHEMA),
-      event_id: id,
-      sequence: int0,
-      event_class: oneOf(...TRACE_EVENT_CLASSES),
-      at: time,
-      lineage,
-      operation_id: nullable(id),
-      component_invocation_id: nullable(id),
-      actor_id: id,
-      pins,
-      requested_model: nullable(str2),
-      observed_identity: object2({ provider: nullable(str2), model: nullable(str2), status: oneOf("observed", "unavailable"), reason: nullable(str2) }),
-      usage: nullable(usage),
-      payload_ref: nullable(evidence),
-      prompt_hash: nullable(hash),
-      redaction_version: str2,
-      capture: coverage,
-      interval: nullable(interval)
-    });
-  }
-});
-
-// src/domains/telemetry/trace-capture-v3.ts
-function valueEnd(s, i) {
-  const c = s[i];
-  if (c === '"' || c === "'") {
-    for (let j2 = i + 1; j2 < s.length; j2++) {
-      if (s[j2] === "\\") j2++;
-      else if (s[j2] === c) return j2 + 1;
-    }
-    return s.length;
-  }
-  if (c === "{" || c === "[") {
-    let depth = 0;
-    let quote = null;
-    for (let j2 = i; j2 < s.length; j2++) {
-      const ch = s[j2];
-      if (quote) {
-        if (ch === "\\") j2++;
-        else if (ch === quote) quote = null;
-      } else if (ch === '"' || ch === "'") quote = ch;
-      else if (ch === "{" || ch === "[") depth++;
-      else if ((ch === "}" || ch === "]") && --depth === 0) return j2 + 1;
-    }
-    return s.length;
-  }
-  let j = i;
-  while (j < s.length && !/[,}\]\s]/.test(s[j])) j++;
-  return j;
-}
-function redactQuotedKeys(s) {
-  return redactValuesAfter(redactValuesAfter(s, QUOTED_KEY_RE), UNQUOTED_KEY_RE);
-}
-function redactValuesAfter(s, keyRe) {
-  const re = new RegExp(keyRe.source, keyRe.flags);
-  let out = "";
-  let last = 0;
-  let m;
-  while (m = re.exec(s)) {
-    const start = m.index + m[0].length;
-    if (start >= s.length || s.startsWith(REDACTED_VALUE, start)) continue;
-    const end = valueEnd(s, start);
-    if (end === start) continue;
-    out += s.slice(last, start) + REDACTED_VALUE;
-    last = end;
-    re.lastIndex = end;
-  }
-  return out + s.slice(last);
-}
-function bracketDepth(s) {
-  let depth = 0;
-  let max = 0;
-  let quote = null;
-  for (let j = 0; j < s.length; j++) {
-    const ch = s[j];
-    if (quote) {
-      if (ch === "\\") j++;
-      else if (ch === quote) quote = null;
-    } else if (ch === '"') quote = ch;
-    else if (ch === "{" || ch === "[") max = Math.max(max, ++depth);
-    else if (ch === "}" || ch === "]") depth--;
-  }
-  return max;
-}
-function redactStructured(s, privateLiterals, level) {
-  const t = s.trim();
-  if (!(t.startsWith("{") || t.startsWith("[")) || bracketDepth(t) > MAX_CONTENT_DEPTH) return s;
-  let doc;
-  try {
-    doc = JSON.parse(t);
-  } catch {
-    return s;
-  }
-  let changed = false;
-  const walk = (v) => {
-    if (typeof v === "string") {
-      const x = scrubOnce(v, privateLiterals, level + 1);
-      if (x !== v) changed = true;
-      return x;
-    }
-    if (Array.isArray(v)) return v.map(walk);
-    if (!isObj2(v)) return v;
-    const out = {};
-    for (const [k, x] of Object.entries(v)) {
-      const key = scrubOnce(k, privateLiterals, MAX_SERIALIZED_LEVELS);
-      if (key !== k) changed = true;
-      if (CREDENTIAL_KEY_RE.test(k) && x !== "[REDACTED]" && x !== null) {
-        changed = true;
-        out[key] = "[REDACTED]";
-      } else out[key] = walk(x);
-    }
-    return out;
-  };
-  const red = walk(doc);
-  return changed ? JSON.stringify(red) : s;
-}
-function containsJsonCompound(s) {
-  if (parsesAsJsonCompound(s)) return true;
-  let seen = 0;
-  for (let i = nextOpen(s, 0); i !== -1; i = nextOpen(s, i + 1), seen++) {
-    if (seen >= MAX_EMBEDDED_FRAGMENTS) return true;
-    if (parsesAsJsonCompound(s.slice(i, valueEnd(s, i)))) return true;
-  }
-  return false;
-}
-function redactEmbeddedJson(s, privateLiterals, level) {
-  let out = "";
-  let last = 0;
-  let seen = 0;
-  for (let i = nextOpen(s, 0); i !== -1; i = nextOpen(s, i + 1)) {
-    if (i < last) continue;
-    if (seen >= MAX_EMBEDDED_FRAGMENTS) throw new TooDeepToInspect();
-    const end = valueEnd(s, i);
-    const seg = s.slice(i, end);
-    seen++;
-    const red = redactStructured(seg, privateLiterals, level);
-    if (red !== seg) {
-      out += s.slice(last, i) + red;
-      last = end;
-      i = end - 1;
-    }
-  }
-  return out + s.slice(last);
-}
-function scrubOnce(s, privateLiterals, level = 0) {
-  if (level >= MAX_SERIALIZED_LEVELS && containsJsonCompound(s)) throw new TooDeepToInspect();
-  let out = s;
-  if (level < MAX_SERIALIZED_LEVELS) {
-    const t = s.trim();
-    out = t.startsWith("{") || t.startsWith("[") ? redactStructured(s, privateLiterals, level) : s;
-    if (out === s) out = redactEmbeddedJson(s, privateLiterals, level);
-  }
-  out = out.replace(PEM_PRIVATE_KEY_BLOCK_RE, PEM_REDACTED);
-  out = redactQuotedKeys(out);
-  out = redact(out).out;
-  out = redactTokenShapes(out);
-  out = redactKeyValueSecrets(out);
-  out = redactHomeDirPaths(out);
-  for (const lit of privateLiterals) if (lit.length > 0) out = out.split(lit).join("<PRIVATE-REDACTED>");
-  return out;
-}
-function scrub(s, privateLiterals) {
-  let cur = s;
-  try {
-    for (let i = 0; i < 4; i++) {
-      const next = scrubOnce(cur, privateLiterals);
-      if (next === cur) return cur;
-      cur = next;
-    }
-  } catch (error) {
-    if (error instanceof TooDeepToInspect) return null;
-    throw error;
-  }
-  return null;
-}
-function traceStringIsUnsafe(s, privateLiterals) {
-  try {
-    return scrubOnce(s, privateLiterals) !== s;
-  } catch (error) {
-    if (error instanceof TooDeepToInspect) return true;
-    throw error;
-  }
-}
-function truncateUtf8(s, maxBytes) {
-  if (encodedBytes(s) <= maxBytes) return s;
-  let bytes = 0;
-  let out = "";
-  for (const ch of s) {
-    const n = encodedBytes(ch);
-    if (bytes + n > maxBytes) break;
-    bytes += n;
-    out += ch;
-  }
-  return out;
-}
-function cutLiteralPrefixTail(s, privateLiterals) {
-  for (const lit of privateLiterals) {
-    for (let k = lit.length - 1; k >= 4; k--) if (s.endsWith(lit.slice(0, k))) return s.slice(0, s.length - k);
-  }
-  return s;
-}
-function scrubPayload(raw, maxBytes, privateLiterals) {
-  const original_bytes = Buffer.byteLength(raw, "utf8");
-  if (bracketDepth(raw) > MAX_CONTENT_DEPTH) return null;
-  let cur = scrub(raw, privateLiterals);
-  if (cur === null) return null;
-  const redacted = cur !== raw;
-  let truncated = false;
-  for (let i = 0; i < 3 && encodedBytes(cur) > maxBytes; i++) {
-    truncated = true;
-    const cut = cutLiteralPrefixTail(truncateUtf8(cur, maxBytes), privateLiterals);
-    cur = scrub(cut, privateLiterals);
-    if (cur === null) return null;
-  }
-  if (encodedBytes(cur) > maxBytes) return null;
-  return { content: cur, truncated, redacted, original_bytes };
-}
-function scrubTraceText(raw, maxBytes, privateLiterals = []) {
-  return scrubPayload(raw, maxBytes, privateLiterals);
-}
-var TRACE_CAPTURE_LIMITS, DISPATCH_CAPTURE_PATHS, isObj2, SENSITIVE_KEY_SRC, CREDENTIAL_KEY_RE, QUOTED_KEY_RE, REDACTED_VALUE, MAX_CONTENT_DEPTH, UNQUOTED_KEY_RE, MAX_SERIALIZED_LEVELS, PEM_PRIVATE_KEY_BLOCK_RE, PEM_REDACTED, TooDeepToInspect, parsesAsJsonCompound, nextOpen, MAX_EMBEDDED_FRAGMENTS, encodedBytes, USAGE_FAMILY_BY_HOST;
-var init_trace_capture_v3 = __esm({
-  "src/domains/telemetry/trace-capture-v3.ts"() {
-    init_kernel();
-    init_security();
-    init_trace_analysis_v3();
-    init_trace_analysis_v3();
-    TRACE_CAPTURE_LIMITS = Object.freeze({
-      max_host_event_bytes: 256 * 1024,
-      max_sidecar_bytes: 32 * 1024,
-      max_trace_events: 1e5,
-      max_json_depth: 16,
-      lock_wait_ms: 2e3,
-      stale_lock_ms: 3e4
-    });
-    DISPATCH_CAPTURE_PATHS = Object.freeze(["agent", "cmux", "tmux", "remote", "task_cell", "stack_launch", "unknown"]);
-    isObj2 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
-    SENSITIVE_KEY_SRC = "(?:[A-Za-z0-9]+[_-])*(?:password|passwd|passphrase|secret|api[_-]?key|apikey|token|authorization|credential|credentials|private[_-]?key|client[_-]?secret|cookie|reasoning|thinking|chain[_-]?of[_-]?thought|redacted[_-]?thinking|encrypted[_-]?reasoning)(?:[_-][A-Za-z0-9]+)*";
-    CREDENTIAL_KEY_RE = new RegExp(`^${SENSITIVE_KEY_SRC}$`, "i");
-    QUOTED_KEY_RE = new RegExp(`(["'])(${SENSITIVE_KEY_SRC})\\1\\s*:\\s*`, "gi");
-    REDACTED_VALUE = '"[REDACTED]"';
-    MAX_CONTENT_DEPTH = 64;
-    UNQUOTED_KEY_RE = new RegExp(`\\b(${SENSITIVE_KEY_SRC})\\s*[:=]\\s*(?=[{\\["'])`, "gi");
-    MAX_SERIALIZED_LEVELS = 3;
-    PEM_PRIVATE_KEY_BLOCK_RE = /-----BEGIN ([A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?)-----[\s\S]*?(?:-----END \1-----|$)/gi;
-    PEM_REDACTED = "<PEM-PRIVATE-KEY-REDACTED>";
-    TooDeepToInspect = class extends Error {
-    };
-    parsesAsJsonCompound = (s) => {
-      const t = s.trim();
-      if (!(t.startsWith("{") || t.startsWith("["))) return false;
-      if (bracketDepth(t) > MAX_CONTENT_DEPTH) return true;
-      try {
-        return typeof JSON.parse(t) === "object";
-      } catch {
-        return false;
-      }
-    };
-    nextOpen = (s, from) => {
-      const a = s.indexOf("{", from);
-      const b = s.indexOf("[", from);
-      return a === -1 ? b : b === -1 ? a : Math.min(a, b);
-    };
-    MAX_EMBEDDED_FRAGMENTS = 1e3;
-    encodedBytes = (s) => Buffer.byteLength(JSON.stringify(s), "utf8") - 2;
-    USAGE_FAMILY_BY_HOST = Object.freeze({
-      claude: "anthropic_messages",
-      codex: "openai_responses"
-    });
   }
 });
 
@@ -37813,10 +37835,10 @@ function safeId(v, literals = []) {
   return typeof v === "string" && ID_RE.test(v) && !traceStringIsUnsafe(v, literals);
 }
 function retrievalDir(runDir2) {
-  return path71.join(runDir2, "knowledge", "retrieval");
+  return path72.join(runDir2, "knowledge", "retrieval");
 }
 function usesDir(runDir2) {
-  return path71.join(runDir2, "knowledge", "uses");
+  return path72.join(runDir2, "knowledge", "uses");
 }
 function writeOnce(root, target, bytes) {
   const prep = prepareContainedWrite(root, target, { requireRegularFileLeaf: true });
@@ -37861,16 +37883,16 @@ function readContained(root, file) {
     const st = fs60.lstatSync(file);
     if (!st.isFile() || st.size > RETRIEVAL_LIMITS.max_record_bytes) return null;
     const real = fs60.realpathSync(file);
-    if (!real.startsWith(realRoot2 + path71.sep)) return null;
+    if (!real.startsWith(realRoot2 + path72.sep)) return null;
     return fs60.readFileSync(real);
   } catch {
     return null;
   }
 }
-function generationForEvidence(indexesDir, evidence2, unboundReason, literals = []) {
+function generationForEvidence(indexesDir, evidence3, unboundReason, literals = []) {
   const none = (state, reason) => ({ state, generation: null, publication_sha256: null, recall_channel_state: null, reason, source_id: null });
   if (!indexesDir) return none("unbound", unboundReason ?? "producer is not bound to a published knowledge store");
-  const readSha = evidence2?.recall_export_sha256 ?? null;
+  const readSha = evidence3?.recall_export_sha256 ?? null;
   if (!isSha(readSha)) return none("unbound", "the query read no published channel");
   try {
     const cur = readPublicationRecord(indexesDir);
@@ -37925,7 +37947,7 @@ function resultsDigest(results, resultCount, status, allResults) {
   return sha2(JSON.stringify({ status, result_count: resultCount, results, all_results_sha256: allResults }));
 }
 function validContext(ctx) {
-  return typeof ctx.runDir === "string" && path71.isAbsolute(ctx.runDir) && safeId(ctx.run_id, ctx.private_literals) && ENTRY_POINTS.includes(ctx.entry_point) && MODE_RE.test(ctx.mode ?? "") && (ctx.use_capture === "supported" || ctx.use_capture === "unsupported") && (ctx.query_id === void 0 || safeQid(ctx.query_id, ctx.private_literals)) && (ctx.identity === void 0 || (ctx.identity.kind === "retry" || ctx.identity.kind === "mirror") && safeQid(ctx.identity.of, ctx.private_literals) && ctx.identity.of !== ctx.query_id);
+  return typeof ctx.runDir === "string" && path72.isAbsolute(ctx.runDir) && safeId(ctx.run_id, ctx.private_literals) && ENTRY_POINTS.includes(ctx.entry_point) && MODE_RE.test(ctx.mode ?? "") && (ctx.use_capture === "supported" || ctx.use_capture === "unsupported") && (ctx.query_id === void 0 || safeQid(ctx.query_id, ctx.private_literals)) && (ctx.identity === void 0 || (ctx.identity.kind === "retry" || ctx.identity.kind === "mirror") && safeQid(ctx.identity.of, ctx.private_literals) && ctx.identity.of !== ctx.query_id);
 }
 function launchPathOf(ctx) {
   if (ctx.launch_path) return ctx.launch_path;
@@ -37952,18 +37974,18 @@ function beginRetrieval(query, ctx) {
     started_at: startedAt
   };
   if (!fs60.existsSync(ctx.runDir)) {
-    const root = [path71.dirname(ctx.runDir), path71.dirname(path71.dirname(ctx.runDir))].find((d) => fs60.existsSync(d));
-    if (root) prepareContainedWrite(root, path71.join(ctx.runDir, "knowledge", "retrieval", "probe"));
+    const root = [path72.dirname(ctx.runDir), path72.dirname(path72.dirname(ctx.runDir))].find((d) => fs60.existsSync(d));
+    if (root) prepareContainedWrite(root, path72.join(ctx.runDir, "knowledge", "retrieval", "probe"));
   }
-  const startOutcome = writeOnce(ctx.runDir, path71.join(dir, `${query_id}.started.json`), Buffer.from(JSON.stringify(marker)));
+  const startOutcome = writeOnce(ctx.runDir, path72.join(dir, `${query_id}.started.json`), Buffer.from(JSON.stringify(marker)));
   const startLoss = startOutcome === "written" ? null : startOutcome === "containment" ? "containment" : startOutcome === "conflict" || startOutcome === "identical" ? "record_conflict" : "start_not_written";
   const markLost = () => {
     const lostId = `q-${crypto21.randomBytes(16).toString("hex")}`;
-    writeOnce(ctx.runDir, path71.join(dir, `${lostId}.started.json`), Buffer.from(JSON.stringify({ ...marker, query_id: lostId })));
+    writeOnce(ctx.runDir, path72.join(dir, `${lostId}.started.json`), Buffer.from(JSON.stringify({ ...marker, query_id: lostId })));
   };
   if (startLoss === "record_conflict") markLost();
   let done = false;
-  const finish = (status, items, errorCode, evidence2) => {
+  const finish = (status, items, errorCode, evidence3) => {
     if (done) return { record: null, loss: "record_conflict" };
     done = true;
     const endNs = clock.monotonicNs();
@@ -37973,7 +37995,7 @@ function beginRetrieval(query, ctx) {
       return { record: null, loss: startLoss };
     }
     const literals = ctx.private_literals ?? [];
-    const gen1 = status === "error" ? generationForEvidence(ctx.indexesDir, void 0, ctx.unbound_reason ?? "the query failed", literals) : generationForEvidence(ctx.indexesDir, evidence2, ctx.unbound_reason, literals);
+    const gen1 = status === "error" ? generationForEvidence(ctx.indexesDir, void 0, ctx.unbound_reason ?? "the query failed", literals) : generationForEvidence(ctx.indexesDir, evidence3, ctx.unbound_reason, literals);
     const { source_id: pubSource, ...generation } = gen1;
     const results = status === "error" ? [] : resultEntries(items, literals);
     const every = status === "error" ? [] : resultEntries(items, literals, Number.MAX_SAFE_INTEGER);
@@ -38007,11 +38029,11 @@ function beginRetrieval(query, ctx) {
       use_capture: ctx.use_capture
     };
     const bytes = Buffer.from(JSON.stringify(record));
-    const out = writeOnce(ctx.runDir, path71.join(dir, `${query_id}.json`), bytes);
+    const out = writeOnce(ctx.runDir, path72.join(dir, `${query_id}.json`), bytes);
     if (out === "written" || out === "identical") {
       if (ctx.use_capture === "supported" && status !== "error") {
         const marker2 = { schema_version: USE_CAPTURE_SCHEMA, query_id, retrieval_sha256: sha2(bytes) };
-        writeOnce(ctx.runDir, path71.join(usesDir(ctx.runDir), `${query_id}.capture.json`), Buffer.from(JSON.stringify(marker2)));
+        writeOnce(ctx.runDir, path72.join(usesDir(ctx.runDir), `${query_id}.capture.json`), Buffer.from(JSON.stringify(marker2)));
       }
       return { record, loss: null };
     }
@@ -38020,7 +38042,7 @@ function beginRetrieval(query, ctx) {
   };
   return {
     query_id,
-    complete: (items, evidence2) => finish(items.length > 0 ? "hit" : "miss", items, null, evidence2),
+    complete: (items, evidence3) => finish(items.length > 0 ? "hit" : "miss", items, null, evidence3),
     fail: (code) => finish("error", [], ERROR_CODE_RE.test(code) ? code : "producer_error")
   };
 }
@@ -38049,22 +38071,22 @@ function instrumentRetrieval(query, ctx, producer, toItems = (r) => r, evidenceO
     return { result: result8, record: null, loss: "write_failed" };
   }
 }
-function useIdOf(queryId, ordinal, kind, id2) {
-  return `u-${crypto21.createHash("sha256").update(JSON.stringify([queryId, ordinal, kind, id2])).digest("hex").slice(0, 32)}`;
+function useIdOf(queryId, ordinal, kind, id3) {
+  return `u-${crypto21.createHash("sha256").update(JSON.stringify([queryId, ordinal, kind, id3])).digest("hex").slice(0, 32)}`;
 }
 function recordKnowledgeUse(input) {
   const { runDir: runDir2, query_id, ordinal, consumer } = input;
-  if (typeof runDir2 !== "string" || !path71.isAbsolute(runDir2) || !safeQid(query_id, input.private_literals) || !Number.isInteger(ordinal) || ordinal < 0 || !consumer || !CONSUMER_KINDS.includes(consumer.kind) || !safeId(consumer.id, input.private_literals)) {
+  if (typeof runDir2 !== "string" || !path72.isAbsolute(runDir2) || !safeQid(query_id, input.private_literals) || !Number.isInteger(ordinal) || ordinal < 0 || !consumer || !CONSUMER_KINDS.includes(consumer.kind) || !safeId(consumer.id, input.private_literals)) {
     return { ok: false, code: "invalid", detail: "query id, ordinal or consumer is not a safe identifier" };
   }
   const loaded = loadRecord(runDir2, query_id);
   if (loaded === null) {
-    return fs60.existsSync(path71.join(retrievalDir(runDir2), `${query_id}.json`)) ? { ok: false, code: "record_invalid", detail: "the retrieval record fails validation" } : { ok: false, code: "dangling", detail: "no retrieval record for this query" };
+    return fs60.existsSync(path72.join(retrievalDir(runDir2), `${query_id}.json`)) ? { ok: false, code: "record_invalid", detail: "the retrieval record fails validation" } : { ok: false, code: "dangling", detail: "no retrieval record for this query" };
   }
   const { record, sha256: sha2567 } = loaded;
   if (record.use_capture !== "supported") return { ok: false, code: "use_unsupported", detail: "this retrieval path does not capture use" };
   try {
-    const m = JSON.parse(readContained(runDir2, path71.join(usesDir(runDir2), `${query_id}.capture.json`))?.toString("utf8") ?? "null");
+    const m = JSON.parse(readContained(runDir2, path72.join(usesDir(runDir2), `${query_id}.capture.json`))?.toString("utf8") ?? "null");
     if (!m || m["schema_version"] !== USE_CAPTURE_SCHEMA || m["query_id"] !== query_id || m["retrieval_sha256"] !== sha2567) {
       return { ok: false, code: "record_invalid", detail: "the record bytes are not the ones captured" };
     }
@@ -38074,7 +38096,7 @@ function recordKnowledgeUse(input) {
   const result8 = record.results[ordinal];
   if (record.outcome.status !== "hit" || !result8) return { ok: false, code: "not_in_results", detail: "the query did not return this result" };
   const use_id = useIdOf(query_id, ordinal, consumer.kind, consumer.id);
-  const target = path71.join(usesDir(runDir2), `${use_id}.json`);
+  const target = path72.join(usesDir(runDir2), `${use_id}.json`);
   const existing = readContained(runDir2, target);
   if (existing !== null) {
     const prior = parseUse(existing);
@@ -38108,9 +38130,9 @@ function validRecord(r, queryId) {
   if (r["launch_path"] !== "stack_launch" && r["launch_path"] !== "non_stack") return false;
   if (!isStr2(r["mode"]) || !MODE_RE.test(r["mode"])) return false;
   if (r["use_capture"] !== "supported" && r["use_capture"] !== "unsupported") return false;
-  const id2 = r["identity"];
-  if (!isObj3(id2) || !["original", "retry", "mirror"].includes(id2["kind"]) || !Number.isInteger(id2["attempt"]) || id2["attempt"] < 1) return false;
-  if (!keysExactly(id2, ["kind", "of", "attempt"]) || (id2["kind"] === "original" ? id2["of"] !== null || id2["attempt"] !== 1 : !safeQid(id2["of"]) || id2["of"] === queryId)) return false;
+  const id3 = r["identity"];
+  if (!isObj3(id3) || !["original", "retry", "mirror"].includes(id3["kind"]) || !Number.isInteger(id3["attempt"]) || id3["attempt"] < 1) return false;
+  if (!keysExactly(id3, ["kind", "of", "attempt"]) || (id3["kind"] === "original" ? id3["of"] !== null || id3["attempt"] !== 1 : !safeQid(id3["of"]) || id3["of"] === queryId)) return false;
   const q = r["query"];
   if (!isObj3(q) || !keysExactly(q, ["sha256", "bytes", "redacted", "truncated", "withheld", "preview", "redaction_version"])) return false;
   if (!(q["sha256"] === null || isSha(q["sha256"])) || !isStrOrNull(q["preview"])) return false;
@@ -38159,7 +38181,7 @@ function validRecord(r, queryId) {
 }
 function loadRecord(runDir2, queryId) {
   if (!safeQid(queryId)) return null;
-  const bytes = readContained(runDir2, path71.join(retrievalDir(runDir2), `${queryId}.json`));
+  const bytes = readContained(runDir2, path72.join(retrievalDir(runDir2), `${queryId}.json`));
   if (bytes === null) return null;
   try {
     const r = JSON.parse(bytes.toString("utf8"));
@@ -38184,15 +38206,15 @@ function parseUse(bytes) {
     return null;
   }
 }
-var crypto21, fs60, os7, path71, RETRIEVAL_RECORD_SCHEMA, RETRIEVAL_STARTED_SCHEMA, KNOWLEDGE_USE_SCHEMA, USE_CAPTURE_SCHEMA, RETRIEVAL_LIMITS, ENTRY_POINTS, CONSUMER_KINDS, ID_RE, QID_RE, MODE_RE, ERROR_CODE_RE, SHA_RE, ISO_RE, isIso, safeQid, isSha, isStr2, SYSTEM_CLOCK, PROCESS_CLOCK_REF, sha2, isObj3, isStrOrNull, keysExactly, GENERATION_STATES, CHANNEL_STATES, RECORD_KEYS;
+var crypto21, fs60, os7, path72, RETRIEVAL_RECORD_SCHEMA, RETRIEVAL_STARTED_SCHEMA, KNOWLEDGE_USE_SCHEMA, USE_CAPTURE_SCHEMA, RETRIEVAL_LIMITS, ENTRY_POINTS, CONSUMER_KINDS, ID_RE, QID_RE, MODE_RE, ERROR_CODE_RE, SHA_RE, ISO_RE, isIso, safeQid, isSha, isStr2, SYSTEM_CLOCK, PROCESS_CLOCK_REF, sha2, isObj3, isStrOrNull, keysExactly, GENERATION_STATES, CHANNEL_STATES, RECORD_KEYS;
 var init_retrieval_ledger = __esm({
   "src/domains/knowledge/retrieval-ledger.ts"() {
     crypto21 = __toESM(require("node:crypto"));
     fs60 = __toESM(require("node:fs"));
     os7 = __toESM(require("node:os"));
-    path71 = __toESM(require("node:path"));
+    path72 = __toESM(require("node:path"));
     init_kernel();
-    init_trace_capture_v3();
+    init_telemetry();
     init_publication();
     RETRIEVAL_RECORD_SCHEMA = "guild.knowledge.retrieval.v1";
     RETRIEVAL_STARTED_SCHEMA = "guild.knowledge.retrieval_started.v1";
@@ -38263,9 +38285,9 @@ function protectLine(line, probe, opts) {
 function pageText(storage, rel2) {
   const root = (storage.project ?? storage.workspace)?.knowledge();
   if (!root) return "";
-  const abs = path72.resolve(root, rel2);
-  const back = path72.relative(root, abs);
-  if (back.startsWith("..") || path72.isAbsolute(back)) return "";
+  const abs = path73.resolve(root, rel2);
+  const back = path73.relative(root, abs);
+  if (back.startsWith("..") || path73.isAbsolute(back)) return "";
   try {
     return fs61.readFileSync(abs, "utf8");
   } catch {
@@ -38308,8 +38330,8 @@ function phaseStartRecall(query, opts) {
   });
   const recordDir = opts.runDir ?? (opts.runId ? (storage.project ?? storage.workspace)?.runRecord(opts.runId) : void 0);
   const search = recordDir ? instrumentRetrieval(query, {
-    runDir: path72.resolve(recordDir),
-    run_id: opts.runId ?? path72.basename(recordDir),
+    runDir: path73.resolve(recordDir),
+    run_id: opts.runId ?? path73.basename(recordDir),
     entry_point: "phase_start",
     mode: `phase_start_${policy.backend}`.replace(/[^a-z0-9_:-]/g, "_"),
     use_capture: "unsupported",
@@ -38340,11 +38362,11 @@ ${pageText(storage, h.rel)}` }, protect),
     lane_bundle
   };
 }
-var fs61, path72;
+var fs61, path73;
 var init_phase_start = __esm({
   "src/domains/knowledge/phase-start.ts"() {
     fs61 = __toESM(require("node:fs"));
-    path72 = __toESM(require("node:path"));
+    path73 = __toESM(require("node:path"));
     init_state();
     init_glossary();
     init_recall_protect();
@@ -38429,7 +38451,7 @@ function walkMdFiles(dir) {
       continue;
     }
     for (const ent of entries) {
-      const full = path73.join(cur, ent.name);
+      const full = path74.join(cur, ent.name);
       if (ent.isDirectory()) {
         stack.push(full);
       } else if (ent.isFile() && ent.name.endsWith(".md")) {
@@ -38452,8 +38474,8 @@ function sqliteBranch(query, cwd, indexConfig, limit, runDir2, runId) {
   return { source: "sqlite", chunks, directive: result8.directive };
 }
 function fileBm25Branch(query, cwd, category, limit, runDir2, runId, composite) {
-  const wikiBase = path73.join(durableGuildDir(cwd), "wiki");
-  const scanDir = category ? path73.join(wikiBase, category) : wikiBase;
+  const wikiBase = path74.join(durableGuildDir(cwd), "wiki");
+  const scanDir = category ? path74.join(wikiBase, category) : wikiBase;
   const superseded = supersededWikiPages(wikiBase);
   const files = walkMdFiles(scanDir).filter((f) => !superseded.has(f));
   if (files.length === 0) return null;
@@ -38477,7 +38499,7 @@ function fileBm25Branch(query, cwd, category, limit, runDir2, runId, composite) 
   );
   if (ranked.length === 0) return null;
   const rawHits = ranked.map((d) => ({
-    source_path: path73.relative(cwd, d.path),
+    source_path: path74.relative(cwd, d.path),
     content: d.content
   }));
   const { chunks, directive } = protectChunks(rawHits, {
@@ -38499,14 +38521,14 @@ function fsScanBranch(query, cwd, category, limit, runDir2, runId) {
   }
   const rawHits = scanResult.hits.map((hit) => {
     const absPath = hit.path;
-    const relPath2 = path73.relative(cwd, absPath);
+    const relPath3 = path74.relative(cwd, absPath);
     let content;
     try {
       content = fs62.readFileSync(absPath, "utf8");
     } catch {
       content = hit.snippet;
     }
-    return { source_path: relPath2, content };
+    return { source_path: relPath3, content };
   });
   const { chunks, directive } = protectChunks(rawHits, {
     runDir: runDir2,
@@ -38516,7 +38538,7 @@ function fsScanBranch(query, cwd, category, limit, runDir2, runId) {
   return { source: "fs-scan", chunks, directive };
 }
 function kgQueryBranch(query, cwd, limit, runDir2, runId, category, onExportRead) {
-  const projPath = path73.join(durableGuildDir(cwd), "indexes", "knowledge-recall.json");
+  const projPath = path74.join(durableGuildDir(cwd), "indexes", "knowledge-recall.json");
   if (!fs62.existsSync(projPath)) return null;
   let proj = null;
   try {
@@ -38610,7 +38632,7 @@ structural node (hop ${n.depth}) \u2014 no line provenance, untrusted
 function structuralBranch(query, cwd, category, limit, runDir2, runId) {
   const intent = classifyStructuralIntent(query);
   if (!intent) return null;
-  const graphPath = path73.join(durableGuildDir(cwd), "indexes", "knowledge-graph.json");
+  const graphPath = path74.join(durableGuildDir(cwd), "indexes", "knowledge-graph.json");
   if (!fs62.existsSync(graphPath)) return null;
   let doc = null;
   try {
@@ -38622,17 +38644,17 @@ function structuralBranch(query, cwd, category, limit, runDir2, runId) {
   const edges = Array.isArray(doc?.edges) ? doc.edges : [];
   if (nodes.length === 0) return null;
   const view = { nodes, edges };
-  let evidence2;
+  let evidence3;
   if (intent.kind === "deadcode") {
-    evidence2 = kgDeadCode(view, { configEntryPoints: resolveEntryPointConfig({ repoRoot: cwd }) }).nodes;
+    evidence3 = kgDeadCode(view, { configEntryPoints: resolveEntryPointConfig({ repoRoot: cwd }) }).nodes;
   } else if (intent.kind === "neighbors") {
-    evidence2 = kgNeighbors(view, intent.target ?? "", 1).nodes;
+    evidence3 = kgNeighbors(view, intent.target ?? "", 1).nodes;
   } else {
-    evidence2 = kgTrace(view, intent.target ?? "", intent.direction ?? "outbound", 3).nodes;
+    evidence3 = kgTrace(view, intent.target ?? "", intent.direction ?? "outbound", 3).nodes;
   }
-  if (evidence2.length === 0) return null;
+  if (evidence3.length === 0) return null;
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  const scoped = evidence2.filter(
+  const scoped = evidence3.filter(
     (e) => nodeInScope(category, byId.get(e.id)?.category, e.source_refs)
   );
   if (scoped.length === 0) return null;
@@ -38655,12 +38677,12 @@ function structuralBranch(query, cwd, category, limit, runDir2, runId) {
   return { source: "structural", chunks, directive };
 }
 function corpusForcesIdentifierBypass(query, cwd, category, wikiFileThreshold) {
-  const globalWikiBase = path73.join(durableGuildDir(resolveMainRepoRoot(cwd)), "wiki");
+  const globalWikiBase = path74.join(durableGuildDir(resolveMainRepoRoot(cwd)), "wiki");
   if (walkMdFiles(globalWikiBase).length <= wikiFileThreshold) return false;
   const querySet = new Set(tokenizeIdentifierAware(query));
   if (querySet.size === 0) return false;
-  const wikiBase = path73.join(durableGuildDir(cwd), "wiki");
-  const scanDir = category ? path73.join(wikiBase, category) : wikiBase;
+  const wikiBase = path74.join(durableGuildDir(cwd), "wiki");
+  const scanDir = category ? path74.join(wikiBase, category) : wikiBase;
   for (const f of walkMdFiles(scanDir)) {
     let content;
     try {
@@ -38681,18 +38703,18 @@ function corpusForcesIdentifierBypass(query, cwd, category, wikiFileThreshold) {
   return false;
 }
 function recall(query, opts) {
-  const runDir2 = opts.runDir ?? (opts.runId ? path73.join(durableGuildDir(opts.cwd), "runs", opts.runId) : void 0);
+  const runDir2 = opts.runDir ?? (opts.runId ? path74.join(durableGuildDir(opts.cwd), "runs", opts.runId) : void 0);
   if (!runDir2) return recallUninstrumented(query, opts);
   const r = opts.retrieval ?? {};
   const taskId = process.env["GUILD_TASK_ID"] ?? process.env["GUILD_LANE_ID"];
   const ctx = {
-    runDir: path73.resolve(runDir2),
-    run_id: opts.runId ?? path73.basename(runDir2),
+    runDir: path74.resolve(runDir2),
+    run_id: opts.runId ?? path74.basename(runDir2),
     entry_point: r.entry_point ?? "recall_api",
     mode: opts.category ? "recall_category" : "recall",
     use_capture: r.use_capture ?? "supported",
     // The generation is named only from the bytes the KG branch actually read.
-    indexesDir: path73.join(durableGuildDir(opts.cwd), "indexes"),
+    indexesDir: path74.join(durableGuildDir(opts.cwd), "indexes"),
     ...taskId ? { task_id: taskId } : {},
     ...r.identity ? { identity: r.identity } : {},
     ...r.query_id ? { query_id: r.query_id } : {},
@@ -38746,7 +38768,7 @@ function recallUninstrumented(query, opts) {
     laneOutcome = "unknown"
   } = opts;
   const _traceStart = Date.now();
-  const runDir2 = rawRunDir ?? (runId ? path73.join(durableGuildDir(cwd), "runs", runId) : void 0);
+  const runDir2 = rawRunDir ?? (runId ? path74.join(durableGuildDir(cwd), "runs", runId) : void 0);
   const indexConfig = { ...DEFAULT_INDEX_BLOCK, ..._indexConfig };
   const structuralResult = structuralBranch(
     query,
@@ -38930,9 +38952,9 @@ function runRecallCli() {
     }
   }
   if (recordUse) {
-    const useRunDir = runDir2 || (runId ? path73.join(durableGuildDir(cwd), "runs", runId) : "");
+    const useRunDir = runDir2 || (runId ? path74.join(durableGuildDir(cwd), "runs", runId) : "");
     const res = useRunDir ? recordKnowledgeUse({
-      runDir: path73.resolve(useRunDir),
+      runDir: path74.resolve(useRunDir),
       query_id: useQueryId,
       ordinal: useResult,
       consumer: { kind: consumerKind, id: consumerId }
@@ -38983,11 +39005,11 @@ function runRecallCli() {
   }
   process.stdout.write(JSON.stringify(result8) + "\n");
 }
-var fs62, path73, crypto22, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
+var fs62, path74, crypto22, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
 var init_recall = __esm({
   "src/domains/knowledge/recall.ts"() {
     fs62 = __toESM(require("node:fs"));
-    path73 = __toESM(require("node:path"));
+    path74 = __toESM(require("node:path"));
     crypto22 = __toESM(require("node:crypto"));
     init_state();
     init_wiki_recall();
@@ -39003,7 +39025,7 @@ var init_recall = __esm({
     init_telemetry();
     init_state();
     init_phase_start();
-    init_trace_capture_v3();
+    init_telemetry();
     init_retrieval_ledger();
     DEFAULT_RECALL_HALF_LIFE_DAYS = 90;
     DEFAULT_RECALL_SCORE_THRESHOLD = 0.4;
@@ -39170,11 +39192,11 @@ function lintKnowledgeNodes(nodes) {
   }
   return findings;
 }
-var fs63, path74, KNOWLEDGE_NODE_TYPES, IMPORTANCE_LINTABLE_TYPES, VALID_IMPORTANCE;
+var fs63, path75, KNOWLEDGE_NODE_TYPES, IMPORTANCE_LINTABLE_TYPES, VALID_IMPORTANCE;
 var init_wiki_lint_knowledge = __esm({
   "src/domains/knowledge/wiki-lint-knowledge.ts"() {
     fs63 = __toESM(require("fs"));
-    path74 = __toESM(require("path"));
+    path75 = __toESM(require("path"));
     init_knowledge_graph_contract();
     KNOWLEDGE_NODE_TYPES = /* @__PURE__ */ new Set([
       "topic",
@@ -39198,7 +39220,7 @@ var init_wiki_lint_knowledge = __esm({
       const useJson = argv.includes("--json");
       let graph;
       try {
-        graph = JSON.parse(fs63.readFileSync(path74.resolve(graphPath), "utf8"));
+        graph = JSON.parse(fs63.readFileSync(path75.resolve(graphPath), "utf8"));
       } catch (err) {
         process.stderr.write(`[wiki-lint-knowledge] ERROR reading graph: ${err}
 `);
@@ -39512,14 +39534,14 @@ function parseResumeLanesArgs(argv) {
   return { runDir: runDir2, json, cwd, slug };
 }
 function repoRootFromRunDir2(runDir2) {
-  return path75.resolve(runDir2, "..", "..", "..");
+  return path76.resolve(runDir2, "..", "..", "..");
 }
 function scanResumableLanes(runDir2, cwd, slug) {
   const repoRoot = cwd ?? repoRootFromRunDir2(runDir2);
   if (!readResumeEnabled(repoRoot)) {
     return [];
   }
-  const lanesDir = path75.join(runDir2, "lanes");
+  const lanesDir = path76.join(runDir2, "lanes");
   let entries;
   try {
     entries = fs64.readdirSync(lanesDir, { withFileTypes: true });
@@ -39586,11 +39608,11 @@ function runResumeLanesCli() {
   }
   process.exit(0);
 }
-var fs64, path75;
+var fs64, path76;
 var init_resume_lanes = __esm({
   "src/domains/lifecycle/resume-lanes.ts"() {
     fs64 = __toESM(require("fs"));
-    path75 = __toESM(require("path"));
+    path76 = __toESM(require("path"));
     init_run_state();
     init_teams();
     if (require.main === module && new RegExp("[\\\\/]resume-lanes\\.[cm]?[jt]s$").test(process.argv[1] ?? "")) {
@@ -39607,11 +39629,11 @@ var init_retry_lane = __esm({
 });
 
 // src/domains/lifecycle/run-binding-fields.ts
-var path76, LOGICAL_RUN_MANIFEST_RELPATH, RUN_BINDING_V1_FIELDS;
+var path77, LOGICAL_RUN_MANIFEST_RELPATH, RUN_BINDING_V1_FIELDS;
 var init_run_binding_fields = __esm({
   "src/domains/lifecycle/run-binding-fields.ts"() {
-    path76 = __toESM(require("path"));
-    LOGICAL_RUN_MANIFEST_RELPATH = path76.join("lineage", "logical-run.json");
+    path77 = __toESM(require("path"));
+    LOGICAL_RUN_MANIFEST_RELPATH = path77.join("lineage", "logical-run.json");
     RUN_BINDING_V1_FIELDS = Object.freeze(["schema_version", "run_id", "binding_ref", "state"]);
   }
 });
@@ -39653,7 +39675,7 @@ var init_run_lifecycle = __esm({
 
 // src/domains/lifecycle/write-run-manifest.ts
 function manifestPathFor(cwd, slug) {
-  return path77.join(durableGuildDir(cwd), "programs", slug, "manifest.json");
+  return path78.join(durableGuildDir(cwd), "programs", slug, "manifest.json");
 }
 function readRunManifest(cwd, slug) {
   try {
@@ -39811,11 +39833,11 @@ function runWriteRunManifestCli(argv = process.argv.slice(2)) {
     process.exit(2);
   }
 }
-var fs65, path77, WAVE_STATUSES, PROGRAM_STATUSES;
+var fs65, path78, WAVE_STATUSES, PROGRAM_STATUSES;
 var init_write_run_manifest = __esm({
   "src/domains/lifecycle/write-run-manifest.ts"() {
     fs65 = __toESM(require("fs"));
-    path77 = __toESM(require("path"));
+    path78 = __toESM(require("path"));
     init_state();
     init_state();
     WAVE_STATUSES = /* @__PURE__ */ new Set(["pending", "active", "completed", "failed"]);
@@ -40030,7 +40052,7 @@ var init_runstart_preflight = __esm({
 
 // src/domains/lifecycle/write-task-run.ts
 function taskRunPath(cwd, runId, taskId) {
-  return path78.join(durableGuildDir(cwd), "runs", runId, "task-runs", `${taskId}.yaml`);
+  return path79.join(durableGuildDir(cwd), "runs", runId, "task-runs", `${taskId}.yaml`);
 }
 function writeTaskRun(cwd, runId, taskId, params) {
   const {
@@ -40104,7 +40126,7 @@ function writeTaskRun(cwd, runId, taskId, params) {
   });
   atomicWrite(outPath, yamlStr);
   try {
-    const _traceRunDir = path78.join(durableGuildDir(cwd), "runs", runId);
+    const _traceRunDir = path79.join(durableGuildDir(cwd), "runs", runId);
     const _traceTs = (/* @__PURE__ */ new Date()).toISOString();
     const _traceBackend = "unknown";
     emitTraceEvent(
@@ -40282,10 +40304,10 @@ function runWriteTaskRunCli(argv = process.argv.slice(2)) {
     process.exit(2);
   }
 }
-var path78;
+var path79;
 var init_write_task_run = __esm({
   "src/domains/lifecycle/write-task-run.ts"() {
-    path78 = __toESM(require("path"));
+    path79 = __toESM(require("path"));
     init_telemetry();
     init_kernel();
     init_state();
@@ -40363,15 +40385,15 @@ var init_learning_checkpoint_5 = __esm({
 });
 
 // src/domains/lifecycle/workflow-graph-load.ts
-var path79, PLUGIN_GRAPH_DIRS;
+var path80, PLUGIN_GRAPH_DIRS;
 var init_workflow_graph_load = __esm({
   "src/domains/lifecycle/workflow-graph-load.ts"() {
-    path79 = __toESM(require("node:path"));
+    path80 = __toESM(require("node:path"));
     init_kernel();
     init_state();
     init_workflow_graph_overlay();
     PLUGIN_GRAPH_DIRS = Object.freeze([
-      path79.join("src", "surfaces", "graphs"),
+      path80.join("src", "surfaces", "graphs"),
       "graphs"
     ]);
   }
@@ -48629,6 +48651,254 @@ var init_stack_p05 = __esm({
   }
 });
 
+// src/domains/lifecycle/execution-identity.ts
+function isRfc33392(v) {
+  const m = TIME_RE2.exec(v);
+  if (!m) return false;
+  const [y, mo, d, h, mi, s] = m.slice(1, 7).map(Number);
+  const daysIn = [31, y % 4 === 0 && y % 100 !== 0 || y % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (mo < 1 || mo > 12 || d < 1 || d > daysIn[mo - 1] || h > 23 || mi > 59 || s > 59) return false;
+  if (m[7] !== void 0 && (Number(m[7]) > 23 || Number(m[8]) > 59)) return false;
+  return true;
+}
+var path81, LOGICAL_RUN_SCHEMA, EXECUTION_SEGMENT_SCHEMA, STACK_TASK_ASSIGNMENT_SCHEMA, STACK_TASK_ATTEMPT_SCHEMA, RUN_BINDING_V2_SCHEMA, EXECUTION_LINEAGE_SCHEMA, ID_RE2, HASH_RE2, TIME_RE2, REL_PATH_RE2, KINDS, own2, isObj4, fail2, cpLength2, id2, hash2, time2, str3, int02, int1, num02, bool2, konst2, oneOf2, nullable2, relPath2, array2, object3, entity, evidence2, lineage2, pins2, stateAxes, interval2, authority, admission, SHAPES, ATTEMPT_INDEX, EXECUTION_IDENTITY_CAPABILITY;
+var init_execution_identity = __esm({
+  "src/domains/lifecycle/execution-identity.ts"() {
+    path81 = __toESM(require("node:path"));
+    init_kernel();
+    init_state();
+    init_config2();
+    init_security();
+    init_run_binding();
+    init_run_binding_fields();
+    LOGICAL_RUN_SCHEMA = "guild.logical_run.v2";
+    EXECUTION_SEGMENT_SCHEMA = "guild.execution_segment.v1";
+    STACK_TASK_ASSIGNMENT_SCHEMA = "guild.task_assignment.v3";
+    STACK_TASK_ATTEMPT_SCHEMA = "guild.task_attempt.v1";
+    RUN_BINDING_V2_SCHEMA = "guild.run_binding.v2";
+    EXECUTION_LINEAGE_SCHEMA = "guild.stack.execution-lineage.v1";
+    ID_RE2 = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+    HASH_RE2 = /^sha256:[a-f0-9]{64}$/;
+    TIME_RE2 = /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:[Zz]|[+-](\d{2}):(\d{2}))$/;
+    REL_PATH_RE2 = /^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*[\\%\x00-\x1f])[^:]+$/u;
+    KINDS = /* @__PURE__ */ new Set(["initiative", "run", "execution", "host_session", "goal", "logical_task", "task_attempt", "agent_instance", "request", "operation", "decision", "workflow", "component", "invocation", "obligation", "memory", "knowledge", "candidate", "agent", "skill", "tool", "team", "loop", "config", "evaluation", "report", "benchmark_case", "transfer", "query"]);
+    own2 = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+    isObj4 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+    fail2 = (errs, at, msg) => {
+      errs.push(`${at}: ${msg}`);
+    };
+    cpLength2 = (s) => [...s].length;
+    id2 = (v, at, e) => {
+      if (typeof v !== "string" || !ID_RE2.test(v)) fail2(e, at, "not an id");
+    };
+    hash2 = (v, at, e) => {
+      if (typeof v !== "string" || !HASH_RE2.test(v)) fail2(e, at, "not a sha256 hash");
+    };
+    time2 = (v, at, e) => {
+      if (typeof v !== "string" || !isRfc33392(v)) fail2(e, at, "not a date-time");
+    };
+    str3 = (v, at, e) => {
+      if (typeof v !== "string" || cpLength2(v) < 1 || cpLength2(v) > 4096) fail2(e, at, "not a bounded string");
+    };
+    int02 = (v, at, e) => {
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 0) fail2(e, at, "not a non-negative integer");
+    };
+    int1 = (v, at, e) => {
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 1) fail2(e, at, "not a positive integer");
+    };
+    num02 = (v, at, e) => {
+      if (typeof v !== "number" || !Number.isFinite(v) || v < 0) fail2(e, at, "not a non-negative number");
+    };
+    bool2 = (v, at, e) => {
+      if (typeof v !== "boolean") fail2(e, at, "not a boolean");
+    };
+    konst2 = (c) => (v, at, e) => {
+      if (v !== c) fail2(e, at, `must equal ${c}`);
+    };
+    oneOf2 = (...vals) => (v, at, e) => {
+      if (typeof v !== "string" || !vals.includes(v)) fail2(e, at, `not one of ${vals.join("|")}`);
+    };
+    nullable2 = (c) => (v, at, e) => {
+      if (v !== null) c(v, at, e);
+    };
+    relPath2 = (v, at, e) => {
+      if (typeof v !== "string" || cpLength2(v) < 1 || cpLength2(v) > 1024 || !REL_PATH_RE2.test(v)) fail2(e, at, "not a contained relative path");
+    };
+    array2 = (item, max) => (v, at, e) => {
+      if (!Array.isArray(v)) return fail2(e, at, "not an array");
+      if (v.length > max) fail2(e, at, `more than ${max} items`);
+      for (let i = 0; i < v.length; i++) item(v[i], `${at}[${i}]`, e);
+    };
+    object3 = (shape2) => (v, at, e) => {
+      if (!isObj4(v)) return fail2(e, at, "not an object");
+      for (const k of Object.keys(v)) if (!own2(shape2, k)) fail2(e, `${at}.${k}`, "unknown field");
+      for (const k of Object.keys(shape2)) {
+        if (!own2(v, k)) fail2(e, `${at}.${k}`, "required");
+        else shape2[k](v[k], `${at}.${k}`, e);
+      }
+    };
+    entity = object3({ source_id: id2, kind: (v, at, e) => {
+      if (typeof v !== "string" || !KINDS.has(v)) fail2(e, at, "unknown kind");
+    }, id: id2, revision: hash2 });
+    evidence2 = object3({
+      source_id: id2,
+      path: relPath2,
+      sha256: hash2,
+      schema_version: str3,
+      observed_at: time2,
+      availability: oneOf2("available", "expired", "redacted", "missing", "unsupported"),
+      reason: nullable2(str3)
+    });
+    lineage2 = object3({
+      source_id: id2,
+      run_id: id2,
+      execution_id: id2,
+      host_session_id: nullable2(id2),
+      initiative_id: nullable2(id2),
+      goal_id: nullable2(id2),
+      logical_task_id: nullable2(id2),
+      attempt_id: nullable2(id2),
+      agent_instance_id: nullable2(id2),
+      request_id: nullable2(id2)
+    });
+    pins2 = object3({ assignment: hash2, definition: hash2, configuration: hash2, workflow: hash2, policy: hash2 });
+    stateAxes = object3({
+      lifecycle: oneOf2("created", "active", "suspended", "closed", "unknown"),
+      outcome: oneOf2("pending", "succeeded", "failed", "cancelled", "partial", "unknown"),
+      acceptance: oneOf2("pending", "verified", "rejected", "not_required", "unknown"),
+      observability: oneOf2("complete", "partial", "unavailable")
+    });
+    interval2 = object3({
+      start: time2,
+      end: nullable2(time2),
+      duration_ms: nullable2(num02),
+      clock: object3({ domain: id2, basis: oneOf2("controller", "local_monotonic", "provider", "unknown"), comparable: bool2, skew_bound_ms: nullable2(num02) })
+    });
+    authority = object3({
+      controller_source_id: id2,
+      controller_epoch: int02,
+      execution_id: nullable2(id2),
+      attempt_id: nullable2(id2),
+      writer_scope_hash: hash2,
+      source_disposition_revision: nullable2(hash2)
+    });
+    admission = oneOf2("active", "reconcile_only", "revoked", "sealed");
+    SHAPES = {
+      "logical-run": object3({
+        schema_version: konst2(LOGICAL_RUN_SCHEMA),
+        source_id: id2,
+        run_id: id2,
+        initiative_id: nullable2(id2),
+        parent_run: nullable2(entity),
+        created_at: time2,
+        phase: oneOf2("init", "ideate", "plan", "build", "qa", "ops"),
+        initial_command: str3,
+        initial_prompt_ref: nullable2(evidence2),
+        controller: object3({ source_id: id2, host_id: id2, epoch: int02, state: oneOf2("active", "suspended"), failover: konst2("manual_new_run_only") }),
+        workflow_hash: hash2,
+        settings_hash: hash2,
+        execution_refs: array2(entity, 1e3),
+        goal_refs: array2(entity, 1e3),
+        state: stateAxes
+      }),
+      "execution-segment": object3({
+        schema_version: konst2(EXECUTION_SEGMENT_SCHEMA),
+        lineage: lineage2,
+        original_host_id: id2,
+        host_session_id: nullable2(id2),
+        issued_controller_epoch: int02,
+        adapter_capability_hash: hash2,
+        pins: pins2,
+        admission,
+        interval: interval2,
+        observation_manifest: hash2,
+        seal_evidence: nullable2(evidence2)
+      }),
+      "task-assignment": object3({
+        schema_version: konst2(STACK_TASK_ASSIGNMENT_SCHEMA),
+        lineage: lineage2,
+        original_host_id: id2,
+        issued_controller_epoch: int02,
+        assignment_hash: hash2,
+        pins: pins2,
+        result_scope_hash: hash2,
+        grant_id: id2,
+        created_at: time2,
+        goal_contributions: array2(entity, 100),
+        input_refs: array2(evidence2, 100)
+      }),
+      "task-attempt": object3({
+        schema_version: konst2(STACK_TASK_ATTEMPT_SCHEMA),
+        lineage: lineage2,
+        assignment_ref: evidence2,
+        ordinal: int1,
+        state: stateAxes,
+        result_refs: array2(evidence2, 100),
+        acceptance_subject_hash: nullable2(hash2),
+        accepted_by_controller_epoch: nullable2(int02),
+        receipt_loss_reconciled: bool2,
+        uncertain_effects: bool2
+      }),
+      "run-binding": object3({
+        schema_version: konst2(RUN_BINDING_V2_SCHEMA),
+        source_id: id2,
+        run_id: id2,
+        controller_source_id: id2,
+        controller_host_id: id2,
+        controller_epoch: int02,
+        writer_grant_id: id2,
+        writer_scope_hash: hash2,
+        state: oneOf2("open", "suspended", "sealed"),
+        logical_run_manifest_hash: hash2
+      }),
+      "execution-lineage": object3({
+        schema_version: konst2(EXECUTION_LINEAGE_SCHEMA),
+        lineage: lineage2,
+        run_schema: konst2(LOGICAL_RUN_SCHEMA),
+        pins: pins2,
+        requested_host: id2,
+        observed_host: nullable2(id2),
+        requested_model: nullable2(str3),
+        observed_identity: object3({ provider: nullable2(str3), model: nullable2(str3), status: oneOf2("observed", "unavailable"), reason: nullable2(str3) }),
+        adapter_capability_hash: hash2,
+        authority,
+        attempt_grant_ref: nullable2(id2),
+        admission,
+        state: stateAxes,
+        interval: interval2,
+        handoffs: array2(object3({ operation_id: id2, from_execution_id: id2, to_execution_id: id2, accepted_by_controller_epoch: int02, evidence: evidence2 }), 100),
+        evidence: array2(evidence2, 100)
+      })
+    };
+    ATTEMPT_INDEX = path81.join("runs", "_lineage-index", "attempts");
+    EXECUTION_IDENTITY_CAPABILITY = Object.freeze({
+      id: "guild.execution_identity",
+      version: 1,
+      components: Object.freeze({
+        lifecycle_binding: RUN_BINDING_V2_SCHEMA,
+        session: EXECUTION_SEGMENT_SCHEMA,
+        assignment: STACK_TASK_ASSIGNMENT_SCHEMA,
+        attempt: STACK_TASK_ATTEMPT_SCHEMA,
+        receipt: EXECUTION_LINEAGE_SCHEMA,
+        adapter: "guild.adapter_capability.v1"
+      })
+    });
+  }
+});
+
+// src/domains/lifecycle/managed-segment.ts
+var MANAGED_SEGMENT_INTEGRATION;
+var init_managed_segment = __esm({
+  "src/domains/lifecycle/managed-segment.ts"() {
+    init_state();
+    init_execution_identity();
+    MANAGED_SEGMENT_INTEGRATION = Object.freeze({
+      qualified: false,
+      reason: "Managed launch of a logical v2 run is not qualified; segment integration needs a real managed host launch (V01)"
+    });
+  }
+});
+
 // src/domains/lifecycle/managed-run.ts
 var init_managed_run = __esm({
   "src/domains/lifecycle/managed-run.ts"() {
@@ -48636,6 +48906,7 @@ var init_managed_run = __esm({
     init_kernel();
     init_run_lifecycle();
     init_run_binding();
+    init_managed_segment();
   }
 });
 
@@ -48649,6 +48920,7 @@ var init_stack_operations = __esm({
     init_workflow_graph_overlay();
     init_stack_p05();
     init_run_lifecycle();
+    init_managed_segment();
     init_managed_run();
   }
 });
@@ -50306,9 +50578,9 @@ function operationObserved(value, kind) {
   if (!isPlainRecord(manager)) return false;
   return typeof manager.identity === "string" && manager.identity.length > 0 && typeof manager.path === "string" && manager.path.length > 0;
 }
-function releaseClaimVerifies(evidence2, identity) {
-  const claim = evidence2.release_claim;
-  const archiveBase64 = evidence2.release_archive_base64;
+function releaseClaimVerifies(evidence3, identity) {
+  const claim = evidence3.release_claim;
+  const archiveBase64 = evidence3.release_archive_base64;
   if (!isPlainRecord(claim) || typeof archiveBase64 !== "string" || archiveBase64.length === 0) {
     return { ok: false, errors: ["release claim or archive bytes absent"] };
   }
@@ -50346,10 +50618,10 @@ function fromTransition(transition, observed) {
     observed: { ...observed, support_record: { ...transition.record } }
   };
 }
-function deriveSup001(evidence2, identity) {
-  const hostRecognized = evidence2.host_recognized === true && NEUTRAL_RECOGNIZED_HOST_IDS.indexOf(identity.host_id) !== -1;
-  const sourceBound = evidence2.source_commit === identity.source_commit;
-  const noArtifact = evidence2.package_artifact_exists === false;
+function deriveSup001(evidence3, identity) {
+  const hostRecognized = evidence3.host_recognized === true && NEUTRAL_RECOGNIZED_HOST_IDS.indexOf(identity.host_id) !== -1;
+  const sourceBound = evidence3.source_commit === identity.source_commit;
+  const noArtifact = evidence3.package_artifact_exists === false;
   const record = seededSupport(hostRecognized && sourceBound ? ["recognized"] : []);
   const claim = deriveNeutralSupportClaim(record);
   const observed = {
@@ -50364,9 +50636,9 @@ function deriveSup001(evidence2, identity) {
   }
   return { disposition: "failed", reason_code: "support_operation_failed", observed };
 }
-function deriveSup002(evidence2, identity) {
-  const recognized = evidence2.host_recognized === true && evidence2.source_commit === identity.source_commit && NEUTRAL_RECOGNIZED_HOST_IDS.indexOf(identity.host_id) !== -1;
-  const renderProven = evidence2.package_hash === identity.package_hash && evidence2.manifest_deterministic === true && evidence2.manager_or_destination_mutated === false;
+function deriveSup002(evidence3, identity) {
+  const recognized = evidence3.host_recognized === true && evidence3.source_commit === identity.source_commit && NEUTRAL_RECOGNIZED_HOST_IDS.indexOf(identity.host_id) !== -1;
+  const renderProven = evidence3.package_hash === identity.package_hash && evidence3.manifest_deterministic === true && evidence3.manager_or_destination_mutated === false;
   const transition = applyNeutralSupportTransition(seededSupport(recognized ? ["recognized"] : []), "render", {
     satisfied: renderProven
   });
@@ -50375,11 +50647,11 @@ function deriveSup002(evidence2, identity) {
   }
   return fromTransition(transition, { recognized, render_proven: renderProven });
 }
-function deriveSup003(evidence2, identity) {
-  const renderBound = evidence2.rendered_package_hash === identity.package_hash;
-  const claimVerdict = releaseClaimVerifies(evidence2, identity);
-  const installObserved = operationObserved(evidence2.install_operation, "install");
-  const postWriteBound = evidence2.post_write_hash === identity.package_hash;
+function deriveSup003(evidence3, identity) {
+  const renderBound = evidence3.rendered_package_hash === identity.package_hash;
+  const claimVerdict = releaseClaimVerifies(evidence3, identity);
+  const installObserved = operationObserved(evidence3.install_operation, "install");
+  const postWriteBound = evidence3.post_write_hash === identity.package_hash;
   const installProven = claimVerdict.ok && installObserved && postWriteBound;
   const transition = applyNeutralSupportTransition(
     seededSupport(renderBound ? ["recognized", "rendered"] : ["recognized"]),
@@ -50394,14 +50666,14 @@ function deriveSup003(evidence2, identity) {
     release_claim_errors: [...claimVerdict.errors]
   });
 }
-function deriveSup004(evidence2, identity) {
-  const installedBound = evidence2.installed_package_hash === identity.package_hash;
-  const claimVerdict = releaseClaimVerifies(evidence2, identity);
-  const activateOp = evidence2.activate_operation;
+function deriveSup004(evidence3, identity) {
+  const installedBound = evidence3.installed_package_hash === identity.package_hash;
+  const claimVerdict = releaseClaimVerifies(evidence3, identity);
+  const activateOp = evidence3.activate_operation;
   const activateObserved = operationObserved(activateOp, "activate") && isPlainRecord(activateOp) && activateOp.evidence_class === "operator";
-  const discovery = recordOf(evidence2, "runtime_discovery");
+  const discovery = recordOf(evidence3, "runtime_discovery");
   const discoveryBound = discovery !== null && discovery.active_version === identity.runtime_version && discovery.active_package_hash === identity.package_hash;
-  const requiredSurfaces = evidence2.required_entry_surfaces;
+  const requiredSurfaces = evidence3.required_entry_surfaces;
   const discoveredSurfaces = discovery === null ? null : discovery.entry_surfaces;
   const surfacesBound = Array.isArray(requiredSurfaces) && requiredSurfaces.length > 0 && Array.isArray(discoveredSurfaces) && requiredSurfaces.every((surface) => discoveredSurfaces.indexOf(surface) !== -1);
   const activateProven = claimVerdict.ok && activateObserved && discoveryBound && surfacesBound;
@@ -50419,16 +50691,16 @@ function deriveSup004(evidence2, identity) {
     release_claim_errors: [...claimVerdict.errors]
   });
 }
-function deriveSup005(evidence2, identity) {
-  const before = recordOf(evidence2, "before_discovery");
-  const after = recordOf(evidence2, "after_discovery");
+function deriveSup005(evidence3, identity) {
+  const before = recordOf(evidence3, "before_discovery");
+  const after = recordOf(evidence3, "after_discovery");
   const beforeObserved = before !== null && typeof before.active_version === "string" && typeof before.active_package_hash === "string";
   const afterObserved = after !== null && typeof after.active_version === "string" && typeof after.active_package_hash === "string";
   const changed = beforeObserved && afterObserved && (before?.active_version !== after?.active_version || before?.active_package_hash !== after?.active_package_hash);
   const afterBound = afterObserved && after?.active_version === identity.runtime_version && after?.active_package_hash === identity.package_hash;
-  const claimVerdict = releaseClaimVerifies(evidence2, identity);
-  const updateObserved = operationObserved(evidence2.update_operation, "update");
-  const destinationStable = evidence2.destination_unchanged === true;
+  const claimVerdict = releaseClaimVerifies(evidence3, identity);
+  const updateObserved = operationObserved(evidence3.update_operation, "update");
+  const destinationStable = evidence3.destination_unchanged === true;
   const updateProven = beforeObserved && afterObserved && changed && afterBound && claimVerdict.ok && updateObserved && destinationStable;
   const transition = applyNeutralSupportTransition(
     seededSupport(beforeObserved ? ["recognized", "rendered", "installed"] : ["recognized", "rendered"]),
@@ -50446,13 +50718,13 @@ function deriveSup005(evidence2, identity) {
     release_claim_errors: [...claimVerdict.errors]
   });
 }
-function deriveSup006(evidence2, identity) {
-  const activated = evidence2.activated_identity;
+function deriveSup006(evidence3, identity) {
+  const activated = evidence3.activated_identity;
   const identityExact = identityComplete2(activated) && NEUTRAL_EVIDENCE_IDENTITY_FIELDS.every(
     (field) => activated[field] === identity[field]
   );
-  const manifestComplete = evidence2.scenario_verdict_manifest_complete === true;
-  const hashesResolve = evidence2.all_evidence_hashes_resolve === true;
+  const manifestComplete = evidence3.scenario_verdict_manifest_complete === true;
+  const hashesResolve = evidence3.all_evidence_hashes_resolve === true;
   const verifyProven = identityExact && manifestComplete && hashesResolve;
   const transition = applyNeutralSupportTransition(
     seededSupport(
@@ -50467,9 +50739,9 @@ function deriveSup006(evidence2, identity) {
     all_evidence_hashes_resolve: hashesResolve
   });
 }
-function deriveVer001(evidence2) {
-  const prior = evidence2.prior_verdict_identity;
-  const current = evidence2.current_identity;
+function deriveVer001(evidence3) {
+  const prior = evidence3.prior_verdict_identity;
+  const current = evidence3.current_identity;
   if (!identityComplete2(prior) || !identityComplete2(current)) {
     return EVIDENCE_MISSING;
   }
@@ -50485,9 +50757,9 @@ function deriveVer001(evidence2) {
   }
   return undemonstrated({ changed_fields: [], age_ignored: true });
 }
-function deriveVer002(evidence2) {
-  const consumer = evidence2.consumer_pinned_major;
-  const producer = evidence2.producer_contract_major;
+function deriveVer002(evidence3) {
+  const consumer = evidence3.consumer_pinned_major;
+  const producer = evidence3.producer_contract_major;
   if (typeof consumer !== "number" || !Number.isInteger(consumer) || typeof producer !== "number" || !Number.isInteger(producer)) {
     return EVIDENCE_MISSING;
   }
@@ -50499,15 +50771,15 @@ function deriveVer002(evidence2) {
         consumer_pinned_major: consumer,
         producer_contract_major: producer,
         bundle_parsed: false,
-        bundle_hash: stringOf(evidence2, "bundle_hash")
+        bundle_hash: stringOf(evidence3, "bundle_hash")
       }
     };
   }
   return undemonstrated({ consumer_pinned_major: consumer, producer_contract_major: producer });
 }
-function deriveVer003(evidence2) {
-  const expected = recordOf(evidence2, "expected");
-  const observedDiscovery = recordOf(evidence2, "observed_runtime_discovery");
+function deriveVer003(evidence3) {
+  const expected = recordOf(evidence3, "expected");
+  const observedDiscovery = recordOf(evidence3, "observed_runtime_discovery");
   if (expected === null || observedDiscovery === null) return EVIDENCE_MISSING;
   const comparisons = [
     { field: "package_hash", expected: expected.package_hash, observed: observedDiscovery.active_package_hash },
@@ -50524,27 +50796,27 @@ function deriveVer003(evidence2) {
   }
   return undemonstrated({ mismatched: [] });
 }
-function deriveScenario(stableId, evidence2, identity) {
-  if (!isPlainRecord(evidence2)) return EVIDENCE_MISSING;
+function deriveScenario(stableId, evidence3, identity) {
+  if (!isPlainRecord(evidence3)) return EVIDENCE_MISSING;
   switch (stableId) {
     case "MHRC-SUP-001":
-      return deriveSup001(evidence2, identity);
+      return deriveSup001(evidence3, identity);
     case "MHRC-SUP-002":
-      return deriveSup002(evidence2, identity);
+      return deriveSup002(evidence3, identity);
     case "MHRC-SUP-003":
-      return deriveSup003(evidence2, identity);
+      return deriveSup003(evidence3, identity);
     case "MHRC-SUP-004":
-      return deriveSup004(evidence2, identity);
+      return deriveSup004(evidence3, identity);
     case "MHRC-SUP-005":
-      return deriveSup005(evidence2, identity);
+      return deriveSup005(evidence3, identity);
     case "MHRC-SUP-006":
-      return deriveSup006(evidence2, identity);
+      return deriveSup006(evidence3, identity);
     case "MHRC-VER-001":
-      return deriveVer001(evidence2);
+      return deriveVer001(evidence3);
     case "MHRC-VER-002":
-      return deriveVer002(evidence2);
+      return deriveVer002(evidence3);
     case "MHRC-VER-003":
-      return deriveVer003(evidence2);
+      return deriveVer003(evidence3);
     default:
       return EVIDENCE_MISSING;
   }
@@ -51052,12 +51324,12 @@ function copyTransportedResult(result8) {
     evidence_freshness: ownField(result8, "evidence_freshness")
   };
 }
-function evaluateTransportedReleaseConformance(evidence2, authority) {
-  if (!isRecord2(evidence2)) {
+function evaluateTransportedReleaseConformance(evidence3, authority2) {
+  if (!isRecord2(evidence3)) {
     return transportedRefusal("coverage", "the transported evidence is not a record");
   }
-  const required = ownField(evidence2, "required_scenario_ids");
-  const results = ownField(evidence2, "results");
+  const required = ownField(evidence3, "required_scenario_ids");
+  const results = ownField(evidence3, "results");
   const canonical = NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS;
   if (!Array.isArray(required) || required.length !== canonical.length) {
     return transportedRefusal(
@@ -51087,11 +51359,11 @@ function evaluateTransportedReleaseConformance(evidence2, authority) {
       );
     }
   }
-  const claimantId = ownField(evidence2, "claimant_id");
+  const claimantId = ownField(evidence3, "claimant_id");
   if (typeof claimantId !== "string" || claimantId.length === 0) {
     return transportedRefusal("coverage", "the evidence names no claimant");
   }
-  const identity = copyIdentity2(ownField(evidence2, "activated_runtime"));
+  const identity = copyIdentity2(ownField(evidence3, "activated_runtime"));
   if (!identityIsComplete4(identity)) {
     return transportedRefusal("coverage", "the evidence names no complete activated-runtime identity");
   }
@@ -51123,7 +51395,7 @@ function evaluateTransportedReleaseConformance(evidence2, authority) {
       `the real assembler refused the re-derived packets (${typeof control === "string" ? control : "unnamed control"})`
     );
   }
-  const outcome = evaluateNeutralConformanceDecision(assembled.evidence, authority);
+  const outcome = evaluateNeutralConformanceDecision(assembled.evidence, authority2);
   const promotable = outcome.disposition === "succeeded" && outcome.facts?.may_promote_conformant === true;
   return {
     promotable,
@@ -51132,14 +51404,14 @@ function evaluateTransportedReleaseConformance(evidence2, authority) {
     outcome
   };
 }
-function batteryManifestJson(id2, kind, dependsOn) {
+function batteryManifestJson(id3, kind, dependsOn) {
   const manifest = {};
   manifest["schema_version"] = ["guild", "module_manifest", "v1"].join(".");
-  manifest["id"] = id2;
-  manifest["title"] = id2;
+  manifest["id"] = id3;
+  manifest["title"] = id3;
   manifest["kind"] = kind;
   manifest["implementation_mode"] = "workflow-backed";
-  manifest["description"] = `A21-X battery fixture module ${id2}`;
+  manifest["description"] = `A21-X battery fixture module ${id3}`;
   if (dependsOn !== void 0) manifest["depends_on"] = [...dependsOn];
   manifest["owns"] = {};
   return `${JSON.stringify(manifest, null, 2)}
@@ -51162,10 +51434,10 @@ function buildBatteryModuleWorkspace(base) {
     2
   )}
 `;
-  const coreDir = path80.resolve(__dirname, "../lifecycle");
+  const coreDir = path82.resolve(__dirname, "../lifecycle");
   const coreWorkflows = {};
   for (const member of NEUTRAL_CORE_MEMBERS) {
-    coreWorkflows[member] = fs66.readFileSync(path80.join(coreDir, member), "utf8");
+    coreWorkflows[member] = fs66.readFileSync(path82.join(coreDir, member), "utf8");
   }
   coreWorkflows["lifecycle-ports.ts"] = [
     'export const LIFECYCLE_PORT_VERSION = "guild.lifecycle.ports.v1" as const;',
@@ -51275,27 +51547,27 @@ function buildBatteryModuleWorkspace(base) {
     ""
   ].join("\n");
   for (const [rel2, content] of Object.entries(files)) {
-    const target = path80.join(base, rel2);
-    fs66.mkdirSync(path80.dirname(target), { recursive: true });
+    const target = path82.join(base, rel2);
+    fs66.mkdirSync(path82.dirname(target), { recursive: true });
     fs66.writeFileSync(target, content);
   }
 }
 function batteryWorkspace() {
   if (batteryWorkspaceSingleton !== null) return batteryWorkspaceSingleton;
-  const base = fs66.mkdtempSync(path80.join(os8.tmpdir(), "a21x-integration-battery-"));
-  const journalRoot = path80.join(base, "journal-root");
-  const migrationJournalRoot = path80.join(base, "migration-journal-root");
+  const base = fs66.mkdtempSync(path82.join(os8.tmpdir(), "a21x-integration-battery-"));
+  const journalRoot = path82.join(base, "journal-root");
+  const migrationJournalRoot = path82.join(base, "migration-journal-root");
   fs66.mkdirSync(journalRoot, { recursive: true });
   fs66.mkdirSync(migrationJournalRoot, { recursive: true });
-  const moduleBase = path80.join(base, "module-workspace");
+  const moduleBase = path82.join(base, "module-workspace");
   buildBatteryModuleWorkspace(moduleBase);
   batteryWorkspaceSingleton = {
     journalRoot,
     migrationJournalRoot,
-    pluginRoot: path80.join(moduleBase, "plugin"),
+    pluginRoot: path82.join(moduleBase, "plugin"),
     consumerRoots: {
-      website: path80.join(moduleBase, "website"),
-      benchmark: path80.join(moduleBase, "benchmark")
+      website: path82.join(moduleBase, "website"),
+      benchmark: path82.join(moduleBase, "benchmark")
     }
   };
   return batteryWorkspaceSingleton;
@@ -51467,12 +51739,12 @@ function refusesWithControl(implementation, request, control) {
   if (!isRecord2(result8.outcome) || result8.outcome.disposition !== "refused") return false;
   return ownField(result8.outcome.facts, "refusal_control") === control;
 }
-var fs66, os8, path80, RELEASE_INTEGRATION_REQUEST_MEMBERS, RELEASE_INTEGRATION_OWNER_BOUNDARIES, CONTROL_NOT_TEXT, CONTROL_CALLER_PACKETS, CONTROL_CALLER_REQUIRED_SET2, CONTROL_CALLER_OUTCOMES, CONTROL_OWNER_FAILED, CONTROL_CLAIM_INCOMPLETE, CONTROL_ASSEMBLY_REFUSED, RELEASE_INTEGRATION_REFUSAL_CONTROLS, RELEASE_INTEGRATION_OWNER_INPUT_MEMBERS, FORBIDDEN_OWNER_INPUT_KEYS, MH02_SNAPSHOT_HASH, MH02_SUPPORTED_CAPABILITY, MH02_ABSENT_CAPABILITY, MH02_DENIED_OPERATION, MH02_ALLOWED_OPERATION, MH02_CONDITION_GATE, MH02_OPEN_GATE, MH02_OBSERVATION, MH02_POLICY, MH02_GATES, MH02_HOST_PROBES, MH02_PROBES, hostAdapterConformanceOwner, batteryWorkspaceSingleton, BATTERY_MODULE_PUBLIC_API, BATTERY_IDENTITY, BATTERY_CLAIMANT, BATTERY_RUN_ID, BATTERY_CLAIM, batteryRecomputedPacketsSingleton, RELEASE_INTEGRATION_CONTROL_BATTERY, RELEASE_INTEGRATION_CONTROLS;
+var fs66, os8, path82, RELEASE_INTEGRATION_REQUEST_MEMBERS, RELEASE_INTEGRATION_OWNER_BOUNDARIES, CONTROL_NOT_TEXT, CONTROL_CALLER_PACKETS, CONTROL_CALLER_REQUIRED_SET2, CONTROL_CALLER_OUTCOMES, CONTROL_OWNER_FAILED, CONTROL_CLAIM_INCOMPLETE, CONTROL_ASSEMBLY_REFUSED, RELEASE_INTEGRATION_REFUSAL_CONTROLS, RELEASE_INTEGRATION_OWNER_INPUT_MEMBERS, FORBIDDEN_OWNER_INPUT_KEYS, MH02_SNAPSHOT_HASH, MH02_SUPPORTED_CAPABILITY, MH02_ABSENT_CAPABILITY, MH02_DENIED_OPERATION, MH02_ALLOWED_OPERATION, MH02_CONDITION_GATE, MH02_OPEN_GATE, MH02_OBSERVATION, MH02_POLICY, MH02_GATES, MH02_HOST_PROBES, MH02_PROBES, hostAdapterConformanceOwner, batteryWorkspaceSingleton, BATTERY_MODULE_PUBLIC_API, BATTERY_IDENTITY, BATTERY_CLAIMANT, BATTERY_RUN_ID, BATTERY_CLAIM, batteryRecomputedPacketsSingleton, RELEASE_INTEGRATION_CONTROL_BATTERY, RELEASE_INTEGRATION_CONTROLS;
 var init_release_conformance_integration = __esm({
   "src/domains/distribution/release-conformance-integration.ts"() {
     fs66 = __toESM(require("node:fs"));
     os8 = __toESM(require("node:os"));
-    path80 = __toESM(require("node:path"));
+    path82 = __toESM(require("node:path"));
     init_lifecycle();
     init_config2();
     init_telemetry();
@@ -52237,7 +52509,7 @@ function gatherKnowledgeText(knowledgeDir2) {
   const parts = [];
   const walk = (dir) => {
     for (const e of fs67.readdirSync(dir, { withFileTypes: true })) {
-      const abs = path81.join(dir, e.name);
+      const abs = path83.join(dir, e.name);
       if (e.isDirectory()) {
         walk(abs);
         continue;
@@ -52306,11 +52578,11 @@ function main3(argv) {
   );
   return warn ? 0 : 1;
 }
-var fs67, path81, TOKEN_START, TOKEN_END, KNOWLEDGE_EXTENSIONS, NAMED_ENTITIES2, HTML_SPACE;
+var fs67, path83, TOKEN_START, TOKEN_END, KNOWLEDGE_EXTENSIONS, NAMED_ENTITIES2, HTML_SPACE;
 var init_check_command_coverage = __esm({
   "src/domains/distribution/check-command-coverage.ts"() {
     fs67 = __toESM(require("fs"));
-    path81 = __toESM(require("path"));
+    path83 = __toESM(require("path"));
     TOKEN_START = "(?<![A-Za-z0-9-])";
     TOKEN_END = "(?![A-Za-z0-9-])";
     KNOWLEDGE_EXTENSIONS = [".md", ".html", ".htm"];
@@ -52459,7 +52731,7 @@ function resolveUserFacingSkillPaths(changedFiles, cwd) {
   const skillFiles = changedFiles.filter((f) => f.endsWith("SKILL.md"));
   const result8 = [];
   for (const rel2 of skillFiles) {
-    const abs = path82.resolve(cwd, rel2);
+    const abs = path84.resolve(cwd, rel2);
     if (!fs68.existsSync(abs)) continue;
     try {
       const contents = fs68.readFileSync(abs, "utf8");
@@ -52536,7 +52808,7 @@ function main4(argv = process.argv.slice(2)) {
     );
     process.exit(2);
   }
-  const pluginRepo = args.pluginRepo ?? path82.join(workspaceRoot2, "plugin");
+  const pluginRepo = args.pluginRepo ?? path84.join(workspaceRoot2, "plugin");
   const rootRepo = args.rootRepo ?? workspaceRoot2;
   const effectiveRootRange = args.rootRange ?? args.pluginRange;
   const pluginRepoExists = fs68.existsSync(pluginRepo) && fs68.statSync(pluginRepo).isDirectory();
@@ -52581,11 +52853,11 @@ function main4(argv = process.argv.slice(2)) {
     );
   }
 }
-var fs68, path82, import_child_process4;
+var fs68, path84, import_child_process4;
 var init_check_doc_sync = __esm({
   "src/domains/distribution/check-doc-sync.ts"() {
     fs68 = __toESM(require("fs"));
-    path82 = __toESM(require("path"));
+    path84 = __toESM(require("path"));
     import_child_process4 = require("child_process");
     init_state();
     if (typeof module !== "undefined" && require.main === module && /^check-doc-sync\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
@@ -52596,7 +52868,7 @@ var init_check_doc_sync = __esm({
 
 // src/domains/distribution/wiki-lint-checks.ts
 function readLabelTaxonomy(root) {
-  const p = path83.join(durableGuildDir(root), "project.yaml");
+  const p = path85.join(durableGuildDir(root), "project.yaml");
   if (!fs69.existsSync(p)) return null;
   let parsed;
   try {
@@ -52653,24 +52925,24 @@ function parseArgs10(argv) {
   let root = process.cwd();
   let json = false;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--root" && argv[i + 1]) root = path83.resolve(argv[++i]);
+    if (argv[i] === "--root" && argv[i + 1]) root = path85.resolve(argv[++i]);
     else if (argv[i] === "--json") json = true;
   }
   return { root, json };
 }
 function lintWiki(root) {
-  const wiki = path83.join(durableGuildDir(root), "wiki");
+  const wiki = path85.join(durableGuildDir(root), "wiki");
   const findings = [];
   const taxonomy = readLabelTaxonomy(root);
   if (fs69.existsSync(wiki)) {
     const walk = (dir) => fs69.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
-      const p = path83.join(dir, e.name);
+      const p = path85.join(dir, e.name);
       return e.isDirectory() ? walk(p) : e.name.endsWith(".md") ? [p] : [];
     });
     for (const f of walk(wiki)) {
-      const rel2 = path83.relative(root, f);
-      const relInWiki = path83.relative(wiki, f);
-      const base = path83.basename(f).toLowerCase();
+      const rel2 = path85.relative(root, f);
+      const relInWiki = path85.relative(wiki, f);
+      const base = path85.basename(f).toLowerCase();
       if (base.startsWith("lint-")) continue;
       const { fmLines } = splitFrontmatter2(fs69.readFileSync(f, "utf8"));
       const frontmatterLines = fmLines ?? [];
@@ -52698,7 +52970,7 @@ function lintWiki(root) {
       }
     }
   }
-  const kgPath = path83.join(durableGuildDir(root), "indexes", "knowledge-graph.json");
+  const kgPath = path85.join(durableGuildDir(root), "indexes", "knowledge-graph.json");
   if (fs69.existsSync(kgPath)) {
     try {
       const kg = JSON.parse(fs69.readFileSync(kgPath, "utf8"));
@@ -52731,11 +53003,11 @@ function main5(argv = process.argv.slice(2)) {
   }
   process.exit(findings.length ? 2 : 0);
 }
-var fs69, path83, yaml4, DEFAULT_CONCERN_ENUM;
+var fs69, path85, yaml4, DEFAULT_CONCERN_ENUM;
 var init_wiki_lint_checks = __esm({
   "src/domains/distribution/wiki-lint-checks.ts"() {
     fs69 = __toESM(require("fs"));
-    path83 = __toESM(require("path"));
+    path85 = __toESM(require("path"));
     init_state();
     init_knowledge();
     init_kernel();
@@ -52830,7 +53102,7 @@ __export(guild_run_exports, {
 });
 module.exports = __toCommonJS(guild_run_exports);
 var fs71 = __toESM(require("node:fs"));
-var path86 = __toESM(require("node:path"));
+var path88 = __toESM(require("node:path"));
 var import_node_crypto4 = require("node:crypto");
 var import_node_child_process3 = require("node:child_process");
 
@@ -54285,7 +54557,7 @@ function createAppHostAdapter(hostId, entry = HOST_REGISTRY_ROWS[hostId]) {
 }
 
 // scripts/lib/host/tmux-backend.ts
-var path84 = __toESM(require("node:path"));
+var path86 = __toESM(require("node:path"));
 init_config2();
 
 // scripts/lib/core/contracts/team-backend.ts
@@ -54347,7 +54619,7 @@ function paneCommand(prompt, runId, capabilityScope, taskId, specialist, debug =
     throw new Error("--plugin-dir activation requires the paired child GUILD_PLUGIN_ROOT");
   }
   if (pluginRoot !== void 0) {
-    if (!path84.isAbsolute(pluginRoot) || pluginDirIndexes.length !== 1 || launchArgs[pluginDirIndexes[0] + 1] !== pluginRoot) {
+    if (!path86.isAbsolute(pluginRoot) || pluginDirIndexes.length !== 1 || launchArgs[pluginDirIndexes[0] + 1] !== pluginRoot) {
       throw new Error("child GUILD_PLUGIN_ROOT must exactly match one absolute --plugin-dir argument");
     }
   }
@@ -56157,8 +56429,8 @@ var OPENAI_API_MODELS_URL = "https://api.openai.com/v1/models";
 function isRecord6(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
-function openAiFamilyFor(id2) {
-  if (id2.startsWith("gpt-")) return "gpt";
+function openAiFamilyFor(id3) {
+  if (id3.startsWith("gpt-")) return "gpt";
   return "unknown";
 }
 function parseOpenAiModelsResponse(raw) {
@@ -56395,24 +56667,24 @@ var CAPABILITY_READERS = {
   "host.structured_output.native_json": (entry) => entry.capabilities.structured_output.native_json
 };
 var UNKNOWN_HOST_VERSION = "unknown";
-function canonicalJson2(value) {
+function canonicalJson3(value) {
   if (value === null) return "null";
   const kind = typeof value;
   if (kind === "number") return Number.isFinite(value) ? JSON.stringify(value) : "null";
   if (kind === "boolean" || kind === "string") return JSON.stringify(value);
   if (kind === "undefined" || kind === "function" || kind === "symbol") return "null";
-  if (Array.isArray(value)) return `[${value.map((item) => canonicalJson2(item)).join(",")}]`;
+  if (Array.isArray(value)) return `[${value.map((item) => canonicalJson3(item)).join(",")}]`;
   const record = value;
   const parts = [];
   for (const key of Object.keys(record).sort()) {
     if (record[key] === void 0) continue;
-    parts.push(`${JSON.stringify(key)}:${canonicalJson2(record[key])}`);
+    parts.push(`${JSON.stringify(key)}:${canonicalJson3(record[key])}`);
   }
   return `{${parts.join(",")}}`;
 }
 function snapshotHash(hostId, hostVersion, facts) {
   const digest = (0, import_node_crypto3.createHash)("sha256").update(
-    canonicalJson2({
+    canonicalJson3({
       schema_version: HOST_CAPABILITY_SNAPSHOT_SCHEMA,
       host_id: hostId,
       host_version: hostVersion,
@@ -56470,7 +56742,7 @@ function createHostCapabilitySnapshotStore() {
       if (!hostId || !entry) return unsupportedResult(request);
       const hostVersion = request.hostVersion ?? UNKNOWN_HOST_VERSION;
       const observation = request.authentication ?? "not_observed";
-      const inputHash = canonicalJson2({ host_id: hostId, host_version: hostVersion, authentication: observation });
+      const inputHash = canonicalJson3({ host_id: hostId, host_version: hostVersion, authentication: observation });
       const key = keyFor(request.runId, hostId);
       const existing = minted.get(key);
       if (existing !== void 0) {
@@ -57857,7 +58129,7 @@ init_state();
 
 // scripts/lib/state/ensure-storage-layout.ts
 var fs70 = __toESM(require("node:fs"));
-var path85 = __toESM(require("node:path"));
+var path87 = __toESM(require("node:path"));
 
 // scripts/lib/guild-root.ts
 init_guild_root();
@@ -57865,12 +58137,12 @@ init_guild_root();
 // scripts/lib/state/ensure-storage-layout.ts
 var CURRENT_LAYOUT_VERSION = 2;
 function markerPath(root) {
-  return path85.join(root, ".guild", "storage-layout.json");
+  return path87.join(root, ".guild", "storage-layout.json");
 }
 function detect2(cwd = process.cwd()) {
   const root = resolveGuildRoot(cwd);
   const marker = markerPath(root);
-  if (!fs70.existsSync(path85.join(root, ".guild"))) {
+  if (!fs70.existsSync(path87.join(root, ".guild"))) {
     return { state: "absent", version: null, root, marker };
   }
   let version = null;
@@ -57888,9 +58160,9 @@ var upgradeChunk = null;
 function upgradeChain() {
   if (upgradeChunk === null) {
     const candidates = [
-      path85.join(__dirname, "upgrade-chain.js"),
-      path85.join(__dirname, "lib", "state", "upgrade-chain"),
-      path85.join(__dirname, "upgrade-chain")
+      path87.join(__dirname, "upgrade-chain.js"),
+      path87.join(__dirname, "lib", "state", "upgrade-chain"),
+      path87.join(__dirname, "upgrade-chain")
     ];
     const spec = candidates.find((c) => fs70.existsSync(c) || fs70.existsSync(`${c}.ts`)) ?? candidates[2];
     upgradeChunk = require(spec);
@@ -58027,7 +58299,7 @@ function parseArgs11(argv) {
     const a = argv[i];
     if (a === "--host" && next(i) !== void 0) host = argv[++i];
     else if (a === "--mode" && next(i) !== void 0) mode = argv[++i];
-    else if (a === "--cwd" && next(i) !== void 0) cwd = path86.resolve(argv[++i]);
+    else if (a === "--cwd" && next(i) !== void 0) cwd = path88.resolve(argv[++i]);
     else if (a === "--writable" && next(i) !== void 0) writableRoots.push(...argv[++i].split(":"));
     else if (a === "--bootstrap-file" && next(i) !== void 0) bootstrap = fs71.readFileSync(argv[++i], "utf8");
     else if (a === "--prompt" && next(i) !== void 0) prompt = argv[++i];
@@ -58035,7 +58307,7 @@ function parseArgs11(argv) {
     else if (a === "--contract" && next(i) !== void 0) contract = argv[++i];
     else if (a === "--max-repair" && next(i) !== void 0) maxRepair = Number(argv[++i]);
     else if (a === "--resume" && next(i) !== void 0) resume = argv[++i];
-    else if (a === "--record" && next(i) !== void 0) record = path86.resolve(argv[++i]);
+    else if (a === "--record" && next(i) !== void 0) record = path88.resolve(argv[++i]);
     else if (a === "--model" && next(i) !== void 0) modelParams2.model = argv[++i];
     else if (a === "--effort" && next(i) !== void 0) modelParams2.effort = argv[++i];
     else if (a === "--reasoning" && next(i) !== void 0) modelParams2.reasoning = argv[++i];
@@ -58085,7 +58357,7 @@ function repairRoundPrompt(originalPrompt, repairPrompt) {
   ].join("\n");
 }
 function guildRunId(parsed) {
-  return parsed.record ? path86.basename(parsed.record, path86.extname(parsed.record)) : "guild-run-wrapper";
+  return parsed.record ? path88.basename(parsed.record, path88.extname(parsed.record)) : "guild-run-wrapper";
 }
 function bindGuildRunHostAdapter(parsed, provider = createHostAdapter2, snapshots) {
   return bindHostRuntimeAdapter({
@@ -58307,7 +58579,7 @@ function main6() {
   }
   const backups = [];
   for (const f of plan.bootstrap.files) {
-    const abs = path86.isAbsolute(f.path) ? f.path : path86.join(plan.cwd, f.path);
+    const abs = path88.isAbsolute(f.path) ? f.path : path88.join(plan.cwd, f.path);
     const wrote = Buffer.from(f.content, "utf8");
     let existed = false;
     let prior = null;
@@ -58326,7 +58598,7 @@ function main6() {
       existed = false;
     }
     try {
-      fs71.mkdirSync(path86.dirname(abs), { recursive: true });
+      fs71.mkdirSync(path88.dirname(abs), { recursive: true });
       fs71.writeFileSync(abs, wrote);
       backups.push({ abs, existed, prior, wrote });
     } catch (err) {
@@ -58409,7 +58681,7 @@ function main6() {
   };
   if (parsed.record) {
     try {
-      fs71.mkdirSync(path86.dirname(parsed.record), { recursive: true });
+      fs71.mkdirSync(path88.dirname(parsed.record), { recursive: true });
       fs71.writeFileSync(parsed.record, JSON.stringify(record, null, 2) + "\n");
     } catch (err) {
       process.stderr.write(`guild-run: cannot write record ${parsed.record}: ${String(err)}

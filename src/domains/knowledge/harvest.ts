@@ -69,6 +69,7 @@ import {
 import { refreshWikiIndexPaths } from "./wiki-index";
 import { recordDecisionPromotion, recordDecisionRevert } from "./decision-catalog";
 import { checkContained, isRefused, isWithin } from "../kernel";
+import { propagateDecisions, publishDecisionCandidates, recordAcceptedDecision, type EntityRef } from "./decision-propagation";
 
 export const DECISION_SCHEMA = "guild.decision.v1" as const;
 
@@ -263,6 +264,8 @@ export interface HarvestInput {
   /** Ids pinned by a working set / lane bundle / assignment / spec / packet. */
   pinned_decision_ids?: readonly string[];
   glossary_term?: string;
+  /** K04: the staged candidate this op promotes (`wiki-promote`), bound into the accepted event. */
+  from_candidate?: { path: string; sha256: `sha256:${string}` };
   /** Project playbook span to replace in the same op. */
   playbook?: { path: string; span: string; replacement: string };
   /** True when the wiki has uncommitted changes. T0 knows; this module does not shell out. */
@@ -294,6 +297,10 @@ export interface HarvestResult {
   replan_queued: boolean;
   next_need: NextNeed;
   stale_decision_ids: string[];
+  /** K04: pinned plans the accepted supersession made `replan_required` (never rewritten). */
+  replan_required?: EntityRef[];
+  /** K04: the candidate staged but the owner's candidate manifest did not update. */
+  candidate_manifest_error?: string;
   /**
    * True when the op refused because a target it was told to rewrite is not in
    * the shape the caller described — a named playbook span whose heading is not
@@ -585,7 +592,9 @@ export function harvestDecision(input: HarvestInput): HarvestResult {
   // its page is a journal that outlived its compact history: nothing here can say
   // what those bytes are, so nothing here may report a promotion. The operator
   // decides (R54 / KTD39).
-  if (existing && (existing.status === "written" || existing.status === "indexed")) {
+  // `replan_queued` re-enters too: the replan signal is rebuilt from the durable
+  // accepted event and pins, never by repeating the write (K04).
+  if (existing && (existing.status === "written" || existing.status === "indexed" || existing.status === "replan_queued")) {
     const pageEntry = readInverse(input.run_id, op.op_id, storeOpts)?.files.find(
       (f) => f.path === wikiAbs,
     );
@@ -824,6 +833,10 @@ function stageDecisionCandidate(
     );
   }
   delete op.wiki_path;
+  // K04: list it by reference in the owner's candidate manifest, the baseline that
+  // makes a later disappearance visible, BEFORE the op turns terminal. Rebuilt from
+  // the directory on every call, so a later staging also lists an orphan.
+  const manifest = publishDecisionCandidates({ guildDir: scope.definitions(), autopromote: false, now });
   op.candidate_path = candidateAbs;
   op.status = "candidate";
   upsertOp(input.run_id, op, storeOpts);
@@ -836,6 +849,7 @@ function stageDecisionCandidate(
     replan_queued: false,
     next_need: "operator",
     stale_decision_ids: [],
+    ...(manifest.status === "refused" ? { candidate_manifest_error: `${manifest.reason}: ${manifest.detail}` } : {}),
   };
 }
 
@@ -916,12 +930,40 @@ function finishHarvest(
     }
   }
 
+  // ── accepted-decision event, then dependent propagation (K04) ─────────────
+  // Idempotent, so a resumed op re-entering here records nothing twice. A ledger
+  // that cannot take the event leaves the op resumable: the page is canonical but
+  // not yet authority, and reporting it promoted would skip the replan.
+  const guildDir = (storage.project ?? storage.workspace)!.definitions();
+  const superseded = [...new Set([...(input.replaces ? [input.replaces] : []), ...(op.superseded_ids ?? [])])];
+  const accepted = recordAcceptedDecision({ guildDir, pagePath: wikiAbs, supersededIds: superseded, now, opId: op.op_id, ...(input.from_candidate ? { fromCandidate: { path: input.from_candidate.path, revision: input.from_candidate.sha256 } } : {}) });
+  if (accepted.status === "refused") return blockResume(input, op, "decision-ledger", `${accepted.reason}: ${accepted.detail}`);
+  const propagation = propagateDecisions({ guildDir, now });
+  if (propagation.status === "refused") return blockResume(input, op, "decision-propagation", `${propagation.reason}: ${propagation.detail}`);
+  // Affected ids come from the durable event (page `replaces` included, so a resume
+  // that omits it still finds them) plus this id itself: a revision under the same
+  // id invalidates its pins as much as a supersession does.
+  const affected = new Set([
+    accepted.event.decision.id,
+    ...accepted.event.supersedes.map((e) => e.id),
+    ...accepted.event.supersedes_unrecorded,
+    ...superseded,
+  ]);
+  const dependents = propagation.report.dependents.filter(
+    (d) => d.dependent_kind === "plan" && d.state === "replan_required" && d.stale_decisions.some((s) => affected.has(s.pinned.id)),
+  );
+
   // ── pin hit → replan, without rewriting the spec (KTD53 / R65) ────────────
-  const pinned = new Set(input.pinned_decision_ids ?? []);
-  const stale = (op.superseded_ids ?? []).filter((id) => pinned.has(id));
+  const pinned = new Set([
+    ...(input.pinned_decision_ids ?? []),
+    ...(op.replan_decision_ids ?? []),
+    ...dependents.flatMap((d) => d.stale_decisions.map((s) => s.pinned.id)),
+  ]);
+  const stale = [...affected].filter((id) => pinned.has(id)).sort();
   const replan = stale.length > 0;
   if (replan) {
     op.pinned_in_flight = true;
+    op.replan_decision_ids = stale;
     op.status = "replan_queued";
     upsertOp(input.run_id, op, storeOpts);
     emitHarvestEvent(input.runDir, input.run_id, op);
@@ -940,6 +982,7 @@ function finishHarvest(
     replan_queued: replan,
     next_need: input.wiki_dirty === true ? "commit" : null,
     stale_decision_ids: stale,
+    replan_required: dependents.map((d) => d.dependent),
   };
 }
 

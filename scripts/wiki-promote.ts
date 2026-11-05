@@ -17,6 +17,7 @@
  * page and its inverse; a fresh op would journal the half-promoted page as "before".
  */
 
+import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -125,7 +126,8 @@ export function runWikiPromoteCli(argv: string[] = process.argv.slice(2)): numbe
   }
 
   const fileSlug = path.basename(candidatePath, ".md").split(".")[0]!;
-  const parsed = parseCandidate(fs.readFileSync(candidatePath, "utf8"), fileSlug);
+  const candidateBytes = fs.readFileSync(candidatePath);
+  const parsed = parseCandidate(candidateBytes.toString("utf8"), fileSlug);
   const runId = args.runId ?? `run-${stamp()}-promote-${parsed.slug}`;
   const runDir = scope.runRecord(runId);
   fs.mkdirSync(runDir, { recursive: true });
@@ -143,6 +145,8 @@ export function runWikiPromoteCli(argv: string[] = process.argv.slice(2)): numbe
     ...(parsed.replaces ? { replaces: parsed.replaces } : {}),
     // An explicit operator promotion: the candidate already passed staging.
     autopromote: true,
+    // K04: the accepted event names this exact candidate, so its later removal is explained.
+    from_candidate: { path: candidatePath, sha256: `sha256:${createHash("sha256").update(candidateBytes).digest("hex")}` },
     ...(args.opId ? { op_id: args.opId } : {}),
   });
   process.stdout.write(

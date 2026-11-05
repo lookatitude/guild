@@ -5,6 +5,7 @@ import { StackError, stackHash, stackId, stackContained, createGuildStorage, Sta
 import { canonicalizeRealPath } from "../kernel";
 import { createRunLifecycle, createRealEnv, assertCanonicalRunId } from "./run-lifecycle";
 import { loadRunBinding } from "./run-binding";
+import { resolveManagedRunTarget, reserveManagedSegment, finalizeManagedSegmentSeal, managedExitAction, type ManagedSegmentIntegration } from "./managed-segment";
 
 export interface ManagedAttemptInput {
   source_id: string;
@@ -45,6 +46,8 @@ export interface ManagedLaunchSpec {
   max_usd: number; strict_usd_qualified: boolean;
   operation?:"run.start"|"run.rerun"|"run.resume";profile?:string;
   budget_mode?: "strict"|"native_estimated_spend_threshold";native_threshold_qualified?:boolean;policy_sha256?:string;native_session_id?:string;native_cost_baseline_usd?:number;leave_resumable?:boolean;
+  /** Logical v2 runs only: the execution segment this launch supervises. */
+  execution_id?:string;
 }
 export interface ManagedOwnedProcess {
   identity: Record<string,unknown>;
@@ -124,17 +127,19 @@ function canonicalAttemptDir(sourceRoot:string,identity:ManagedAttemptIdentity):
   const rel='runs/'+identity.run_id+'/attempts/'+stackId(identity.attempt_id);
   const out=stackContained(base,rel,true);fs.mkdirSync(out,{recursive:true,mode:0o700});return out;
 }
-export async function runManagedWorker(input:{runtimeDir:string;sourceRoot:string;identity:ManagedAttemptIdentity;launch:ManagedLaunchSpec;process:ManagedProcessPort;control:ManagedControlPort;onAdmitted?:(claim:ManagedAttemptClaim)=>void;graceMs?:number}):Promise<ManagedRunOutcome> {
+export async function runManagedWorker(input:{runtimeDir:string;sourceRoot:string;identity:ManagedAttemptIdentity;launch:ManagedLaunchSpec;process:ManagedProcessPort;control:ManagedControlPort;onAdmitted?:(claim:ManagedAttemptClaim)=>void;graceMs?:number;integration?:ManagedSegmentIntegration}):Promise<ManagedRunOutcome> {
   const {runtimeDir,sourceRoot,identity,launch}=input;
   let claim=readManagedAttempt(runtimeDir,identity.attempt_id);
   if(canonical(claim.identity)!==canonical(identity)||managedLaunchHash(launch)!==identity.launch_hash||launch.max_duration_ms!==identity.max_duration_ms)throw new StackError('invalid_intent','Managed launch differs from claim');
   if(launch.classification!=='local_process_test')assertManagedBudgetAdmission({max_usd:launch.max_usd,mode:launch.budget_mode??'strict',qualified:launch.budget_mode==='native_estimated_spend_threshold'?launch.native_threshold_qualified===true:launch.strict_usd_qualified});
   if(new StackScope(sourceRoot).discover().root.source_id!==identity.source_id)throw new StackError('source_mismatch','Managed attempt belongs to another source',403);
   if(claim.state!=='claimed'||claim.admitted_at!==null)throw new StackError('already_admitted','Managed attempt cannot launch twice',409);
+  const target=resolveManagedRunTarget({root:sourceRoot,run_id:identity.run_id,source_id:identity.source_id,host_id:launch.host_id,execution_id:launch.execution_id,attempt_id:identity.attempt_id},input.integration);
+  if(target.kind==='v2')reserveManagedSegment(sourceRoot,identity,target);
   const owner=claimPath(runtimeDir,identity.attempt_id)+'.worker';
   try{const fd=fs.openSync(owner,'wx',0o600);fs.writeFileSync(fd,identity.nonce_hash);fs.fsyncSync(fd);fs.closeSync(fd);syncDirectory(path.dirname(owner));}catch(error){if((error as NodeJS.ErrnoException).code==='EEXIST')throw new StackError('already_admitted','Managed worker claim consumed',409);throw error;}
   const binding=loadRunBinding({root:sourceRoot,run_id:identity.run_id});
-  if(!binding||binding.state!=='open')throw new StackError('binding_refused','Managed source run has no open lifecycle binding',403);
+  if(target.kind==='v1'&&(!binding||binding.state!=='open'))throw new StackError('binding_refused','Managed source run has no open lifecycle binding',403);
   const dir=canonicalAttemptDir(sourceRoot,identity);let sequence=0;
   const runDir=path.dirname(path.dirname(dir));
   const pointer=(state:string)=>publish(path.join(runDir,'attempt.json'),{schema_version:'guild.stack.managed_run_attempt.v1',source_id:identity.source_id,run_id:identity.run_id,attempt_id:identity.attempt_id,state,intent_ref:'attempts/'+identity.attempt_id+'/intent.json',events_ref:'attempts/'+identity.attempt_id+'/events.jsonl',outcome_ref:claim.outcome?'attempts/'+identity.attempt_id+'/outcome.json':null});
@@ -160,10 +165,29 @@ export async function runManagedWorker(input:{runtimeDir:string;sourceRoot:strin
     const state=gone?(requested||'exited'):'recovery_needed';
     const outcome:ManagedRunOutcome={schema_version:'guild.stack.managed_run_outcome.v1',source_id:identity.source_id,run_id:identity.run_id,attempt_id:identity.attempt_id,state,exit_code:exit.exit_code,signal:exit.signal,admitted_at:claim.admitted_at!,ended_at:new Date().toISOString(),deadline_at:claim.deadline_at!,classification:launch.classification,output:child.outputSummary?.()??{bytes:0,hashed_bytes:0,retained_bytes:0,prefix_sha256:stackHash('')},usage:child.observation?.()??{state:'unknown',cost_usd:null,basis:'no trusted provider billing observation'}};
     publish(path.join(dir,'outcome.json'),outcome,true);claim={...claim,state,outcome};updateClaim(runtimeDir,claim);event(state,{exit_code:exit.exit_code,signal:exit.signal});pointer(state);if(gone)hostProof('exited');
-    if(gone){const lifecycle=createRunLifecycle(createRealEnv(sourceRoot,()=>{throw new StackError('host_resolution_refused','Managed run close never resolves a host',500);}));lifecycle.closeRun(identity.run_id,{binding_ref:binding.binding_ref,status:state==='exited'&&exit.exit_code===0&&!launch.leave_resumable?'closed':'resumable'});}
+    const exitAction=managedExitAction(target.kind,{gone,state,exit_code:exit.exit_code,leave_resumable:launch.leave_resumable===true});
+    if(exitAction.action==='close_run'){const lifecycle=createRunLifecycle(createRealEnv(sourceRoot,()=>{throw new StackError('host_resolution_refused','Managed run close never resolves a host',500);}));lifecycle.closeRun(identity.run_id,{binding_ref:binding!.binding_ref,status:exitAction.status});}
+    else if(exitAction.action==='seal_segment'&&target.kind==='v2')finalizeManagedSegmentSeal(sourceRoot,identity,target.execution_id,outcome);
     return outcome;
   }catch(error){claim={...claim,state:'recovery_needed'};updateClaim(runtimeDir,claim);event('recovery_needed');throw error;}
   finally{if(deadline)clearTimeout(deadline);if(killTimer)clearTimeout(killTimer);await closeControl();}
+}
+
+/** Recovery: re-derive a v2 segment seal from the persisted terminal outcome (crash between outcome and seal). */
+export function recoverManagedSegmentSeal(runtimeDir:string,sourceRoot:string,identity:ManagedAttemptIdentity,executionId:string):boolean {
+  const claim=readManagedAttempt(runtimeDir,identity.attempt_id);
+  if(canonical(claim.identity)!==canonical(identity))throw new StackError('invalid_state','Managed source/attempt mismatch');
+  let outcome=claim.outcome;
+  if(!outcome){
+    // Crash after outcome.json was published but before the private claim recorded it.
+    const file=stackContained(createGuildStorage(sourceRoot).root.durable,'runs/'+identity.run_id+'/attempts/'+stackId(identity.attempt_id)+'/outcome.json',true);
+    if(!fs.existsSync(file))return false;
+    if(fs.lstatSync(file).isSymbolicLink()||fs.statSync(file).size>1048576)throw new StackError('invalid_state','Managed outcome refused');
+    const value=JSON.parse(fs.readFileSync(file,'utf8'));
+    if(value?.schema_version!=='guild.stack.managed_run_outcome.v1'||value.source_id!==identity.source_id||value.run_id!==identity.run_id||value.attempt_id!==identity.attempt_id||!['exited','cancelled','timed_out','recovery_needed'].includes(value.state)||typeof value.ended_at!=='string'||!Number.isFinite(Date.parse(value.ended_at)))throw new StackError('invalid_state','Managed outcome identity invalid');
+    outcome=value as ManagedRunOutcome;
+  }
+  return finalizeManagedSegmentSeal(sourceRoot,identity,executionId,outcome);
 }
 
 export interface ManagedWorkerPackage { node_binary:string; node_sha256:string; entry:string; entry_sha256:string; }
