@@ -102,6 +102,7 @@ function main(): void {
   ensureStorageLayout(cwd, { detectOnly: true });
   const gp = guildPaths(cwd);
   const repoRoot = gp.repoRoot;
+  const sourceRoot = gp.sourceRoot; // K01: read lane bytes, write under the owner
   const incremental = hasFlag(argv, "incremental");
   const started = Date.now();
 
@@ -123,7 +124,7 @@ function main(): void {
   // deleted file's map entry became a phantom file node. Both modes now share
   // walkRepo's inventory/ignore semantics; the scan command and its map remain
   // independently scoped (the map is no longer consulted here).
-  const relFiles = walkRepo(repoRoot).files;
+  const relFiles = walkRepo(sourceRoot).files;
   const readFile = (abs: string) => fs.readFileSync(abs, "utf8");
 
   const existing = readJson<ExistingGraph>(outPath);
@@ -160,7 +161,7 @@ function main(): void {
     prior = null;
   }
   if (incremental && prior && prior.files && Object.keys(prior.files).length > 0) {
-    const r = refreshStructuralIncremental(repoRoot, relFiles, readFile, prior);
+    const r = refreshStructuralIncremental(sourceRoot, relFiles, readFile, prior);
     structural = r.structural;
     bundles = r.bundles;
     stats = r.stats;
@@ -171,8 +172,8 @@ function main(): void {
         `${path.relative(repoRoot, cachePath)} → full rebuild (seeding cache)\n`,
       );
     }
-    bundles = buildBundles(repoRoot, relFiles, readFile);
-    structural = assembleStructuralGraph(repoRoot, bundles);
+    bundles = buildBundles(sourceRoot, relFiles, readFile);
+    structural = assembleStructuralGraph(sourceRoot, bundles);
   }
 
   // I15 (legacy G3-F4): EVERY mode strips the prior structural tier so the
@@ -265,7 +266,7 @@ function main(): void {
   const sidecar = {
     schema: "guild.structural_extraction_meta.v1",
     generated_at: new Date(started).toISOString(),
-    generated_from_commit: headSha(repoRoot),
+    generated_from_commit: headSha(sourceRoot),
     wall_clock_ms: elapsedMs,
     file_count: relFiles.length,
     structural_node_count: subset.nodes.length,

@@ -3318,9 +3318,9 @@ function isWithin(child, parent) {
 }
 function checkContained(root, target, options = {}) {
   const policy = options.policy ?? "resolve";
-  let realRoot2;
+  let realRoot3;
   try {
-    realRoot2 = fs2.realpathSync(path3.resolve(root));
+    realRoot3 = fs2.realpathSync(path3.resolve(root));
   } catch {
     return refuse("root-unresolvable", `project root ${root} does not resolve`);
   }
@@ -3330,7 +3330,7 @@ function checkContained(root, target, options = {}) {
       `refusing a path spelled with a ".." segment (${target}) \u2014 parent traversal cannot be resolved before symlinks`
     );
   }
-  const abs = path3.isAbsolute(target) ? path3.resolve(target) : path3.resolve(realRoot2, target);
+  const abs = path3.isAbsolute(target) ? path3.resolve(target) : path3.resolve(realRoot3, target);
   let probe = abs;
   let probeStat = null;
   for (; ; ) {
@@ -3358,7 +3358,7 @@ function checkContained(root, target, options = {}) {
       `${probe} is a symlink that does not resolve; refusing to write through it`
     );
   }
-  const rel2 = path3.relative(realRoot2, realProbe);
+  const rel2 = path3.relative(realRoot3, realProbe);
   if (rel2 !== "" && escapes(rel2)) {
     return refuse("outside-root", `${abs} resolves outside the project root (${realProbe})`);
   }
@@ -3376,7 +3376,7 @@ function checkContained(root, target, options = {}) {
       } catch {
         return refuse("dangling-symlink", `${walk} is a symlink that does not resolve`);
       }
-      const segRel = path3.relative(realRoot2, segReal);
+      const segRel = path3.relative(realRoot3, segReal);
       const strictlyInside = segRel !== "" && !escapes(segRel);
       if (strictlyInside) {
         return refuse("physical-symlink", `refusing \u2014 symlinked path segment: ${walk}`);
@@ -3385,7 +3385,7 @@ function checkContained(root, target, options = {}) {
   }
   const tail = path3.relative(probe, abs);
   const realPath = tail === "" ? realProbe : path3.join(realProbe, tail);
-  return Object.freeze({ contained: true, realRoot: realRoot2, realPath });
+  return Object.freeze({ contained: true, realRoot: realRoot3, realPath });
 }
 function prepareContainedWrite(root, target, options = {}) {
   if (hasParentSegment(target)) {
@@ -4652,6 +4652,88 @@ var init_guild_root = __esm({
   }
 });
 
+// src/domains/knowledge/source-basis.ts
+function realRoot(root) {
+  try {
+    return fs9.realpathSync(root);
+  } catch {
+    return path11.resolve(root);
+  }
+}
+function git(cwd, args) {
+  try {
+    return (0, import_node_child_process.execFileSync)("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  } catch {
+    return null;
+  }
+}
+function resolveSourceWorktreeRoot(cwd) {
+  const top = git(cwd, ["rev-parse", "--show-toplevel"])?.trim();
+  return realRoot(top ? top : cwd);
+}
+function readWorktreeHead(root) {
+  try {
+    const dotGit = path11.join(root, ".git");
+    let gitDir = dotGit;
+    if (fs9.statSync(dotGit).isFile()) {
+      const m = /^gitdir:\s*(.+)\s*$/m.exec(fs9.readFileSync(dotGit, "utf8"));
+      if (!m) return "";
+      gitDir = path11.resolve(root, m[1].trim());
+    }
+    let commonDir = gitDir;
+    const commonFile = path11.join(gitDir, "commondir");
+    if (fs9.existsSync(commonFile)) commonDir = path11.resolve(gitDir, fs9.readFileSync(commonFile, "utf8").trim());
+    let ref = fs9.readFileSync(path11.join(gitDir, "HEAD"), "utf8").trim();
+    for (let hop = 0; hop < 5 && ref.startsWith("ref:"); hop++) {
+      const name = ref.slice(4).trim();
+      const loose = [path11.join(gitDir, name), path11.join(commonDir, name)].find((p) => fs9.existsSync(p));
+      if (loose) {
+        ref = fs9.readFileSync(loose, "utf8").trim();
+        continue;
+      }
+      const packed = path11.join(commonDir, "packed-refs");
+      if (!fs9.existsSync(packed)) return "";
+      const line = fs9.readFileSync(packed, "utf8").split("\n").find((l) => !l.startsWith("#") && !l.startsWith("^") && l.split(" ")[1] === name);
+      return line ? line.split(" ")[0] : "";
+    }
+    return /^[0-9a-f]{40,64}$/.test(ref) ? ref : "";
+  } catch {
+    return "";
+  }
+}
+function readWorktreeEntry(root, rel2) {
+  if (path11.isAbsolute(rel2) || rel2.includes("\\")) return { kind: "refused" };
+  const segs = rel2.split("/");
+  if (segs.some((seg) => seg === "" || seg === "." || seg === "..")) return { kind: "refused" };
+  let cur = root;
+  for (let i = 0; i < segs.length; i++) {
+    cur = path11.join(cur, segs[i]);
+    let st;
+    try {
+      st = fs9.lstatSync(cur);
+    } catch {
+      return { kind: "absent" };
+    }
+    const last = i === segs.length - 1;
+    if (st.isSymbolicLink()) return last ? { kind: "symlink", target: fs9.readlinkSync(cur) } : { kind: "refused" };
+    if (!last && !st.isDirectory()) return { kind: "absent" };
+    if (last) return st.isFile() ? { kind: "file", bytes: fs9.readFileSync(cur) } : { kind: "refused" };
+  }
+  return { kind: "refused" };
+}
+function readContainedFile(root, rel2) {
+  const e = readWorktreeEntry(root, rel2);
+  return e.kind === "file" ? e.bytes : null;
+}
+var import_node_child_process, fs9, path11;
+var init_source_basis = __esm({
+  "src/domains/knowledge/source-basis.ts"() {
+    import_node_child_process = require("node:child_process");
+    fs9 = __toESM(require("node:fs"));
+    path11 = __toESM(require("node:path"));
+  }
+});
+
 // scripts/learn/cross-link.ts
 var cross_link_exports = {};
 __export(cross_link_exports, {
@@ -5652,7 +5734,7 @@ function openDatabase(dbPath) {
 }
 function resolveGuildRoot2(cwd) {
   try {
-    const raw = (0, import_node_child_process.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
+    const raw = (0, import_node_child_process2.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
       cwd,
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"]
@@ -5747,10 +5829,10 @@ function runIndexMigrateCli() {
     process.exit(1);
   }
 }
-var import_node_child_process, fs16, path18, CURRENT_SCHEMA_VERSION, MIGRATIONS;
+var import_node_child_process2, fs16, path18, CURRENT_SCHEMA_VERSION, MIGRATIONS;
 var init_index_migrate = __esm({
   "src/domains/state/index-migrate.ts"() {
-    import_node_child_process = require("node:child_process");
+    import_node_child_process2 = require("node:child_process");
     fs16 = __toESM(require("node:fs"));
     path18 = __toESM(require("node:path"));
     CURRENT_SCHEMA_VERSION = 3;
@@ -5929,7 +6011,7 @@ function openDatabase2(dbPath) {
 }
 function resolveMainRepoRoot(cwd) {
   try {
-    const raw = (0, import_node_child_process2.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
+    const raw = (0, import_node_child_process3.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
       cwd,
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"]
@@ -6045,10 +6127,10 @@ function ensureWikiFtsIndex(cwd, config) {
     return { status: "error", message: `ensureWikiFtsIndex error: ${err.message}` };
   }
 }
-var import_node_child_process2, import_node_crypto, fs17, path19, DEFAULT_INDEX_BLOCK;
+var import_node_child_process3, import_node_crypto, fs17, path19, DEFAULT_INDEX_BLOCK;
 var init_index_cache = __esm({
   "src/domains/state/index-cache.ts"() {
-    import_node_child_process2 = require("node:child_process");
+    import_node_child_process3 = require("node:child_process");
     import_node_crypto = require("node:crypto");
     fs17 = __toESM(require("node:fs"));
     path19 = __toESM(require("node:path"));
@@ -6381,14 +6463,14 @@ function resolveContainedRealDir(abs, root) {
   const st = lstatSafe(abs);
   if (!st || !st.isDirectory() || st.isSymbolicLink()) return null;
   let real;
-  let realRoot2;
+  let realRoot3;
   try {
     real = fs18.realpathSync(abs);
-    realRoot2 = fs18.realpathSync(root);
+    realRoot3 = fs18.realpathSync(root);
   } catch {
     return null;
   }
-  const rel2 = path21.relative(realRoot2, real);
+  const rel2 = path21.relative(realRoot3, real);
   if (rel2 === "" || rel2.startsWith("..") || path21.isAbsolute(rel2)) return null;
   return real;
 }
@@ -6536,10 +6618,10 @@ function createGuildStorage(cwd = process.cwd(), opts = {}) {
   return storage;
 }
 function hostCapabilityCacheDir(cwd, hostId) {
-  const storage = createGuildStorage(realRoot(cwd));
+  const storage = createGuildStorage(realRoot2(cwd));
   return hostId === void 0 ? storage.cache("hosts") : storage.cache("hosts", hostId);
 }
-function realRoot(cwd) {
+function realRoot2(cwd) {
   try {
     return fs19.realpathSync(cwd);
   } catch {
@@ -6547,7 +6629,7 @@ function realRoot(cwd) {
   }
 }
 function modelCatalogCacheHome(cwd) {
-  return createGuildStorage(realRoot(cwd)).cache("model-catalog");
+  return createGuildStorage(realRoot2(cwd)).cache("model-catalog");
 }
 var fs19, path22, POLICY_CONFIG_FILES;
 var init_storage_layout = __esm({
@@ -12278,19 +12360,6 @@ function newestMtime(dir) {
   walk(dir);
   return Math.floor(newest);
 }
-function readGitHead(root) {
-  try {
-    const headFile = path37.join(root, ".git", "HEAD");
-    const head = fs32.readFileSync(headFile, "utf8").trim();
-    if (!head.startsWith("ref:")) return head;
-    const ref = head.slice(4).trim();
-    const refFile = path37.join(root, ".git", ref);
-    if (fs32.existsSync(refFile)) return fs32.readFileSync(refFile, "utf8").trim();
-    return ref;
-  } catch {
-    return "";
-  }
-}
 function hashOpenQuestions(ids) {
   const sorted = [...ids].filter((s) => typeof s === "string").sort();
   return crypto9.createHash("sha256").update(sorted.join("\n"), "utf8").digest("hex").slice(0, 32);
@@ -12307,7 +12376,7 @@ function computeFingerprint(opts = {}) {
   const wiki = wikiDir(storage);
   return {
     wiki_mtime: wiki && fs32.existsSync(wiki) ? newestMtime(wiki) : 0,
-    git_head: readGitHead(storage.activeRoot),
+    git_head: readWorktreeHead(storage.activeRoot),
     open_questions_hash: hashOpenQuestions(opts.open_question_ids ?? [])
   };
 }
@@ -12374,6 +12443,7 @@ var init_working_set = __esm({
     fs32 = __toESM(require("node:fs"));
     path37 = __toESM(require("node:path"));
     init_state();
+    init_source_basis();
     WORKING_SET_SCHEMA = "guild.working_set.v1";
     WORKING_SET_TOKEN_CAP = 400;
   }
@@ -12490,7 +12560,7 @@ function supersededWikiPages(wikiDir2) {
     const slug = path38.basename(abs, ".md");
     bySlug.set(slug, [...bySlug.get(slug) ?? [], abs]);
   }
-  const resolve30 = (ref) => {
+  const resolve31 = (ref) => {
     let r = ref.replace(/\\/g, "/");
     if (r.startsWith("decision:")) r = r.slice("decision:".length);
     if (r.startsWith("./")) r = r.slice(2);
@@ -12514,7 +12584,7 @@ function supersededWikiPages(wikiDir2) {
       superseded.add(abs);
     }
     for (const ref of refsOf(fm["supersedes"])) {
-      const target = resolve30(ref);
+      const target = resolve31(ref);
       if (target && target !== abs) superseded.add(target);
     }
   }
@@ -19167,7 +19237,7 @@ var init_catalog_cache = __esm({
         }
       }
     };
-    defaultSleep = (ms) => new Promise((resolve30) => setTimeout(resolve30, ms));
+    defaultSleep = (ms) => new Promise((resolve31) => setTimeout(resolve31, ms));
   }
 });
 
@@ -21410,7 +21480,7 @@ function failClosedCore(inputs, reason, rulePath) {
   receipt2.resolution_core_hash = coreHash(receipt2);
   return receipt2;
 }
-function resolve23(inputs) {
+function resolve24(inputs) {
   const rulePath = [];
   const policyObj = asObject(inputs.policy);
   if (policyObj === null) {
@@ -24789,7 +24859,7 @@ __export(config_exports, {
   registryIdToCanonicalHostKind: () => registryIdToCanonicalHostKind,
   requiredAssetIdsForG5: () => requiredAssetIdsForG5,
   requiredEntriesFor: () => requiredEntriesFor,
-  resolve: () => resolve23,
+  resolve: () => resolve24,
   resolveAuthorHost: () => resolveAuthorHost,
   resolveCapability: () => resolveCapability,
   resolveEffectivePurpose: () => resolveEffectivePurpose,
@@ -26967,8 +27037,7 @@ if (require.main === module && /^wiki-index\.[cm]?[jt]s$/.test((process.argv[1] 
 }
 
 // scripts/learn/lib/ignore.ts
-var fs9 = __toESM(require("fs"));
-var path11 = __toESM(require("path"));
+init_source_basis();
 var DEFAULT_IGNORE_PATTERNS = Object.freeze([
   "node_modules/",
   ".git/",
@@ -27092,9 +27161,9 @@ function compile(patterns) {
 }
 function createIgnoreFilter(projectRoot) {
   const patterns = [...DEFAULT_IGNORE_PATTERNS];
-  const rootIgnore = path11.join(projectRoot, ".guildignore");
-  if (fs9.existsSync(rootIgnore)) {
-    patterns.push(...fs9.readFileSync(rootIgnore, "utf-8").split("\n"));
+  const rootIgnore = readContainedFile(projectRoot, ".guildignore");
+  if (rootIgnore) {
+    patterns.push(...rootIgnore.toString("utf-8").split("\n"));
   }
   const rules = compile(patterns);
   return {
@@ -27130,12 +27199,12 @@ function registeredSubGuildPaths(repoRoot) {
 
 // scripts/learn/lib/git.ts
 var import_child_process = require("child_process");
-function git(cwd, args) {
+function git2(cwd, args) {
   return (0, import_child_process.execFileSync)("git", args, { cwd, encoding: "utf-8" }).trim();
 }
 function headSha(cwd) {
   try {
-    return git(cwd, ["rev-parse", "HEAD"]);
+    return git2(cwd, ["rev-parse", "HEAD"]);
   } catch {
     return "unknown";
   }
@@ -27398,6 +27467,12 @@ init_knowledge();
 var fs56 = __toESM(require("fs"));
 var path62 = __toESM(require("path"));
 var import_child_process3 = require("child_process");
+init_source_basis();
+
+// scripts/learn/lib/tsconfig-chain.ts
+init_source_basis();
+
+// scripts/learn/lib/paths.ts
 function parseCwd(argv) {
   return parseFlag(argv, "cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
 }
@@ -27427,13 +27502,22 @@ function resolveMainRepoRoot2(cwd) {
   }
   return path62.resolve(cwd);
 }
+function sameDir(a, b) {
+  try {
+    return fs56.realpathSync(a) === fs56.realpathSync(b);
+  } catch {
+    return path62.resolve(a) === path62.resolve(b);
+  }
+}
 function guildPaths(cwd) {
   const repoRoot = resolveMainRepoRoot2(cwd);
+  const sourceRoot = resolveSourceWorktreeRoot(cwd);
   const guildDir = durableGuildDir(repoRoot);
   const indexesDir = path62.join(guildDir, "indexes");
   const runsDir = path62.join(guildDir, "runs");
   return {
     repoRoot,
+    sourceRoot: sameDir(sourceRoot, repoRoot) ? repoRoot : sourceRoot,
     guildDir,
     indexesDir,
     runsDir,
