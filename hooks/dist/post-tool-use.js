@@ -62323,44 +62323,7 @@ function bindManagedLaunchProof(proof, expected) {
   const ok = p !== null && typeof p === "object" && !Array.isArray(p) && p["schema_version"] === "guild.stack.managed_launch.v1" && p["source_id"] === expected.source_id && p["run_id"] === expected.run_id && p["operation_id"] === expected.operation_id && p["operation"] === expected.operation && p["attempt_id"] === expected.attempt_id && p["launch_hash"] === expected.launch_hash && parentOk;
   if (!ok) throw new StackError("proof_mismatch", "Launch proof does not bind this exact operation and attempt", 409);
 }
-function assertBudgetAdmissible(input) {
-  if (!Number.isFinite(input.threshold_usd) || input.threshold_usd <= 0) throw new StackError("budget_refused", "Positive spend threshold required before dispatch", 403);
-  if (!Number.isSafeInteger(input.duration_limit_ms) || input.duration_limit_ms < 1) throw new StackError("budget_refused", "Positive duration limit required before dispatch", 403);
-  if (input.mode !== "native_spend_threshold" || input.native_threshold_qualified !== true) throw new StackError("budget_unqualified", "Only a qualified native spend threshold is available; strict USD is not", 503);
-}
-function managedBudgetView(input) {
-  assertBudgetAdmissible(input);
-  const u = input.usage;
-  const known2 = u !== null && u.state === "observed_native_estimate" && u.basis === "api_equivalent_native_estimate" && typeof u.cost_usd === "number" && Number.isFinite(u.cost_usd) && u.cost_usd >= 0;
-  const estimate = known2 ? micro(u.cost_usd) : null;
-  const overshoot = estimate === null ? null : Math.max(0, micro(estimate - input.threshold_usd));
-  const state = estimate === null ? "unknown" : overshoot > 0 ? "over_threshold" : "within_threshold";
-  const elapsed = typeof input.elapsed_ms === "number" && Number.isFinite(input.elapsed_ms) && input.elapsed_ms >= 0 ? input.elapsed_ms : null;
-  const labels = [
-    `Spend threshold ${usd(input.threshold_usd)} (native estimate; a response in flight may overshoot)`,
-    estimate === null ? "Estimated spend unknown (no trusted native estimate observed)" : `Estimated spend ${usd(estimate)} (api-equivalent native estimate)` + (overshoot > 0 ? `, over threshold by ${usd(overshoot)}` : ""),
-    `Duration limit ${Math.round(input.duration_limit_ms / 1e3)}s, enforced separately by deadline`
-  ];
-  return {
-    schema_version: "guild.stack.managed_budget_view.v1",
-    mode: "native_spend_threshold",
-    threshold: { usd: input.threshold_usd, hard_ceiling: false, overshoot_possible: true },
-    spend: { cost_basis: estimate === null ? "unavailable" : "native_estimate", estimate_basis: "api_equivalent_native_estimate", estimate_usd: estimate, measured_usd: null, overshoot_usd: overshoot, state },
-    duration: { limit_ms: input.duration_limit_ms, enforcement: "independent_deadline", elapsed_ms: elapsed, exceeded: elapsed === null ? null : elapsed > input.duration_limit_ms },
-    controls: [
-      { id: "strict_usd_ceiling", available: false, reason: STRICT_UNAVAILABLE },
-      { id: "native_spend_threshold", available: true, reason: "Qualified native estimate threshold; overshoot possible" }
-    ],
-    labels
-  };
-}
-function managedV2Budget(input, evidence2) {
-  assertBudgetAdmissible(input);
-  if (evidence2.qualification?.availability !== "available") throw new StackError("budget_unqualified", "Budget qualification evidence is not available", 503);
-  if (!/^sha256:[a-f0-9]{64}$/.test(evidence2.policy_hash) || !/^sha256:[a-f0-9]{64}$/.test(evidence2.qualification.sha256)) throw new StackError("budget_refused", "Budget policy and qualification must be pinned", 403);
-  return { mode: "native_spend_threshold", threshold_usd: input.threshold_usd, duration_limit_ms: input.duration_limit_ms, overshoot_possible: true, qualification: evidence2.qualification, policy_hash: evidence2.policy_hash };
-}
-var MANAGED_SEGMENT_INTEGRATION, refusalToStack, canonical, STRICT_UNAVAILABLE, micro, usd, managedOutcomeHash;
+var MANAGED_SEGMENT_INTEGRATION, refusalToStack, canonical, managedOutcomeHash;
 var init_managed_segment = __esm({
   "src/domains/lifecycle/managed-segment.ts"() {
     init_state();
@@ -62378,9 +62341,6 @@ var init_managed_segment = __esm({
       }
     };
     canonical = (v) => v === null || typeof v !== "object" ? JSON.stringify(v) : Array.isArray(v) ? "[" + v.map(canonical).join(",") + "]" : "{" + Object.keys(v).sort().map((k) => JSON.stringify(k) + ":" + canonical(v[k])).join(",") + "}";
-    STRICT_UNAVAILABLE = "No verified measured-USD billing source for this host; strict spend ceiling is unavailable";
-    micro = (n) => Math.round(n * 1e6) / 1e6;
-    usd = (n) => "$" + n.toFixed(2);
     managedOutcomeHash = (outcome) => stackHash(canonical(outcome));
   }
 });
@@ -65803,7 +65763,6 @@ __export(lifecycle_exports, {
   LEGACY_DOCUMENT_SCHEMA_VERSION: () => LEGACY_DOCUMENT_SCHEMA_VERSION,
   LEGACY_IMPORT_BOUNDS: () => LEGACY_IMPORT_BOUNDS,
   LEGACY_INFERABLE_KINDS: () => LEGACY_INFERABLE_KINDS,
-  MANAGED_SEGMENT_INTEGRATION: () => MANAGED_SEGMENT_INTEGRATION,
   MANIFEST_REQUIRED_KEYS: () => MANIFEST_REQUIRED_KEYS,
   MAX_ARRAY_ITEMS: () => MAX_ARRAY_ITEMS,
   MAX_CANONICAL_DEPTH: () => MAX_CANONICAL_DEPTH,
@@ -65971,7 +65930,6 @@ __export(lifecycle_exports, {
   assertSafeLaneId: () => assertSafeLaneId,
   assertSafeRunId: () => assertSafeRunId,
   assertWritableBinding: () => assertWritableBinding,
-  bindManagedLaunchProof: () => bindManagedLaunchProof,
   bindWorkClass: () => bindWorkClass,
   bindWorkflowCursor: () => bindWorkflowCursor,
   blockingUnresolved: () => blockingUnresolved,
@@ -66029,7 +65987,6 @@ __export(lifecycle_exports, {
   extractDocumentHtmlBinding: () => extractDocumentHtmlBinding,
   extractNeutralImportEdges: () => extractNeutralImportEdges,
   extractNeutralImportSpecifiers: () => extractNeutralImportSpecifiers,
-  finalizeManagedSegmentSeal: () => finalizeManagedSegmentSeal,
   forcePassAssumptions: () => forcePassAssumptions,
   freezeNeutralCapabilitySnapshot: () => freezeNeutralCapabilitySnapshot,
   genSpanId: () => genSpanId,
@@ -66089,12 +66046,8 @@ __export(lifecycle_exports, {
   makeActivityRow: () => makeActivityRow,
   makeCanonicalRunId: () => makeCanonicalRunId,
   makeRoundState: () => makeRoundState,
-  managedBudgetView: () => managedBudgetView,
-  managedExitAction: () => managedExitAction,
   managedLaunchHash: () => managedLaunchHash,
   managedNonceMatches: () => managedNonceMatches,
-  managedOutcomeHash: () => managedOutcomeHash,
-  managedV2Budget: () => managedV2Budget,
   manifestPathFor: () => manifestPathFor,
   mapLegacyNeutralEventName: () => mapLegacyNeutralEventName,
   markLaneDead: () => markLaneDead,
@@ -66177,10 +66130,8 @@ __export(lifecycle_exports, {
   renderDocumentHtml: () => renderDocumentHtml,
   renderValidatedRecordHtml: () => renderValidatedRecordHtml,
   reopenRunBinding: () => reopenRunBinding,
-  reserveManagedSegment: () => reserveManagedSegment,
   resolveDocumentAuthority: () => resolveDocumentAuthority,
   resolveEffectiveSelection: () => resolveEffectiveSelection,
-  resolveManagedRunTarget: () => resolveManagedRunTarget,
   resolveRunStartDispatchBackend: () => resolveRunStartDispatchBackend,
   resolveTimeoutMs: () => resolveTimeoutMs,
   resolveTraceV2Fields: () => resolveTraceV2Fields,
@@ -66334,7 +66285,6 @@ var init_lifecycle = __esm({
     init_kernel();
     init_initiative_evidence();
     init_managed_run();
-    init_managed_segment();
     stackContractBundle = deepFreeze(stack_contracts_generated_default);
     stackP05Schemas = deepFreeze(stack_p05_schemas_default);
     stackManagedSchemas = deepFreeze(managed_run_schemas_default);

@@ -50329,7 +50329,6 @@ var init_lifecycle = __esm({
     init_kernel();
     init_initiative_evidence();
     init_managed_run();
-    init_managed_segment();
     stackContractBundle = deepFreeze2(stack_contracts_generated_default);
     stackP05Schemas = deepFreeze2(stack_p05_schemas_default);
     stackManagedSchemas = deepFreeze2(managed_run_schemas_default);
