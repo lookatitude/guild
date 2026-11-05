@@ -273,11 +273,16 @@ export {
 
 export * from "./stack-operations";
 
-export {default as stackContractBundle} from './stack-contracts.generated.json';
+import stackContractBundleJson from './stack-contracts.generated.json';
+import stackP05SchemasJson from "./stack-p05.schemas.json";
+import stackManagedSchemasJson from "./managed-run.schemas.json";
+import { deepFreeze as deepFreezeStack } from "../kernel";
+/** The generated contract bundle and schemas, deep-frozen at the public index (closed collections). */
+export const stackContractBundle = deepFreezeStack(stackContractBundleJson);
 
 export { loadInitiativeManifest, buildD8Input, checkInitiativeEvidenceRefs, type InitiativeEvidenceCheck, type LoadedManifest, type BuiltD8Input } from "./initiative-evidence";
-export { default as stackP05Schemas } from "./stack-p05.schemas.json";
+export const stackP05Schemas = deepFreezeStack(stackP05SchemasJson);
 
 export * from "./managed-run";
 
-export { default as stackManagedSchemas } from "./managed-run.schemas.json";
+export const stackManagedSchemas = deepFreezeStack(stackManagedSchemasJson);

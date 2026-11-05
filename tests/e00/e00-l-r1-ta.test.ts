@@ -52,6 +52,8 @@ function env(prefix = "guild-e00-lr1-"): Env {
   fs.writeFileSync(path.join(root, ".guild", "guild.yaml"), "schema_version: guild.root.v1\nkind: project\n");
   const bin = path.join(root, ".bin");
   const shim = installTmuxShim(root, bin);
+  // The pane runs `claude` from PATH: a fixed fake, so the pane outlives the spawn on a host without Claude.
+  fs.writeFileSync(path.join(bin, "claude"), "#!/bin/sh\nexec sleep 6950\n", { mode: 0o755 });
   const run = (cmd: string, args: string[], o: Record<string, unknown> = {}) => {
     const r = spawnSync(cmd === "tmux" ? path.join(bin, "tmux") : cmd, args, { encoding: "utf8", timeout: 20000, ...o } as never);
     return { status: r.status, stdout: (r.stdout as unknown as string) ?? "", stderr: (r.stderr as unknown as string) ?? "" };
@@ -136,7 +138,7 @@ function workerPort(e: Env, run: Env["run"], recordLaunch?: (id: string, evidenc
     receiptPath: (inst) => path.join(e.root, ".guild", "runs", "run-e00-lr1", "handoffs", `${inst.worker_role}-${inst.logical_task_id}.md`),
     ackArgv: ["node", path.join(e.root, "task-cell-ack.js")],
     run,
-    env: { PATH: `${e.bin}:${process.env["PATH"] ?? "/usr/bin:/bin"}`, HOME: process.env["HOME"] ?? e.root, SHELL: "/bin/zsh", LANG: "en_US.UTF-8" },
+    env: { PATH: `${e.bin}:${process.env["PATH"] ?? "/usr/bin:/bin"}`, HOME: process.env["HOME"] ?? e.root, SHELL: fs.existsSync("/bin/zsh") ? "/bin/zsh" : "/bin/sh", LANG: "en_US.UTF-8" },
     activate: () => ({ args: ["--plugin-dir", stubPlugin], pluginRoot: stubPlugin }),
     ...(recordLaunch ? { recordLaunch } : {}),
   });
