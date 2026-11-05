@@ -610,3 +610,88 @@ describe("T01 capture boundary regressions, confirm round", () => {
     expect(auditTraceExport(root, RUN, { private_literals: [GRANT_A] }).ok).toBe(true);
   });
 });
+
+describe("T01 PEM private key blocks", () => {
+  const sidecarContent = (e: { payload_ref: { path: string } | null }) =>
+    JSON.parse(fs.readFileSync(path.join(root, ".guild", e.payload_ref!.path), "utf8")).content as string;
+  const BODY = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7";
+  const pem = (label: string, body = BODY) => `-----BEGIN ${label}-----\n${body}\nTAILBYTESxyz\n-----END ${label}-----`;
+  const capture = (id: string, content: string) => captured(open("exec-a").observe(obs({ host_event_id: id, content })));
+  const assertGone = (out: string) => {
+    expect(out).not.toContain(BODY);
+    expect(out).not.toContain("TAILBYTES");
+    expect(out).not.toContain("BEGIN");
+    expect(out).not.toMatch(/-----END/);
+  };
+
+  it("redacts a raw block whole, for every private key label", () => {
+    seed();
+    ["PRIVATE KEY", "RSA PRIVATE KEY", "EC PRIVATE KEY", "OPENSSH PRIVATE KEY", "ENCRYPTED PRIVATE KEY", "PGP PRIVATE KEY BLOCK"].forEach((label, i) => {
+      const out = sidecarContent(capture(`pem${i}`, `before ${pem(label)} after`));
+      assertGone(out);
+      expect(out).toContain("before");
+      expect(out).toContain("after");
+    });
+    expect(auditTraceExport(root, RUN, { private_literals: [] }).ok).toBe(true);
+  });
+
+  it("redacts a block JSON-escaped inside a JSON document and inside prose", () => {
+    seed();
+    assertGone(sidecarContent(capture("pj1", JSON.stringify({ key: pem("RSA PRIVATE KEY"), keep: "visible" }))));
+    expect(sidecarContent(capture("pj2", JSON.stringify({ key: pem("RSA PRIVATE KEY"), keep: "visible" })))).toContain("visible");
+    assertGone(sidecarContent(capture("pj3", `config ${JSON.stringify({ key: pem("OPENSSH PRIVATE KEY") })} end`)));
+  });
+
+  it("a block with no END is redacted to the end of the field, never leaving the tail", () => {
+    seed();
+    const truncatedBlock = `-----BEGIN PRIVATE KEY-----\n${BODY}\nTAILBYTESxyz`;
+    assertGone(sidecarContent(capture("pt1", `x ${truncatedBlock}`)));
+    const doc = sidecarContent(capture("pt2", JSON.stringify({ key: truncatedBlock, keep: "visible" })));
+    assertGone(doc);
+    expect(JSON.parse(doc).keep).toBe("visible");
+  });
+
+  it("redacts two blocks in one field and keeps the text between them", () => {
+    seed();
+    const out = sidecarContent(capture("pd1", `${pem("RSA PRIVATE KEY")} middle ${pem("EC PRIVATE KEY")}`));
+    assertGone(out);
+    expect(out).toContain("middle");
+    expect(out.match(/<PEM-PRIVATE-KEY-REDACTED>/g)?.length).toBe(2);
+  });
+
+  it("the export audit flags a planted PEM body", () => {
+    seed();
+    const e = capture("pa1", "clean");
+    const p = path.join(root, ".guild", e.payload_ref!.path);
+    fs.writeFileSync(p, fs.readFileSync(p, "utf8").replace("clean", `-----BEGIN OPENSSH PRIVATE KEY-----\\n${BODY}`));
+    expect(auditTraceExport(root, RUN, { private_literals: [] }).ok).toBe(false);
+  });
+});
+
+describe("T01 scrubber confirm counterexamples", () => {
+  const sidecarOf = (e: { payload_ref: { path: string } | null }) =>
+    JSON.parse(fs.readFileSync(path.join(root, ".guild", e.payload_ref!.path), "utf8")).content as string;
+
+  it("a PEM block whose END label differs keeps redacting to the end of the field", () => {
+    seed();
+    const e = captured(open("exec-a").observe(obs({ host_event_id: "k1", content: "-----BEGIN RSA PRIVATE KEY-----\nMIIEvQIBADANBg\n-----END PUBLIC KEY-----\nTAILPRIVATEBYTES" })));
+    expect(sidecarOf(e)).not.toContain("TAILPRIVATEBYTES");
+    expect(sidecarOf(e)).not.toContain("MIIEvQ");
+  });
+
+  it("array fragments in prose are decoded and scrubbed", () => {
+    seed();
+    const e = captured(open("exec-a").observe(obs({ host_event_id: "k2", content: String.raw`note ["grant-private-\u00611"] end` })));
+    expect(sidecarOf(e)).not.toContain("u00611");
+    expect(auditTraceExport(root, RUN, { private_literals: [GRANT_A] }).ok).toBe(true);
+  });
+
+  it("JSON wrapped in prose past the inspection depth is withheld", () => {
+    seed();
+    let content = JSON.stringify({ thinking: "hidden chain text" });
+    for (let i = 0; i < 4; i++) content = JSON.stringify({ wrapper: "note " + content + " end" });
+    const e = captured(open("exec-a").observe(obs({ host_event_id: "k3", content })));
+    expect(e.payload_ref).toBeNull();
+    expect(e.capture.state).toBe("unavailable");
+  });
+});

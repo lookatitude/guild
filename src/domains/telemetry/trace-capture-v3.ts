@@ -273,6 +273,15 @@ function redactStructured(s: string, privateLiterals: readonly string[], level: 
 /** Serialized JSON nested inside JSON strings is inspected this many levels deep. */
 const MAX_SERIALIZED_LEVELS = 3;
 
+/**
+ * A PEM/PGP private key block, BEGIN to END inclusive (any label: RSA, EC, OPENSSH,
+ * ENCRYPTED, PGP … BLOCK). With no END it runs to the end of the string: a decoded
+ * JSON field when content is JSON, the whole content otherwise. Never leaves a tail.
+ */
+// The END label must match the BEGIN label; an unrelated END (e.g. PUBLIC KEY) does not stop it.
+const PEM_PRIVATE_KEY_BLOCK_RE = /-----BEGIN ([A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?)-----[\s\S]*?(?:-----END \1-----|$)/gi;
+const PEM_REDACTED = "<PEM-PRIVATE-KEY-REDACTED>";
+
 /** Thrown when serialized JSON nests past MAX_SERIALIZED_LEVELS: the content cannot be inspected, so it is withheld. */
 class TooDeepToInspect extends Error {}
 
@@ -283,12 +292,28 @@ const parsesAsJsonCompound = (s: string): boolean => {
   try { return typeof JSON.parse(t) === "object"; } catch { return false; }
 };
 
-/** Decode and scrub JSON fragments embedded in prose (`note {"k":"\u0061"} end`). Bounded count. */
+const nextOpen = (s: string, from: number) => {
+  const a = s.indexOf("{", from);
+  const b = s.indexOf("[", from);
+  return a === -1 ? b : b === -1 ? a : Math.min(a, b);
+};
+
+/** True when the string holds a JSON object or array, whole or as a fragment inside prose. Bounded count. */
+function containsJsonCompound(s: string): boolean {
+  if (parsesAsJsonCompound(s)) return true;
+  let seen = 0;
+  for (let i = nextOpen(s, 0); i !== -1 && seen < 1000; i = nextOpen(s, i + 1), seen++) {
+    if (parsesAsJsonCompound(s.slice(i, valueEnd(s, i)))) return true;
+  }
+  return false;
+}
+
+/** Decode and scrub JSON fragments (objects and arrays) embedded in prose (`note {"k":"\u0061"} end`). Bounded count. */
 function redactEmbeddedJson(s: string, privateLiterals: readonly string[], level: number): string {
   let out = "";
   let last = 0;
   let seen = 0;
-  for (let i = s.indexOf("{"); i !== -1 && seen < 1000; i = s.indexOf("{", i + 1)) {
+  for (let i = nextOpen(s, 0); i !== -1 && seen < 1000; i = nextOpen(s, i + 1)) {
     if (i < last) continue;
     const end = valueEnd(s, i);
     const seg = s.slice(i, end);
@@ -300,13 +325,15 @@ function redactEmbeddedJson(s: string, privateLiterals: readonly string[], level
 }
 
 function scrubOnce(s: string, privateLiterals: readonly string[], level = 0): string {
-  if (level >= MAX_SERIALIZED_LEVELS && parsesAsJsonCompound(s)) throw new TooDeepToInspect();
+  if (level >= MAX_SERIALIZED_LEVELS && containsJsonCompound(s)) throw new TooDeepToInspect();
   let out = s;
   if (level < MAX_SERIALIZED_LEVELS) {
     const t = s.trim();
     out = t.startsWith("{") || t.startsWith("[") ? redactStructured(s, privateLiterals, level) : s;
     if (out === s) out = redactEmbeddedJson(s, privateLiterals, level);
   }
+  // Before the shared scrubber, which only replaces the BEGIN marker and would leave the key body.
+  out = out.replace(PEM_PRIVATE_KEY_BLOCK_RE, PEM_REDACTED);
   out = redactQuotedKeys(out);
   out = redact(out).out;
   out = redactTokenShapes(out);
