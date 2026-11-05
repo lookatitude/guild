@@ -617,7 +617,7 @@ function groupKeys(s: Scope, by: GroupBy): Map<string, Scope> {
   }
   // Unavailable sources are unknown in every group, so per-source points still name them.
   if (by === "source") for (const sid of s.unknownSources) if (!out.has(sid)) out.set(sid, { ...s, runs: [], tasks: [], unknownSources: [sid], unknownRuns: [], unenumerated: [], cohortUnknown: [], noOutcomeSources: [] });
-  if (by === "source") for (const sid of s.cohortUnknown) if (!out.has(sid)) out.set(sid, { ...s, runs: [], tasks: [], unknownSources: [], unknownRuns: [], unenumerated: [], cohortUnknown: [sid], noOutcomeSources: [] });
+  if (by === "source") for (const sid of s.cohortUnknown) if (!out.has(sid)) out.set(sid, { ...s, runs: [], tasks: [], unknownSources: [], unknownRuns: [], unenumerated: [], cohortUnknown: [sid], noOutcomeSources: [sid] });
   if (out.size > SERIES_LIMITS.points) throw new SeriesRefusal("invalid_request", `${out.size} groups exceed the ${SERIES_LIMITS.points}-point bound; narrow the filters`);
   return new Map([...out.entries()].sort((a, b) => cmp(a[0], b[0])));
 }

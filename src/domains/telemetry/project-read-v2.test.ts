@@ -526,6 +526,10 @@ describe("AT29 · query snapshot", () => {
     expect(validateMetricSeriesV2(r)).toEqual({ ok: true });
     for (const p of r.points) expect(p).toMatchObject({ value: null, exact_total: null, coverage: { state: "unavailable" } });
     expect(pt(r, "source-a").coverage.reason).toContain("no task outcome producer");
+    // Outcome metrics grouped by source stay unknown too.
+    const oq = projectQuery(snap, { metric_id: "M14.outcome_count", grain: "logical_task", window: { from: "2026-10-26T00:00:00Z", to: AS_OF, basis: "accepted_outcome_cohort" } });
+    const o = readMetricSeries(snap, readRequest(oq, "metric_series", { request_id: "q-17", session_id: "s-1" }), { group_by: "source" }) as MetricSeriesV2;
+    expect(o.points.map((p) => `${p.key}:${p.value}:${p.coverage.state}`)).toEqual(["source-a:null:unavailable", "source-b:null:unavailable"]);
   });
 
   it("a request whose observations conflict on its task matches no task filter exactly", () => {
