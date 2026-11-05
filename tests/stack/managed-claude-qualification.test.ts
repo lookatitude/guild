@@ -1,12 +1,12 @@
 import { it, expect } from "bun:test";
 import * as fs from "node:fs";import * as os from "node:os";import * as path from "node:path";import{execFileSync}from"node:child_process";
-import { StackFacade, stackCanonical, readManagedWorkerRequest, runManagedWorker, recordManagedWorkerAcceptance } from "../domains/lifecycle";
-import { StackScope, stackHash } from "../domains/state";import{stackValidator}from"../../scripts/lib/stack-contract-validator";
-import{buildManagedClaudeLaunch,createManagedClaudeRuntime,createManagedClaudeParser,MANAGED_CLAUDE_PROFILE as profile}from"./managed-claude";
+import { StackFacade, stackCanonical, readManagedWorkerRequest, runManagedWorker, recordManagedWorkerAcceptance } from "../../src/domains/lifecycle";
+import { StackScope, stackHash } from "../../src/domains/state";import{stackValidator}from"../../scripts/lib/stack-contract-validator";
+import{buildManagedClaudeLaunch,createManagedClaudeRuntime,createManagedClaudeParser,MANAGED_CLAUDE_PROFILE as profile}from"../../src/adapters/managed-claude";
 async function proofFixture(){
  const home=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),"guild-proof-contract-"))),root=path.join(home,"project"),pkg=path.join(home,"package"),state=path.join(home,"state"),previous=process.env.GUILD_STATE_HOME;process.env.GUILD_STATE_HOME=state;
  fs.mkdirSync(root);execFileSync("git",["init","--quiet",root]);fs.mkdirSync(path.join(root,".guild/config"),{recursive:true});fs.writeFileSync(path.join(root,".guild/guild.yaml"),"schema_version: guild.root.v1\nkind: project\n");fs.writeFileSync(path.join(root,".guild/storage-layout.json"),JSON.stringify({storage_layout_version:2}));
- fs.mkdirSync(path.join(pkg,".claude-plugin"),{recursive:true});fs.mkdirSync(path.join(pkg,"runtime/scripts"),{recursive:true});fs.mkdirSync(path.join(pkg,"src/surfaces/graphs"),{recursive:true});fs.copyFileSync(path.resolve(import.meta.dir,"../surfaces/graphs/product.yaml"),path.join(pkg,"src/surfaces/graphs/product.yaml"));
+ fs.mkdirSync(path.join(pkg,".claude-plugin"),{recursive:true});fs.mkdirSync(path.join(pkg,"runtime/scripts"),{recursive:true});fs.mkdirSync(path.join(pkg,"src/surfaces/graphs"),{recursive:true});fs.copyFileSync(path.resolve(import.meta.dir,"../../src/surfaces/graphs/product.yaml"),path.join(pkg,"src/surfaces/graphs/product.yaml"));
  fs.writeFileSync(path.join(pkg,".claude-plugin/plugin.json"),JSON.stringify({name:"guild",version:"3.2.0-beta.1"}));fs.writeFileSync(path.join(pkg,"guild.inventory.json"),JSON.stringify({schema_version:"guild.inventory.v1",plugin_version:"3.2.0-beta.1",manifest:{name:"guild",version:"3.2.0-beta.1"},scripts:[{id:"stack-operations",kind:"cli"}]}));
  for(const entry of ["stack-operations","stack-run-worker","stack-qualify-host"])fs.writeFileSync(path.join(pkg,"runtime/scripts",entry+".js"),"synthetic contract fixture "+entry);
  const fileHash=(file:string)=>stackHash(fs.readFileSync(file)),entryHash=(name:string)=>fileHash(path.join(pkg,"runtime/scripts",name+".js")),source_id=new StackScope(root).discover().root.source_id;

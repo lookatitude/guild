@@ -47991,7 +47991,7 @@ function createRunLifecycle(env) {
         const abs = path94.join(plan.root, file.path);
         if (env.fs.exists(abs)) throw new Error("staged target is occupied");
         if (env.fs.writeFileExclusive) {
-          if (!env.fs.writeFileExclusive(abs, file.bytes, abs === runBindingPath(plan.root, plan.run_id) ? PRIVATE_BINDING_MODE : void 0)) throw new Error("staged target is occupied");
+          if (!env.fs.writeFileExclusive(abs, file.bytes, abs === runBindingPath(plan.root, plan.run_id) ? 384 : void 0)) throw new Error("staged target is occupied");
         } else env.fs.writeFile(abs, file.bytes);
       }
       env.initializeRunBindingExclusion?.(plan.root, plan.run_id);
@@ -64600,7 +64600,6 @@ __export(lifecycle_exports, {
   PENDING_SUBSTANTIVE_OPERATION_SCHEMA: () => PENDING_SUBSTANTIVE_OPERATION_SCHEMA,
   PLAN_STEP_STATUSES: () => PLAN_STEP_STATUSES,
   PLUGIN_GRAPH_DIRS: () => PLUGIN_GRAPH_DIRS,
-  PRIVATE_BINDING_MODE: () => PRIVATE_BINDING_MODE,
   PRODUCT_LOOP_ENTRY_SKILL: () => PRODUCT_LOOP_ENTRY_SKILL,
   PROGRAM_STATUSES: () => PROGRAM_STATUSES2,
   PROJECTABLE_DOCUMENT_KINDS: () => PROJECTABLE_DOCUMENT_KINDS,
