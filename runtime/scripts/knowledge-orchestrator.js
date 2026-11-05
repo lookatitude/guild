@@ -29209,6 +29209,7 @@ var path67 = __toESM(require("path"));
 init_publication();
 init_decision_propagation();
 init_source_basis();
+init_sealed_collections();
 
 // scripts/learn/lib/structural.ts
 init_kernel();
@@ -29437,7 +29438,7 @@ function publishLearnArtifacts(t, opts) {
   const base = opts.base ?? readLearnBase(t);
   return publishBuilt(t, { ...opts, basis, base, artifacts: opts.build(base), rebase: opts.rebase === false ? void 0 : opts.build });
 }
-var PUBLICATION_WRITERS = Object.freeze([
+var PUBLICATION_WRITERS = deepFreeze([
   { file: "scripts/learn/extract-structural.ts", channels: ["structural_graph"], rebase: true },
   { file: "scripts/learn/resolve-calls.ts", channels: ["structural_graph"], rebase: true },
   { file: "scripts/learn/assign-layers.ts", channels: ["semantic_graph"], rebase: true },
@@ -29448,7 +29449,7 @@ var PUBLICATION_WRITERS = Object.freeze([
   { file: "scripts/learn/knowledge-orchestrator.ts", channels: ["semantic_graph", "recall"], rebase: false },
   { file: "scripts/learn/write-knowledge-links.ts", channels: ["recall"], rebase: false }
 ]);
-var NON_LAYER_WRITERS = Object.freeze([
+var NON_LAYER_WRITERS = deepFreeze([
   { file: "scripts/learn/lib/publish.ts", writes: "explicit --in/--out stage targets (not published)" },
   { file: "scripts/learn/lib/paths.ts", writes: "writeJson helper; no artifact path of its own" },
   { file: "src/domains/knowledge/publication.ts", writes: "the generation store and legacy exports" },
