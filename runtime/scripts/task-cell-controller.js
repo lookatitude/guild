@@ -65337,7 +65337,7 @@ var TmuxTaskCellWorkerPort = class {
       const argv = args.stdout.trim();
       const at = argv.indexOf(` ${hostArg}`);
       const bounded = at >= 0 && (argv.length === at + hostArg.length + 1 || /\s/.test(argv[at + hostArg.length + 1]));
-      const argv0 = path97.basename(argv.split(/\s+/)[0] ?? "").replace(/^-/, "");
+      const argv0 = path99.basename(argv.split(/\s+/)[0] ?? "").replace(/^-/, "");
       if (bounded && name.length > 0 && !LAUNCH_SHELLS.has(name) && !LAUNCH_SHELLS.has(argv0)) return { pid, comm: name };
     }
     return "absent";
