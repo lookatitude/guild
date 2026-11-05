@@ -298,11 +298,16 @@ const nextOpen = (s: string, from: number) => {
   return a === -1 ? b : b === -1 ? a : Math.min(a, b);
 };
 
+/** Embedded JSON fragments inspected per string; content with more is withheld. */
+const MAX_EMBEDDED_FRAGMENTS = 1000;
+
 /** True when the string holds a JSON object or array, whole or as a fragment inside prose. Bounded count. */
 function containsJsonCompound(s: string): boolean {
   if (parsesAsJsonCompound(s)) return true;
   let seen = 0;
-  for (let i = nextOpen(s, 0); i !== -1 && seen < 1000; i = nextOpen(s, i + 1), seen++) {
+  for (let i = nextOpen(s, 0); i !== -1; i = nextOpen(s, i + 1), seen++) {
+    // Fail closed: past the fragment budget the string counts as holding JSON.
+    if (seen >= MAX_EMBEDDED_FRAGMENTS) return true;
     if (parsesAsJsonCompound(s.slice(i, valueEnd(s, i)))) return true;
   }
   return false;
@@ -313,8 +318,10 @@ function redactEmbeddedJson(s: string, privateLiterals: readonly string[], level
   let out = "";
   let last = 0;
   let seen = 0;
-  for (let i = nextOpen(s, 0); i !== -1 && seen < 1000; i = nextOpen(s, i + 1)) {
+  for (let i = nextOpen(s, 0); i !== -1; i = nextOpen(s, i + 1)) {
     if (i < last) continue;
+    // Fail closed: fragments past the budget cannot be inspected, so the content is withheld.
+    if (seen >= MAX_EMBEDDED_FRAGMENTS) throw new TooDeepToInspect();
     const end = valueEnd(s, i);
     const seg = s.slice(i, end);
     seen++;
