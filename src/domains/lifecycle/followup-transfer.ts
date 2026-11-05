@@ -60,13 +60,13 @@ export interface FollowupTransferV1 {
 }
 
 /** Points where a test (or a fault injector) can stop the protocol. */
-export const TRANSFER_POINTS = [
+export const TRANSFER_POINTS = Object.freeze([
   "intent", "reserve_receipt", "reserve_link", "reserve", "reserved_record",
   "prepare", "prepared_record",
   "commit_receipt", "source_commit", "source_committed_record",
   "activate", "activated_record",
   "target_ack", "ack_receipt", "ack",
-] as const;
+] as const);
 export type TransferPoint = (typeof TRANSFER_POINTS)[number];
 
 export type TransferRefusalCode =
