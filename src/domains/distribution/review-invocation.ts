@@ -56,7 +56,7 @@ const STRING_FIELDS = [
 const REF_FIELDS = ["request", "candidate", "packet", "result", "adapter_exit"] as const;
 
 /** The fields an invocation record must repeat verbatim from its adapter exit record. */
-export const INVOCATION_ADAPTER_JOIN_FIELDS = [
+export const INVOCATION_ADAPTER_JOIN_FIELDS = Object.freeze([
   "exit",
   "reviewer_family",
   "author_family",
@@ -64,7 +64,7 @@ export const INVOCATION_ADAPTER_JOIN_FIELDS = [
   "served_model",
   "started_at",
   "finished_at",
-] as const;
+] as const);
 
 const HEX64 = /^[0-9a-f]{64}$/;
 
