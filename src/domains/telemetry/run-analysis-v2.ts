@@ -20,8 +20,8 @@
  * lifecycle, outcome and acceptance stay `unknown`; a missing trace is
  * `unavailable` with no counters, never zero.
  *
- * Nested metric series (T04) are not verified here: an analysis or comparison
- * that carries them is refused by this reader rather than passed unchecked.
+ * Nested metric series are verified with the T04 C9 rules and must share the
+ * enclosing analysis or comparison inputs (only formula and the M29 scalar differ).
  */
 
 import * as crypto from "node:crypto";
@@ -31,6 +31,7 @@ import { checkContained, isRefused, prepareContainedWrite } from "../kernel";
 import { RUN_LEDGER_VERSIONS, normalizeRunLedger, type PriceTable, type RunLedger } from "./run-ledger-v2";
 import { TRACE_V3_CHECKS, TRACE_ID_RE, compareTraceInstants, isRfc3339, usageRules, type TraceEvidence, type TraceUsage, type TraceShapeCheck } from "./trace-analysis-v3";
 import { readTrace } from "./trace-capture-v3";
+import { nestedSeriesErrors } from "./metric-series-v2";
 
 export const RUN_ANALYSIS_V2_SCHEMA = "guild.run_analysis.v2" as const;
 export const RUN_COMPARISON_V2_SCHEMA = "guild.run_comparison.v2" as const;
@@ -308,7 +309,7 @@ export function validateRunAnalysisV2(value: unknown): Verdict {
   if (errors.length) return verdict(errors);
   const v = value as RunAnalysisV2;
   const require = (ok: boolean, msg: string) => { if (!ok) errors.push(msg); };
-  require(v.metrics.length === 0, "nested metric series are not verified by this reader");
+  errors.push(...nestedSeriesErrors(v.query, v.metrics, "analysis"));
   const ids = new Set<string>();
   for (const u of v.usage) {
     usageRules(u, require);
@@ -343,7 +344,7 @@ export function validateRunComparisonV2(value: unknown): Verdict {
   if (errors.length) return verdict(errors);
   const v = value as RunComparisonV2;
   const require = (ok: boolean, msg: string) => { if (!ok) errors.push(msg); };
-  require(v.metrics.length === 0, "nested metric series are not verified by this reader");
+  errors.push(...nestedSeriesErrors(v.query, v.metrics, "comparison"));
   const keys = v.runs.map((x) => `${x.source_id}\u0000${x.id}`);
   require(new Set(keys).size === keys.length, "duplicate compared run");
   require(v.runs.length === v.analysis_refs.length && v.runs.length === v.input_versions.length, "comparison input cardinality mismatch");
@@ -449,6 +450,28 @@ export function readCachedRunAnalysisV2(root: string, sourceId: string, runId: s
 
 // ── Analyze (and backfill) ───────────────────────────────────────────────────
 
+export interface RunInputs { evidence: TraceEvidence[]; traceUsable: boolean; trace: ReturnType<typeof readTrace> | null }
+
+/**
+ * Read one run's retained inputs bound to their manifest digest: hash, read,
+ * hash again, and keep the read only when nothing changed in between. Writes nothing.
+ */
+export function readRunInputs(root: string, sourceId: string, runId: string, asOf: string): RunInputs {
+  let snapshot: RunInputs | null = null;
+  for (let attempt = 0; attempt < 3 && snapshot === null; attempt++) {
+    // A probe read discovers the sidecar dependencies so they are hashed before the projection read too.
+    const before = retainedEvidence(root, sourceId, runId, asOf);
+    const probe = before.traceUsable ? readTrace(root, runId) : null;
+    const evidence = [...before.evidence, ...payloadEvidence(root, sourceId, probe?.events ?? [], asOf)];
+    const read = before.traceUsable ? readTrace(root, runId) : null;
+    const after = retainedEvidence(root, sourceId, runId, asOf);
+    const again = [...after.evidence, ...payloadEvidence(root, sourceId, read?.events ?? [], asOf)];
+    if (inputManifestDigest(evidence) === inputManifestDigest(again)) snapshot = { evidence, traceUsable: before.traceUsable, trace: read };
+  }
+  if (snapshot === null) throw new Error(`run ${runId} inputs kept changing during analysis; retry later`);
+  return snapshot;
+}
+
 export interface AnalyzeRunV2Options {
   source_id: string; run_id: string; as_of: string;
   pricing?: PriceTable | null;
@@ -468,20 +491,7 @@ export function analyzeRunV2(root: string, opts: AnalyzeRunV2Options): AnalyzeRu
   if (!TRACE_ID_RE.test(opts.source_id)) throw new Error(`unsafe source id: ${opts.source_id}`);
   if (!isRfc3339(opts.as_of)) throw new Error("as_of must be an RFC 3339 instant");
   const pricing = opts.pricing ?? null;
-  // Hash, read, hash again: the projection is bound to the digest only when nothing changed in between.
-  let snapshot: { evidence: TraceEvidence[]; traceUsable: boolean; trace: ReturnType<typeof readTrace> | null } | null = null;
-  for (let attempt = 0; attempt < 3 && snapshot === null; attempt++) {
-    // A probe read discovers the sidecar dependencies so they are hashed before the projection read too.
-    const before = retainedEvidence(root, opts.source_id, opts.run_id, opts.as_of);
-    const probe = before.traceUsable ? readTrace(root, opts.run_id) : null;
-    const evidence = [...before.evidence, ...payloadEvidence(root, opts.source_id, probe?.events ?? [], opts.as_of)];
-    const read = before.traceUsable ? readTrace(root, opts.run_id) : null;
-    const after = retainedEvidence(root, opts.source_id, opts.run_id, opts.as_of);
-    const again = [...after.evidence, ...payloadEvidence(root, opts.source_id, read?.events ?? [], opts.as_of)];
-    if (inputManifestDigest(evidence) === inputManifestDigest(again)) snapshot = { evidence, traceUsable: before.traceUsable, trace: read };
-  }
-  if (snapshot === null) throw new Error(`run ${opts.run_id} inputs kept changing during analysis; retry later`);
-  const { evidence, traceUsable, trace } = snapshot;
+  const { evidence, traceUsable, trace } = readRunInputs(root, opts.source_id, opts.run_id, opts.as_of);
   const late = trace?.events.find((e) => compareTraceInstants(e.at, opts.as_of) >= 0);
   if (late) throw new Error(`as_of ${opts.as_of} precedes retained trace event ${late.event_id}; the snapshot cannot include later evidence`);
   // as_of is left out of normalization so the projection depends only on keyed inputs; a cache hit
