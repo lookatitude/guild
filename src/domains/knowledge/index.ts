@@ -47,4 +47,3 @@ export * from "./graph-query";
 // The /guild:learn router (G10 R1-R2): only what the compiled CLI consumes is public.
 export { parseLearnArgs, routeLearn, SPARSE_TRACKED_FILE_LIMIT, type LearnTargetFacts } from "./learn-route";
 export * from "./wiki-lint-knowledge";
-export * from "./decision-propagation";

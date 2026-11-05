@@ -11,18 +11,18 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { createGuildStorage, type GuildStorage } from "../state";
+import { harvestDecision } from ".";
 import {
   decisionPublicationRefs,
   decisionsHome,
   federatedCandidateView,
-  harvestDecision,
   pinDependent,
   propagateDecisions,
   publishDecisionCandidates,
   readDecisionLedger,
   recordAcceptedDecision,
   type EntityRef,
-} from ".";
+} from "./decision-propagation";
 import { publishGeneration, readPublicationRecord, type BasisRef } from "./publication";
 import { publicationStatus } from "./publication-boundary";
 import { upsertOp } from "./harvest-journal";
