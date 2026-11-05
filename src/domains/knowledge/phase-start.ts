@@ -26,6 +26,7 @@ import { neutralizeRecallTags, protectChunks, type ProtectChunksOpts } from "./r
 import { buildLaneBundle, type LaneBundle } from "./lane-bundle";
 import { searchWiki, type RecallBackend, type SearchResult } from "./wiki-index";
 import { loadWorkingSet } from "./working-set";
+import { instrumentRetrieval } from "./retrieval-ledger";
 
 export interface PhaseStartOptions {
   cwd: string;
@@ -137,12 +138,25 @@ export function phaseStartRecall(query: string, opts: PhaseStartOptions): PhaseS
   const policy = resolveRecallPolicy(opts.cwd);
   // No embedding reranker ships in this cut, so `hybrid` is served as BM25 with
   // the loss recorded — never an error, never a silent pretend-hybrid.
-  const search: SearchResult = searchWiki(query, {
+  const runSearch = (): SearchResult => searchWiki(query, {
     storage,
     backend: policy.backend,
     ...(policy.min_score !== undefined ? { min_score: policy.min_score } : {}),
     ...(policy.max_hits !== undefined ? { max_hits: policy.max_hits } : {}),
   });
+  // K05: a run-scoped phase start is one recorded retrieval. Its hits feed a lane
+  // bundle with no use-reporting path, so use capture is unsupported here.
+  const recordDir = opts.runDir ?? (opts.runId ? (storage.project ?? storage.workspace)?.runRecord(opts.runId) : undefined);
+  const search: SearchResult = recordDir
+    ? instrumentRetrieval(query, {
+        runDir: path.resolve(recordDir),
+        run_id: opts.runId ?? path.basename(recordDir),
+        entry_point: "phase_start",
+        mode: `phase_start_${policy.backend}`.replace(/[^a-z0-9_:-]/g, "_"),
+        use_capture: "unsupported",
+        unbound_reason: "phase start reads the wiki cache index, which is not a published channel",
+      }, runSearch, (s) => s.hits.map((h) => ({ ref: `wiki:${h.rel}`, content: h.title }))).result
+    : runSearch();
 
   const protect: ProtectChunksOpts = {
     callerTool: "phaseStartRecall",
