@@ -16,6 +16,7 @@
  * Read-only: it writes no cache into the sources it reads.
  */
 
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { durableGuildDir } from "../state";
@@ -63,7 +64,13 @@ export interface SourceDiagnostics {
   runs: number; runs_without_trace: number; invalid_events: number; pending_requests: number | null; duplicates: number;
   run_errors: { run_id: string; reason: string }[];
 }
-export interface ProjectSnapshot { facts: FactSet; diagnostics: SourceDiagnostics[]; pricing: PriceTable | null }
+export interface ProjectSnapshot { facts: FactSet; diagnostics: SourceDiagnostics[]; pricing: PriceTable | null; cursor_key: Buffer }
+
+/**
+ * Cursors are MAC'd with a service key, so a client cannot mint an offset or point.
+ * The default key lives for this process; a service that pages across processes passes its own.
+ */
+const PROCESS_CURSOR_KEY = crypto.randomBytes(32);
 
 // ── Reading ──────────────────────────────────────────────────────────────────
 
@@ -190,7 +197,8 @@ function readSource(s: ProjectSource, asOf: string, pricing: PriceTable | null):
 }
 
 /** Read every requested source into one immutable snapshot of facts. */
-export function openProjectSnapshot(sources: readonly ProjectSource[], opts: { as_of: string; pricing?: PriceTable | null }): ProjectSnapshot {
+export function openProjectSnapshot(sources: readonly ProjectSource[], opts: { as_of: string; pricing?: PriceTable | null; cursor_key?: Buffer }): ProjectSnapshot {
+  if (opts.cursor_key !== undefined && opts.cursor_key.length < 32) throw new Error("cursor_key needs at least 32 bytes");
   if (!isRfc3339(opts.as_of)) throw new Error("as_of must be an RFC 3339 instant");
   if (sources.length < 1 || sources.length > PROJECT_READ_LIMITS.sources) throw new Error(`a snapshot reads 1 to ${PROJECT_READ_LIMITS.sources} sources`);
   const ids = sources.map((s) => s.source_id);
@@ -205,7 +213,7 @@ export function openProjectSnapshot(sources: readonly ProjectSource[], opts: { a
   };
   return {
     facts: { snapshot, sources: read.map((r) => r.facts), pricing: pricing ? { version: pricing.version, currency: pricing.currency, source_hash: pricing.source_hash } : null },
-    diagnostics: read.map((r) => r.diag), pricing,
+    diagnostics: read.map((r) => r.diag), pricing, cursor_key: opts.cursor_key ?? PROCESS_CURSOR_KEY,
   };
 }
 
@@ -247,17 +255,21 @@ export function readRequest(q: QueryIdentity, op: "metric_series" | "metric_dril
 interface CursorBody { v: 1; q: string; m: string; g: GroupBy; p: string; o: number }
 const CURSOR_PREFIX = "c9v2.";
 
-export function encodeCursor(b: Omit<CursorBody, "v">): string {
+const mac = (key: Buffer, body: string) => crypto.createHmac("sha256", key).update(body).digest("base64url");
+
+export function encodeCursor(key: Buffer, b: Omit<CursorBody, "v">): string {
   const body = canonicalJson({ v: 1, ...b });
-  return `${CURSOR_PREFIX}${Buffer.from(body).toString("base64url")}.${sha256(body).slice(7, 23)}`;
+  return `${CURSOR_PREFIX}${Buffer.from(body).toString("base64url")}.${mac(key, body)}`;
 }
 
-function decodeCursor(c: string): CursorBody | null {
+function decodeCursor(key: Buffer, c: string): CursorBody | null {
   if (!c.startsWith(CURSOR_PREFIX) || c.length > 4096) return null;
-  const [b64, check, ...rest] = c.slice(CURSOR_PREFIX.length).split(".");
-  if (!b64 || !check || rest.length) return null;
+  const [b64, tag, ...rest] = c.slice(CURSOR_PREFIX.length).split(".");
+  if (!b64 || !tag || rest.length) return null;
   const body = Buffer.from(b64, "base64url").toString("utf8");
-  if (sha256(body).slice(7, 23) !== check) return null;
+  const want = Buffer.from(mac(key, body));
+  const got = Buffer.from(tag);
+  if (want.length !== got.length || !crypto.timingSafeEqual(want, got)) return null;
   try {
     const o = JSON.parse(body) as CursorBody;
     if (canonicalJson(o) !== body || o.v !== 1 || typeof o.q !== "string" || typeof o.g !== "string" || typeof o.m !== "string" || typeof o.p !== "string" || !Number.isInteger(o.o) || o.o < 0) return null;
@@ -313,7 +325,7 @@ export function readMetricSeries(snap: ProjectSnapshot, req: unknown, opts: { gr
   return run(r.request_id, () => {
     const metric = metricOfQuery(r.query);
     const hash = queryHash(r.query);
-    return computeMetricSeries(snap.facts, r.query, { group_by: opts.group_by, cursor: (p, o) => encodeCursor({ q: hash, m: metric.id, g: opts.group_by ?? "all", p, o }) }).series;
+    return computeMetricSeries(snap.facts, r.query, { group_by: opts.group_by, cursor: (p, o) => encodeCursor(snap.cursor_key, { q: hash, m: metric.id, g: opts.group_by ?? "all", p, o }) }).series;
   });
 }
 
@@ -331,7 +343,7 @@ export function readMetricDrilldown(snap: ProjectSnapshot, req: unknown, opts: {
     let point = opts.point_key ?? "all";
     let offset = 0;
     if (r.cursor !== null) {
-      const c = decodeCursor(r.cursor);
+      const c = decodeCursor(snap.cursor_key, r.cursor);
       if (!c) return refusal(r.request_id, "invalid_request", "cursor is malformed or altered", false);
       if (c.q !== hash || c.m !== metric.id || c.g !== (opts.group_by ?? "all")) return refusal(r.request_id, "invalid_request", "cursor belongs to another query, metric or grouping", false);
       if (opts.point_key !== undefined && opts.point_key !== c.p) return refusal(r.request_id, "invalid_request", "cursor names another series point", false);
@@ -347,7 +359,7 @@ export function readMetricDrilldown(snap: ProjectSnapshot, req: unknown, opts: {
     return {
       schema_version: METRIC_DRILLDOWN_V2_SCHEMA, metric_id: metric.id, point_key: point, query_hash: hash,
       snapshot: snap.facts.snapshot, records: records.slice(offset, end), coverage: p.coverage,
-      next_cursor: end < records.length ? encodeCursor({ q: hash, m: metric.id, g: opts.group_by ?? "all", p: point, o: end }) : null,
+      next_cursor: end < records.length ? encodeCursor(snap.cursor_key, { q: hash, m: metric.id, g: opts.group_by ?? "all", p: point, o: end }) : null,
     };
   });
 }

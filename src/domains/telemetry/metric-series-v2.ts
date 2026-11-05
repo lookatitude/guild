@@ -250,7 +250,13 @@ function selectScope(facts: FactSet, q: QueryIdentity, outcomeMetric: boolean): 
     }
     const recordLevel = leafFilters.length > 0 || w.basis === "activity_completed";
     for (const r of s.runs) {
-      if (!runFilters.every((f) => runMatches(r, f))) continue;
+      if (!runFilters.every((f) => runMatches(r, f))) {
+        // Attachments come from the run's records: without a complete trace a non-match is unknown, not absent.
+        const attachmentFilter = runFilters.some((f) => f.dimension !== "run" && !runMatches(r, f));
+        const named = runFilters.filter((f) => f.dimension === "run").every((f) => runMatches(r, f));
+        if (attachmentFilter && named && (r.usage_state !== "available" || !r.trace_complete)) unknownRuns.push({ source_id: r.source_id, run_id: r.run_id });
+        continue;
+      }
       const leaves: UsageFact[] = [];
       for (const l of r.leaves) {
         if (!leafFilters.every((f) => leafMatches(l, f))) continue;
@@ -463,18 +469,24 @@ function computeCalcInner(metric: AtomicMetric, s: Scope, facts: FactSet, grain:
     }
     case "M12.duplicate_count": {
       const records: Evidence[] = [];
+      // A run without a complete trace has unknown attachments and unknown suppressed repeats.
+      const unknown = s.runs.filter(({ run }) => run.usage_state !== "available" || !run.trace_complete);
+      const reason = unknownReason(s, unknown.map(({ run }) => `run ${run.source_id}:${run.run_id} has no complete trace`));
+      const known = s.runs.filter((r) => !unknown.includes(r));
       if (grain === "run") {
         // Suppressed repeats of one source-qualified run across its attachments.
         let observations = 0;
-        for (const { run } of s.runs) { observations += Math.max(1, run.attachments.length); records.push(run.evidence); }
-        const n = observations - s.runs.length;
-        const cov = makeCoverage(enumKnown(s) ? observations : null, observations, {}, unknownReason(s));
+        for (const { run } of known) { observations += Math.max(1, run.attachments.length); records.push(run.evidence); }
+        const n = observations - known.length;
+        const cov = makeCoverage(enumKnown(s) && unknown.length === 0 ? observations : null, observations, {}, reason);
+        if (cov.state === "unavailable") return { ...unavailableCalc(cov.reason!, false), coverage: cov, records };
         return { value: n, known_subtotal: n, exact_total: cov.state === "complete" ? n : null, numerator: null, denominator: null, coverage: cov, cost_basis: "not_applicable", reason: cov.state === "complete" ? null : cov.reason, records };
       }
       if (s.leafFiltered) return unavailableCalc("suppressed request repeats cannot be attributed to a filtered scope", false);
       let n = 0;
-      for (const { run } of s.runs) { n += run.duplicate_count; records.push(run.evidence); }
-      const cov = makeCoverage(enumKnown(s) ? s.runs.length : null, s.runs.length, {}, unknownReason(s));
+      for (const { run } of known) { n += run.duplicate_count; records.push(run.evidence); }
+      const cov = makeCoverage(enumKnown(s) ? s.runs.length : null, known.length, {}, reason);
+      if (cov.state === "unavailable") return { ...unavailableCalc(cov.reason!, false), coverage: cov, records };
       return { value: n, known_subtotal: n, exact_total: cov.state === "complete" ? n : null, numerator: null, denominator: null, coverage: cov, cost_basis: "not_applicable", reason: cov.state === "complete" ? null : cov.reason, records };
     }
     case "M13.allocated_tokens": return sumCalc(s, (l) => (l.covered && l.allocated && l.total !== null ? l.total : l.covered && !l.allocated ? 0 : null), "not_applicable");

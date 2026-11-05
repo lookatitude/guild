@@ -470,8 +470,18 @@ describe("AT29 · query snapshot", () => {
     expect(none).toMatchObject({ value: null, exact_total: null, coverage: { state: "unavailable", covered: 0, eligible: null } });
     expect(none.coverage.reason).toContain("source-b:run-old");
     expect(pt(series(snap, "M01.run_count", { filters: [{ dimension: "task", values: ["task-d"] }] }))).toMatchObject({ value: 1, exact_total: null });
+    // Goal and initiative membership come from records too: a trace-less run is unknown under them.
+    const byGoal = pt(series(snap, "M01.run_count", { filters: [{ dimension: "goal", values: ["goal-none"] }] }));
+    expect(byGoal).toMatchObject({ value: null, coverage: { state: "unavailable", eligible: null } });
+    expect(byGoal.coverage.reason).toContain("source-b:run-old");
+    // Its suppressed repeats are unknown as well.
+    const dup = pt(series(snap, "M12.duplicate_count", { grain: "request" }));
+    expect(dup).toMatchObject({ value: 0, exact_total: null, coverage: { state: "partial", covered: 2, eligible: 3 } });
+    expect(pt(series(snap, "M12.duplicate_count", { grain: "run" }))).toMatchObject({ exact_total: null, coverage: { eligible: null } });
     fs.rmSync(path.join(rootOf("source-b"), ".guild/runs/run-old"), { recursive: true });
     const clean = open();
+    expect(pt(series(clean, "M01.run_count", { filters: [{ dimension: "goal", values: ["goal-none"] }] }))).toMatchObject({ value: 0, exact_total: 0, coverage: { state: "complete" } });
+    expect(pt(series(clean, "M12.duplicate_count", { grain: "request" }))).toMatchObject({ value: 0, exact_total: 0 });
     expect(pt(series(clean, "M01.run_count", { filters: [{ dimension: "task", values: ["task-none"] }] }))).toMatchObject({ value: 0, exact_total: 0, coverage: { state: "complete" } });
     expect(pt(series(clean, "M01.run_count", { filters: [{ dimension: "task", values: ["task-b"] }] }))).toMatchObject({ value: 1, exact_total: 1 });
   });
@@ -516,6 +526,14 @@ describe("AT29 · query snapshot", () => {
     const allCursor = pt(s).drilldown.cursor!;
     const regroup = readMetricDrilldown(snap, readRequest(q, "metric_drilldown", { request_id: "q-12", session_id: "s-1", cursor: allCursor }), { group_by: "source" }) as RefusalV2;
     expect(regroup.code).toBe("invalid_request");
+    // A cursor re-signed with a public checksum (no service key) is refused.
+    const bodyOf = (c: string) => JSON.parse(Buffer.from(c.split(".")[1]!, "base64url").toString()) as Record<string, unknown>;
+    const forgedBody = JSON.stringify(Object.fromEntries(Object.entries({ ...bodyOf(allCursor), o: 1 }).sort(([a], [b]) => (a < b ? -1 : 1))));
+    const forged = `c9v2.${Buffer.from(forgedBody).toString("base64url")}.${crypto.createHash("sha256").update(forgedBody).digest("hex").slice(0, 16)}`;
+    expect((readMetricDrilldown(snap, readRequest(q, "metric_drilldown", { request_id: "q-13", session_id: "s-1", cursor: forged })) as RefusalV2).code).toBe("invalid_request");
+    // A cursor from another service key (another process) is refused, not served.
+    const other = openProjectSnapshot(SOURCES(), { as_of: AS_OF, pricing: P1, cursor_key: Buffer.alloc(32, 7) });
+    expect((readMetricDrilldown(other, readRequest(q, "metric_drilldown", { request_id: "q-14", session_id: "s-1", cursor: allCursor })) as RefusalV2).code).toBe("invalid_request");
     // A filter dimension the service cannot answer refuses rather than being ignored.
     expect(() => projectQuery(snap, { metric_id: "M07.output_tokens", filters: [{ dimension: "host", values: ["h"] }] })).toThrow(/not served/);
   });
