@@ -95,7 +95,7 @@ import {
   type GatePassConditions,
 } from "../distribution";
 import { validateSecretsPolicy } from "../config";
-import { checkContained, isRefused } from "../kernel";
+import { checkContained, isRefused, prepareContainedWrite } from "../kernel";
 import { loadRunBinding, runBindingPath, verifyRunBinding } from "../lifecycle";
 import { applySecretsPolicy, parseSecurityConfig, securityDefaults, type SecretsPolicy } from "../security";
 import { durableGuildDir, guildRootId, parseYaml } from "../state";
@@ -182,6 +182,17 @@ function writeExclusive(abs: string, contents: string, mode = 0o600): boolean {
     if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
     throw error;
   }
+}
+
+/**
+ * writeExclusive for a path built from untrusted ids or under a directory another
+ * principal can create: the mkdir and the create stay physically inside `root`
+ * (no symlinked parent). A containment refusal throws; EEXIST returns false.
+ */
+function writeExclusiveContained(root: string, rel: string, contents: string): boolean {
+  const prepared = prepareContainedWrite(root, rel, { policy: "physical" });
+  if (isRefused(prepared)) throw new ControllerRefusal("write_not_contained", `${rel}: ${prepared.code}`);
+  return writeExclusive(prepared.realPath, contents);
 }
 
 /**
@@ -758,7 +769,13 @@ export function writeAckClaim(input: { assignmentPath: string; now?: () => strin
     claimed_at: (input.now ?? (() => new Date().toISOString()))(),
   };
   const abs = path.join(root, outboxRel(assignment.run_id, assignment.instance_id, "ack-claim.json"));
-  if (writeExclusive(abs, json(claim))) return { ok: true, path: abs, claim };
+  let created: boolean;
+  try {
+    created = writeExclusiveContained(root, outboxRel(assignment.run_id, assignment.instance_id, "ack-claim.json"), json(claim));
+  } catch {
+    return refuse("ack_claim_not_contained");
+  }
+  if (created) return { ok: true, path: abs, claim };
   const existing = readJsonFile(abs) as AssignmentAckClaimV1 | null;
   if (
     existing?.schema_version === ASSIGNMENT_ACK_CLAIM_SCHEMA && existing.run_id === claim.run_id &&
@@ -2956,15 +2973,21 @@ export class TaskCellController {
       let artifactSha: string | null = null;
       if (decoded.kind === "command") {
         const target = decoded.value as CommandOracleTarget;
-        // env -i semantics: no inherited environment (in particular no binding); PATH only to resolve argv[0].
-        const r = spawnSync(target.argv[0], target.argv.slice(1), {
-          cwd: path.resolve(this.cwd, target.cwd), env: { PATH: process.env["PATH"] ?? "/usr/bin:/bin" },
-          timeout: target.timeout_ms, encoding: "buffer", maxBuffer: 64 * 1024 * 1024,
-        });
-        exitCode = typeof r.status === "number" ? r.status : null;
-        stdoutSha = r.stdout ? sha256(r.stdout) : null;
-        stderrSha = r.stderr ? sha256(r.stderr) : null;
-        result = exitCode === 0 ? "pass" : "fail";
+        // The scope check is lexical; the cwd must also resolve physically inside the root
+        // (no symlinked segment), or the oracle fails without running.
+        const cwdContained = checkContained(this.cwd, target.cwd, { policy: "physical" });
+        const cwdIsDir = !isRefused(cwdContained) && fs.statSync(cwdContained.realPath, { throwIfNoEntry: false })?.isDirectory() === true;
+        if (cwdIsDir) {
+          // env -i semantics: no inherited environment (in particular no binding); PATH only to resolve argv[0].
+          const r = spawnSync(target.argv[0], target.argv.slice(1), {
+            cwd: (cwdContained as { realPath: string }).realPath, env: { PATH: process.env["PATH"] ?? "/usr/bin:/bin" },
+            timeout: target.timeout_ms, encoding: "buffer", maxBuffer: 64 * 1024 * 1024,
+          });
+          exitCode = typeof r.status === "number" ? r.status : null;
+          stdoutSha = r.stdout ? sha256(r.stdout) : null;
+          stderrSha = r.stderr ? sha256(r.stderr) : null;
+          result = exitCode === 0 ? "pass" : "fail";
+        }
       } else if (decoded.kind === "artifact_exists") {
         const target = decoded.value as ArtifactExistsOracleTarget;
         const abs = path.resolve(this.cwd, target.path);
@@ -2991,7 +3014,8 @@ export class TaskCellController {
         exit_code: exitCode, stdout_sha256: stdoutSha, stderr_sha256: stderrSha, artifact_sha256: artifactSha,
         started_at: startedAt, ended_at: this.now(), uid: currentUid(), trust_policy: this.principal.worker_trust_policy,
       });
-      if (!writeExclusive(path.resolve(this.cwd, rel), body)) throw new ControllerRefusal("oracle_evidence_exists", rel);
+      if (!isSafeSegment(item.id)) throw new ControllerRefusal("oracle_target_invalid", "oracle id is not a safe path segment");
+      if (!writeExclusiveContained(this.cwd, rel, body)) throw new ControllerRefusal("oracle_evidence_exists", rel);
       const settled = recordOracleOutcome({
         cwd: this.cwd, run_id: assignment.run_id, logical_task_id: ids.logical_task_id, item_id: item.id,
         state: result, now: this.now, binding: this.binding,

@@ -1007,7 +1007,12 @@ function runIngestPauseGate(payload: GuildHookEvent, cwd: string): boolean {
 function runLaneBindingPathGate(payload: GuildHookEvent, cwd: string): boolean {
   const tool = payload.tool_name ?? "";
   const ti = (payload.tool_input ?? {}) as Record<string, unknown>;
-  const target = laneBindingPathTarget(process.env, tool, ti);
+  let target: string | null;
+  try {
+    target = laneBindingPathTarget(process.env, tool, ti);
+  } catch {
+    target = "<binding guard could not evaluate the input>"; // fail closed: an unevaluable input is denied
+  }
   if (target === null) return false;
   const reason =
     `a lane worker may not access a run binding (${tool} input names or can resolve to .guild/runs/<run>/binding.json); ` +

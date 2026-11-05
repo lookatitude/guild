@@ -24262,6 +24262,9 @@ var init_policy_resolver = __esm({
 });
 
 // src/domains/config/session-binding.ts
+function modelFamilyForHostFamily(hostFamily) {
+  return Object.prototype.hasOwnProperty.call(HOST_TO_MODEL_FAMILY, hostFamily) ? HOST_TO_MODEL_FAMILY[hostFamily] : null;
+}
 function detectSession(env = process.env) {
   for (const sig of ENV_SIGNALS) {
     const raw = env[sig.env];
@@ -32096,6 +32099,7 @@ __export(config_exports, {
   maxComplexity: () => maxComplexity,
   migrationPreview: () => migrationPreview,
   modelCatalogCacheDir: () => modelCatalogCacheDir,
+  modelFamilyForHostFamily: () => modelFamilyForHostFamily,
   nextGeneration: () => nextGeneration,
   normalizeDiscovery: () => normalizeDiscovery,
   normalizeHostId: () => normalizeHostId,
@@ -47202,7 +47206,7 @@ function mintRunBinding(opts) {
   };
   fs100.mkdirp(path93.dirname(p));
   const contents = JSON.stringify(record, null, 2) + "\n";
-  const created = fs100.writeFileExclusive ? fs100.writeFileExclusive(p, contents) : !fs100.exists(p) && (fs100.writeFile(p, contents), true);
+  const created = fs100.writeFileExclusive ? fs100.writeFileExclusive(p, contents, PRIVATE_BINDING_MODE) : !fs100.exists(p) && (fs100.writeFile(p, contents), true);
   if (!created) {
     throw new Error(
       `run-binding: a binding for ${opts.run_id} is already minted \u2014 resume restores it (loadRunBinding); it is never re-minted`
@@ -47987,7 +47991,7 @@ function createRunLifecycle(env) {
         const abs = path94.join(plan.root, file.path);
         if (env.fs.exists(abs)) throw new Error("staged target is occupied");
         if (env.fs.writeFileExclusive) {
-          if (!env.fs.writeFileExclusive(abs, file.bytes)) throw new Error("staged target is occupied");
+          if (!env.fs.writeFileExclusive(abs, file.bytes, abs === runBindingPath(plan.root, plan.run_id) ? PRIVATE_BINDING_MODE : void 0)) throw new Error("staged target is occupied");
         } else env.fs.writeFile(abs, file.bytes);
       }
       env.initializeRunBindingExclusion?.(plan.root, plan.run_id);
@@ -48104,10 +48108,11 @@ function createRealEnv(root, resolveHost, captureCapabilityBaseline, recordCapab
         fsNode.mkdirSync(path94.dirname(absPath), { recursive: true });
         fsNode.writeFileSync(absPath, contents, "utf8");
       },
-      writeFileExclusive(absPath, contents) {
+      writeFileExclusive(absPath, contents, mode) {
         fsNode.mkdirSync(path94.dirname(absPath), { recursive: true });
         try {
-          fsNode.writeFileSync(absPath, contents, { encoding: "utf8", flag: "wx" });
+          fsNode.writeFileSync(absPath, contents, { encoding: "utf8", flag: "wx", ...mode === void 0 ? {} : { mode } });
+          if (mode !== void 0) fsNode.chmodSync(absPath, mode);
           return true;
         } catch (error) {
           if (error.code === "EEXIST") return false;
@@ -64595,6 +64600,7 @@ __export(lifecycle_exports, {
   PENDING_SUBSTANTIVE_OPERATION_SCHEMA: () => PENDING_SUBSTANTIVE_OPERATION_SCHEMA,
   PLAN_STEP_STATUSES: () => PLAN_STEP_STATUSES,
   PLUGIN_GRAPH_DIRS: () => PLUGIN_GRAPH_DIRS,
+  PRIVATE_BINDING_MODE: () => PRIVATE_BINDING_MODE,
   PRODUCT_LOOP_ENTRY_SKILL: () => PRODUCT_LOOP_ENTRY_SKILL,
   PROGRAM_STATUSES: () => PROGRAM_STATUSES2,
   PROJECTABLE_DOCUMENT_KINDS: () => PROJECTABLE_DOCUMENT_KINDS,

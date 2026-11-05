@@ -86,7 +86,8 @@ const fakeRun: RunFn = () => ({ status: 0, stdout: "", stderr: "" });
 
 /** tmux protocol answers for a real session launch: credential verifiably absent, create prints its identity. */
 const protocolRun: RunFn = (_cmd, args) => {
-  if (args.length === 3 && args[0] === "show-environment" && args[1] === "-g" && args[2] === "GUILD_RUN_BINDING_REF") {
+  // The global probe and the created session's probe (`-t <session>`) both answer "unset".
+  if (args[0] === "show-environment" && args[args.length - 1] === "GUILD_RUN_BINDING_REF" && (args[1] === "-g" || args[1] === "-t")) {
     return { status: 1, stdout: "", stderr: "unknown variable: GUILD_RUN_BINDING_REF\n" };
   }
   if (args[0] === "new-session" || args[0] === "new-window") return { status: 0, stdout: "$1 @1 77 1793000000\n", stderr: "" };

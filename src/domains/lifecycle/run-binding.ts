@@ -71,7 +71,7 @@ export interface BindingFs {
   /** Atomically replace one physically-contained file. Production always supplies this. */
   writeFileAtomicContained?(root: string, absPath: string, contents: string): void;
   /** Create a new file without replacing an existing inode. */
-  writeFileExclusive?(absPath: string, contents: string): boolean;
+  writeFileExclusive?(absPath: string, contents: string, mode?: number): boolean;
   readFile(absPath: string): string | null;
   exists(absPath: string): boolean;
 }
@@ -79,7 +79,7 @@ export interface BindingFs {
 // binding.json carries the run nonce: the real writers create and update it
 // owner-only (0600, CD21). chmod after the write also tightens a record created
 // earlier with a wider mode the first time this process updates it.
-const PRIVATE_BINDING_MODE = 0o600;
+export const PRIVATE_BINDING_MODE = 0o600;
 
 function realBindingFs(): BindingFs {
   return {
@@ -256,7 +256,7 @@ export function mintRunBinding(opts: RunBindingLocator & { readonly reserved_bin
   // exists check above improves the normal diagnostic but is not the race
   // control: only this exclusive create makes one same-ID starter the owner.
   const created = fs.writeFileExclusive
-    ? fs.writeFileExclusive(p, contents)
+    ? fs.writeFileExclusive(p, contents, PRIVATE_BINDING_MODE)
     : !fs.exists(p) && (fs.writeFile(p, contents), true);
   if (!created) {
     throw new Error(

@@ -11704,6 +11704,9 @@ var init_policy_resolver = __esm({
 });
 
 // src/domains/config/session-binding.ts
+function modelFamilyForHostFamily(hostFamily) {
+  return Object.prototype.hasOwnProperty.call(HOST_TO_MODEL_FAMILY, hostFamily) ? HOST_TO_MODEL_FAMILY[hostFamily] : null;
+}
 function detectSession(env = process.env) {
   for (const sig of ENV_SIGNALS) {
     const raw = env[sig.env];
@@ -19538,6 +19541,7 @@ __export(config_exports, {
   maxComplexity: () => maxComplexity,
   migrationPreview: () => migrationPreview,
   modelCatalogCacheDir: () => modelCatalogCacheDir,
+  modelFamilyForHostFamily: () => modelFamilyForHostFamily,
   nextGeneration: () => nextGeneration,
   normalizeDiscovery: () => normalizeDiscovery,
   normalizeHostId: () => normalizeHostId,
@@ -43936,6 +43940,7 @@ function validateExecutableDoneWhen(doneWhen, ctx) {
   if (doneWhenRefused(floor)) return { ok: false, reason: floor.reason };
   const out = [];
   for (const item of floor.items) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$/.test(item.id)) return { ok: false, reason: "oracle_id_invalid", item_id: item.id };
     if (!EXECUTABLE_ORACLE_KINDS.includes(item.oracle)) {
       return { ok: false, reason: "oracle_kind_unsupported_in_e00", item_id: item.id };
     }
@@ -45384,6 +45389,11 @@ function writeExclusive(abs, contents, mode = 384) {
     throw error;
   }
 }
+function writeExclusiveContained(root, rel2, contents) {
+  const prepared = prepareContainedWrite(root, rel2, { policy: "physical" });
+  if (isRefused(prepared)) throw new ControllerRefusal("write_not_contained", `${rel2}: ${prepared.code}`);
+  return writeExclusive(prepared.realPath, contents);
+}
 function writeExclusiveIdempotent(abs, contents) {
   if (writeExclusive(abs, contents)) return "created";
   const existing = regularBytes(abs);
@@ -45729,7 +45739,13 @@ function writeAckClaim(input) {
     claimed_at: (input.now ?? (() => (/* @__PURE__ */ new Date()).toISOString()))()
   };
   const abs = path87.join(root, outboxRel(assignment.run_id, assignment.instance_id, "ack-claim.json"));
-  if (writeExclusive(abs, json(claim))) return { ok: true, path: abs, claim };
+  let created;
+  try {
+    created = writeExclusiveContained(root, outboxRel(assignment.run_id, assignment.instance_id, "ack-claim.json"), json(claim));
+  } catch {
+    return refuse5("ack_claim_not_contained");
+  }
+  if (created) return { ok: true, path: abs, claim };
   const existing = readJsonFile2(abs);
   if (existing?.schema_version === ASSIGNMENT_ACK_CLAIM_SCHEMA && existing.run_id === claim.run_id && existing.instance_id === claim.instance_id && existing.assignment_sha256 === claim.assignment_sha256) return { ok: true, path: abs, claim: existing };
   return refuse5("ack_claim_conflict");
@@ -47412,17 +47428,21 @@ var init_task_cell_controller = __esm({
           let artifactSha = null;
           if (decoded.kind === "command") {
             const target = decoded.value;
-            const r = (0, import_child_process3.spawnSync)(target.argv[0], target.argv.slice(1), {
-              cwd: path87.resolve(this.cwd, target.cwd),
-              env: { PATH: process.env["PATH"] ?? "/usr/bin:/bin" },
-              timeout: target.timeout_ms,
-              encoding: "buffer",
-              maxBuffer: 64 * 1024 * 1024
-            });
-            exitCode = typeof r.status === "number" ? r.status : null;
-            stdoutSha = r.stdout ? sha2567(r.stdout) : null;
-            stderrSha = r.stderr ? sha2567(r.stderr) : null;
-            result2 = exitCode === 0 ? "pass" : "fail";
+            const cwdContained = checkContained(this.cwd, target.cwd, { policy: "physical" });
+            const cwdIsDir = !isRefused(cwdContained) && fs74.statSync(cwdContained.realPath, { throwIfNoEntry: false })?.isDirectory() === true;
+            if (cwdIsDir) {
+              const r = (0, import_child_process3.spawnSync)(target.argv[0], target.argv.slice(1), {
+                cwd: cwdContained.realPath,
+                env: { PATH: process.env["PATH"] ?? "/usr/bin:/bin" },
+                timeout: target.timeout_ms,
+                encoding: "buffer",
+                maxBuffer: 64 * 1024 * 1024
+              });
+              exitCode = typeof r.status === "number" ? r.status : null;
+              stdoutSha = r.stdout ? sha2567(r.stdout) : null;
+              stderrSha = r.stderr ? sha2567(r.stderr) : null;
+              result2 = exitCode === 0 ? "pass" : "fail";
+            }
           } else if (decoded.kind === "artifact_exists") {
             const target = decoded.value;
             const abs = path87.resolve(this.cwd, target.path);
@@ -47459,7 +47479,8 @@ var init_task_cell_controller = __esm({
             uid: currentUid(),
             trust_policy: this.principal.worker_trust_policy
           });
-          if (!writeExclusive(path87.resolve(this.cwd, rel2), body)) throw new ControllerRefusal("oracle_evidence_exists", rel2);
+          if (!isSafeSegment(item.id)) throw new ControllerRefusal("oracle_target_invalid", "oracle id is not a safe path segment");
+          if (!writeExclusiveContained(this.cwd, rel2, body)) throw new ControllerRefusal("oracle_evidence_exists", rel2);
           const settled = recordOracleOutcome({
             cwd: this.cwd,
             run_id: assignment.run_id,

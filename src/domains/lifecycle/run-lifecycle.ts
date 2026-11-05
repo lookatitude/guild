@@ -53,7 +53,9 @@ import {
   closeRunBinding,
   initializeRunBindingExclusion,
   mintRunBinding,
+  PRIVATE_BINDING_MODE,
   readRunBindingRecord,
+  runBindingPath,
   withRunBindingExclusion,
 } from "./run-binding";
 import type { ResolvedSettingsSnapshot } from "./runstart-preflight";
@@ -82,7 +84,7 @@ export interface RunLifecycleEnv {
     mkdirExclusive?(absPath: string): boolean;
     writeFile(absPath: string, contents: string): void;
     /** Atomic create used to establish unique run ownership. */
-    writeFileExclusive?(absPath: string, contents: string): boolean;
+    writeFileExclusive?(absPath: string, contents: string, mode?: number): boolean;
     readFile(absPath: string): string | null;
     exists(absPath: string): boolean;
     /** Remove one run-start transaction tree after a pre-exposure failure. */
@@ -1251,7 +1253,7 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
       if(env.fs.mkdirExclusive ? !env.fs.mkdirExclusive(own) : env.fs.exists(own))throw new Error("reserved run identity is occupied");
       if(!env.fs.mkdirExclusive)env.fs.mkdirp(own);
       for(const dir of plan.directories)env.fs.mkdirp(path.join(plan.root,dir));
-      for(const file of plan.files){const abs=path.join(plan.root,file.path);if(env.fs.exists(abs))throw new Error("staged target is occupied");if(env.fs.writeFileExclusive){if(!env.fs.writeFileExclusive(abs,file.bytes))throw new Error("staged target is occupied");}else env.fs.writeFile(abs,file.bytes);}
+      for(const file of plan.files){const abs=path.join(plan.root,file.path);if(env.fs.exists(abs))throw new Error("staged target is occupied");if(env.fs.writeFileExclusive){if(!env.fs.writeFileExclusive(abs,file.bytes,abs===runBindingPath(plan.root,plan.run_id)?PRIVATE_BINDING_MODE:undefined))throw new Error("staged target is occupied");}else env.fs.writeFile(abs,file.bytes);}
       env.initializeRunBindingExclusion?.(plan.root,plan.run_id);
       return plan.run_id;
     },
@@ -1439,10 +1441,12 @@ export function createRealEnv(
         fsNode.mkdirSync(path.dirname(absPath), { recursive: true });
         fsNode.writeFileSync(absPath, contents, "utf8");
       },
-      writeFileExclusive(absPath: string, contents: string): boolean {
+      writeFileExclusive(absPath: string, contents: string, mode?: number): boolean {
         fsNode.mkdirSync(path.dirname(absPath), { recursive: true });
         try {
-          fsNode.writeFileSync(absPath, contents, { encoding: "utf8", flag: "wx" });
+          // The mode is applied at create (O_EXCL), so a private file is never briefly readable.
+          fsNode.writeFileSync(absPath, contents, { encoding: "utf8", flag: "wx", ...(mode === undefined ? {} : { mode }) });
+          if (mode !== undefined) fsNode.chmodSync(absPath, mode);
           return true;
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;

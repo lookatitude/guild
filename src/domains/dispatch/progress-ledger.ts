@@ -565,6 +565,8 @@ export function validateExecutableDoneWhen(doneWhen: unknown, ctx: ExecutableDon
   if (doneWhenRefused(floor)) return { ok: false, reason: floor.reason };
   const out: Array<DoneWhenItem & { target: string; value: ExecutableTargetValue }> = [];
   for (const item of floor.items) {
+    // The id names the controller's evidence file: one safe path segment, never a path.
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$/.test(item.id)) return { ok: false, reason: "oracle_id_invalid", item_id: item.id };
     if (!(EXECUTABLE_ORACLE_KINDS as readonly string[]).includes(item.oracle)) {
       return { ok: false, reason: "oracle_kind_unsupported_in_e00", item_id: item.id };
     }

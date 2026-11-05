@@ -1533,7 +1533,8 @@ export class TmuxTeamBackend implements TeamBackend {
     if (!first) return { ok: false, failedCommand: null, stderr: "empty plan", orchestratorPaneId: "", teammatePaneIds: {} };
     // A client-side env cannot remove a key an existing server already holds: verify
     // absence (or no server) before any create. The server is never cleared or killed.
-    const before = probeServerCredential(this.run);
+    // A new session starts from the global env; any other mode joins the caller's current session.
+    const before = probeServerCredential(this.run, plan.mode === "new-session" ? undefined : []);
     if (before.state === "present" || before.state === "unverifiable") {
       capture.error = `refused before create: credential_env_${before.state === "present" ? "present_in_tmux_server" : "unverifiable"}: ${before.detail}`;
       return { ok: false, failedCommand: null, stderr: capture.error, orchestratorPaneId: "", teammatePaneIds: {} };
@@ -1556,7 +1557,7 @@ export class TmuxTeamBackend implements TeamBackend {
       capture.panes = captureLaunchPanes(capture.creating, this.run);
       // After the create only an observed absence verifies; anything else is a failure
       // through the identity-bound cleanup of the captured target, never a success.
-      const after = probeServerCredential(this.run);
+      const after = probeServerCredential(this.run, ["-t", capture.creating.session_id]);
       if (after.state !== "absent") {
         capture.error = `post-create credential check: ${after.state}${"detail" in after ? ` (${after.detail})` : ""}`;
         return fail(first, capture.error);
@@ -1833,11 +1834,27 @@ const isNoServer = (r: { status: number | null; stdout?: string; stderr?: string
  * `-KEY` or `unknown variable: KEY`; an exact isNoServer answer is no_server (a fresh
  * server starts from the sanitized env). Everything else is unverifiable.
  */
-function probeServerCredential(run: RunFn): { state: "absent" | "no_server" } | { state: "present" | "unverifiable"; detail: string } {
+type CredentialProbe = { state: "absent" | "no_server" } | { state: "present" | "unverifiable"; detail: string };
+
+/**
+ * The global probe, plus the session a pane inherits from when one is named: a new
+ * window or pane gets the global AND its session's environment, so both must lack the key.
+ * `session` is `[]` for the caller's current session, `["-t", target]` for a named one.
+ * A session probe has no "no server" answer: the server that holds the session is up.
+ */
+function probeServerCredential(run: RunFn, session?: readonly string[]): CredentialProbe {
+  const global = probeEnvScope(run, ["-g"]);
+  if (session === undefined || global.state !== "absent") return global;
+  const scoped = probeEnvScope(run, session);
+  if (scoped.state === "no_server") return { state: "unverifiable", detail: "session show-environment reported no server" };
+  return scoped;
+}
+
+function probeEnvScope(run: RunFn, scope: readonly string[]): CredentialProbe {
   const key = "GUILD_RUN_BINDING_REF";
   let r: ReturnType<RunFn>;
   try {
-    r = run("tmux", ["show-environment", "-g", key]);
+    r = run("tmux", ["show-environment", ...scope, key]);
   } catch {
     // Never the exception's message or code: either may carry environment bytes.
     return { state: "unverifiable", detail: "show-environment threw" };
@@ -2130,8 +2147,8 @@ export class TmuxTaskCellWorkerPort implements TaskCellWorkerPort {
    * `isNoServer` answer is no_server (a fresh server starts from the sanitized env;
    * accepted before the create only). Everything else is unverifiable.
    */
-  private credentialProbe(): { state: "absent" | "no_server" } | { state: "present" | "unverifiable"; detail: string } {
-    return probeServerCredential(this.run);
+  private credentialProbe(session?: string): CredentialProbe {
+    return probeServerCredential(this.run, session === undefined ? undefined : ["-t", session]);
   }
 
   private matchesRecorded(id: BoundPaneIdentity): PaneServerView["kind"] | "mismatch" {
@@ -2216,6 +2233,12 @@ export class TmuxTaskCellWorkerPort implements TaskCellWorkerPort {
     const probe = this.run("tmux", ["has-session", "-t", session]);
     if (probe.status === null) return refuse("spawn_failed:tmux did not run (no create issued)");
     const exists = probe.status === 0;
+    if (exists) {
+      // A new window inherits the existing session's environment as well as the global one.
+      const scoped = this.credentialProbe(session);
+      if (scoped.state === "present") return refuse(`credential_env_present_in_tmux_session:${scoped.detail}`);
+      if (scoped.state !== "absent") return refuse(`credential_env_unverifiable: ${"detail" in scoped ? scoped.detail : scoped.state}`);
+    }
 
     // From here the create has been issued: nothing proves the absence of a live pane.
     const unknown = (reason: string): TaskCellSpawnResult => ({ ok: false, reason, spawn_effect: "unknown" });
@@ -2286,7 +2309,7 @@ export class TmuxTaskCellWorkerPort implements TaskCellWorkerPort {
     // After the create, only an observed absent variable on the reachable server
     // verifies the pane's env; "no server running" no longer observes the server
     // that holds the pane. Anything else is unknown, identity retained, never used.
-    const after = this.credentialProbe();
+    const after = this.credentialProbe(session);
     if (after.state !== "absent") {
       return unknown(
         `spawn_outcome_unknown: verified pane ${identity.pane_id} spawned but its server env was ` +

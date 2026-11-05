@@ -86,7 +86,12 @@ function segmentRegex(seg: string): RegExp {
       i = close;
     } else re += escapeRe(c);
   }
-  return new RegExp(`^${re}$`, "i");
+  try {
+    return new RegExp(`^${re}$`, "i");
+  } catch {
+    // An invalid class (e.g. `[z-a]`) cannot be proven not to name the binding; every caller denies on a match.
+    return /^[\s\S]*$/;
+  }
 }
 
 function escapeRe(c: string): string {

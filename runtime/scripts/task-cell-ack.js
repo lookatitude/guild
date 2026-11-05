@@ -11523,6 +11523,9 @@ var init_policy_resolver = __esm({
 });
 
 // src/domains/config/session-binding.ts
+function modelFamilyForHostFamily(hostFamily) {
+  return Object.prototype.hasOwnProperty.call(HOST_TO_MODEL_FAMILY, hostFamily) ? HOST_TO_MODEL_FAMILY[hostFamily] : null;
+}
 function detectSession(env = process.env) {
   for (const sig of ENV_SIGNALS) {
     const raw = env[sig.env];
@@ -19357,6 +19360,7 @@ __export(config_exports, {
   maxComplexity: () => maxComplexity,
   migrationPreview: () => migrationPreview,
   modelCatalogCacheDir: () => modelCatalogCacheDir,
+  modelFamilyForHostFamily: () => modelFamilyForHostFamily,
   nextGeneration: () => nextGeneration,
   normalizeDiscovery: () => normalizeDiscovery,
   normalizeHostId: () => normalizeHostId,
@@ -40734,6 +40738,11 @@ function writeExclusive(abs, contents, mode = 384) {
     throw error;
   }
 }
+function writeExclusiveContained(root, rel2, contents) {
+  const prepared = prepareContainedWrite(root, rel2, { policy: "physical" });
+  if (isRefused(prepared)) throw new ControllerRefusal("write_not_contained", `${rel2}: ${prepared.code}`);
+  return writeExclusive(prepared.realPath, contents);
+}
 function runRel(runId, ...segments) {
   return path72.join(".guild", "runs", runId, ...segments);
 }
@@ -40770,12 +40779,18 @@ function writeAckClaim(input) {
     claimed_at: (input.now ?? (() => (/* @__PURE__ */ new Date()).toISOString()))()
   };
   const abs = path72.join(root, outboxRel(assignment.run_id, assignment.instance_id, "ack-claim.json"));
-  if (writeExclusive(abs, json(claim))) return { ok: true, path: abs, claim };
+  let created;
+  try {
+    created = writeExclusiveContained(root, outboxRel(assignment.run_id, assignment.instance_id, "ack-claim.json"), json(claim));
+  } catch {
+    return refuse5("ack_claim_not_contained");
+  }
+  if (created) return { ok: true, path: abs, claim };
   const existing = readJsonFile2(abs);
   if (existing?.schema_version === ASSIGNMENT_ACK_CLAIM_SCHEMA && existing.run_id === claim.run_id && existing.instance_id === claim.instance_id && existing.assignment_sha256 === claim.assignment_sha256) return { ok: true, path: abs, claim: existing };
   return refuse5("ack_claim_conflict");
 }
-var fs60, path72, ASSIGNMENT_ACK_CLAIM_SCHEMA, REQUIRED_INDEPENDENCE, refuse5, json, outboxRel;
+var fs60, path72, ASSIGNMENT_ACK_CLAIM_SCHEMA, REQUIRED_INDEPENDENCE, ControllerRefusal, refuse5, json, outboxRel;
 var init_task_cell_controller = __esm({
   "src/domains/dispatch/task-cell-controller.ts"() {
     fs60 = __toESM(require("fs"));
@@ -40800,6 +40815,15 @@ var init_task_cell_controller = __esm({
     init_teams();
     ASSIGNMENT_ACK_CLAIM_SCHEMA = "guild.assignment_ack_claim.v1";
     REQUIRED_INDEPENDENCE = Object.freeze({ reviewer_cross_host: "cross_family" });
+    ControllerRefusal = class extends Error {
+      constructor(reason, detail = "") {
+        super(detail ? `${reason}: ${detail}` : reason);
+        this.reason = reason;
+        this.name = "ControllerRefusal";
+      }
+      reason;
+      ok = false;
+    };
     refuse5 = (reason, detail) => detail ? { ok: false, reason, detail } : { ok: false, reason };
     json = (value) => JSON.stringify(value, null, 2) + "\n";
     outboxRel = (runId, instanceId, name) => runRel(runId, "outbox", instanceId, name);

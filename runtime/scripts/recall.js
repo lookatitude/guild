@@ -15457,6 +15457,9 @@ var init_policy_resolver = __esm({
 });
 
 // src/domains/config/session-binding.ts
+function modelFamilyForHostFamily(hostFamily) {
+  return Object.prototype.hasOwnProperty.call(HOST_TO_MODEL_FAMILY, hostFamily) ? HOST_TO_MODEL_FAMILY[hostFamily] : null;
+}
 function detectSession(env = process.env) {
   for (const sig of ENV_SIGNALS) {
     const raw = env[sig.env];
@@ -23291,6 +23294,7 @@ __export(config_exports, {
   maxComplexity: () => maxComplexity,
   migrationPreview: () => migrationPreview,
   modelCatalogCacheDir: () => modelCatalogCacheDir,
+  modelFamilyForHostFamily: () => modelFamilyForHostFamily,
   nextGeneration: () => nextGeneration,
   normalizeDiscovery: () => normalizeDiscovery,
   normalizeHostId: () => normalizeHostId,

@@ -21765,6 +21765,9 @@ var init_policy_resolver = __esm({
 });
 
 // src/domains/config/session-binding.ts
+function modelFamilyForHostFamily(hostFamily) {
+  return Object.prototype.hasOwnProperty.call(HOST_TO_MODEL_FAMILY, hostFamily) ? HOST_TO_MODEL_FAMILY[hostFamily] : null;
+}
 function detectSession(env = process.env) {
   for (const sig of ENV_SIGNALS) {
     const raw = env[sig.env];
@@ -29599,6 +29602,7 @@ __export(config_exports, {
   maxComplexity: () => maxComplexity,
   migrationPreview: () => migrationPreview,
   modelCatalogCacheDir: () => modelCatalogCacheDir,
+  modelFamilyForHostFamily: () => modelFamilyForHostFamily,
   nextGeneration: () => nextGeneration,
   normalizeDiscovery: () => normalizeDiscovery,
   normalizeHostId: () => normalizeHostId,
@@ -44324,7 +44328,11 @@ function segmentRegex(seg) {
       i = close;
     } else re += escapeRe2(c);
   }
-  return new RegExp(`^${re}$`, "i");
+  try {
+    return new RegExp(`^${re}$`, "i");
+  } catch {
+    return /^[\s\S]*$/;
+  }
 }
 function escapeRe2(c) {
   return c.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
@@ -45032,7 +45040,12 @@ function runIngestPauseGate(payload, cwd) {
 function runLaneBindingPathGate(payload, cwd) {
   const tool = payload.tool_name ?? "";
   const ti = payload.tool_input ?? {};
-  const target = laneBindingPathTarget(process.env, tool, ti);
+  let target;
+  try {
+    target = laneBindingPathTarget(process.env, tool, ti);
+  } catch {
+    target = "<binding guard could not evaluate the input>";
+  }
   if (target === null) return false;
   const reason = `a lane worker may not access a run binding (${tool} input names or can resolve to .guild/runs/<run>/binding.json); the controller holds the binding (CD21, accident prevention; ${BINDING_GUARD_LIMITS})`;
   const runId = resolveRunId(cwd);

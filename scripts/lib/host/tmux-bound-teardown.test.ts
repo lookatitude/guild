@@ -601,6 +601,30 @@ describe("TmuxTeamBackend child env and credential boundary (fake run / fake tmu
     }
   });
 
+  it("CW-10 F2: a session environment holding the binding is refused: before create when joining the current session, after create for the created session", () => {
+    const held = { status: 0, stdout: `${KEY}=held\n`, stderr: "" };
+    const sessionProbes: string[][] = [];
+    const sessionHeld = (base: RunFn): RunFn => (cmd, args, o) => {
+      if (args[0] !== "show-environment" || args[1] === "-g") return base(cmd, args, o);
+      sessionProbes.push(args);
+      return held;
+    };
+    // new-window joins the caller's session: probed (no -t) before any create.
+    const joined = fakeRun({ pre: absent, post: absent });
+    const windowPlan = { mode: "new-window" as const, targetName: "team-x", commands: [
+      { argv: ["tmux", "new-window", "-P", "-F", CREATE_IDENTITY_FORMAT, "-n", "team-x", "sleep 1"], display: "create" },
+    ] };
+    const w = new TmuxTeamBackend({ run: sessionHeld(joined.run), pluginOwnerRoot: PLUGIN }).spawn(windowPlan as never);
+    expect({ ok: w.ok, created: joined.created(), probed_session: sessionProbes.some((a) => a.length === 2) })
+      .toEqual({ ok: false, created: false, probed_session: true });
+    expect(w.stderr).toMatch(/^refused before create: credential_env_present_in_tmux_server/);
+    // new-session: the created session is probed by id after the create; a held key is a failure, never success.
+    const fresh = fakeRun({ pre: absent, post: absent });
+    const n = new TmuxTeamBackend({ run: sessionHeld(fresh.run), pluginOwnerRoot: PLUGIN }).spawn(plan);
+    expect({ ok: n.ok, created: fresh.created(), probed: sessionProbes.some((a) => a[1] === "-t" && a[2] === "$1") })
+      .toEqual({ ok: false, created: true, probed: true });
+  });
+
   it("a thrown or other-variable credential probe is unverifiable: refused before any create, the reason names it, nothing echoed", () => {
     const canary = "probe-throw-canary-41c2";
     const f = fakeRun({ pre: absent, post: absent });

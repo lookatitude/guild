@@ -11721,6 +11721,9 @@ var init_policy_resolver = __esm({
 });
 
 // src/domains/config/session-binding.ts
+function modelFamilyForHostFamily(hostFamily) {
+  return Object.prototype.hasOwnProperty.call(HOST_TO_MODEL_FAMILY, hostFamily) ? HOST_TO_MODEL_FAMILY[hostFamily] : null;
+}
 function detectSession(env = process.env) {
   for (const sig of ENV_SIGNALS) {
     const raw = env[sig.env];
@@ -19555,6 +19558,7 @@ __export(config_exports, {
   maxComplexity: () => maxComplexity,
   migrationPreview: () => migrationPreview,
   modelCatalogCacheDir: () => modelCatalogCacheDir,
+  modelFamilyForHostFamily: () => modelFamilyForHostFamily,
   nextGeneration: () => nextGeneration,
   normalizeDiscovery: () => normalizeDiscovery,
   normalizeHostId: () => normalizeHostId,
@@ -44160,6 +44164,7 @@ function validateExecutableDoneWhen(doneWhen, ctx) {
   if (doneWhenRefused(floor)) return { ok: false, reason: floor.reason };
   const out = [];
   for (const item of floor.items) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$/.test(item.id)) return { ok: false, reason: "oracle_id_invalid", item_id: item.id };
     if (!EXECUTABLE_ORACLE_KINDS.includes(item.oracle)) {
       return { ok: false, reason: "oracle_kind_unsupported_in_e00", item_id: item.id };
     }
@@ -46469,6 +46474,11 @@ function writeExclusive(abs, contents, mode = 384) {
     throw error;
   }
 }
+function writeExclusiveContained(root, rel2, contents) {
+  const prepared = prepareContainedWrite(root, rel2, { policy: "physical" });
+  if (isRefused(prepared)) throw new ControllerRefusal("write_not_contained", `${rel2}: ${prepared.code}`);
+  return writeExclusive(prepared.realPath, contents);
+}
 function writeExclusiveIdempotent(abs, contents) {
   if (writeExclusive(abs, contents)) return "created";
   const existing = regularBytes(abs);
@@ -48462,17 +48472,21 @@ var init_task_cell_controller = __esm({
           let artifactSha = null;
           if (decoded.kind === "command") {
             const target = decoded.value;
-            const r = (0, import_child_process3.spawnSync)(target.argv[0], target.argv.slice(1), {
-              cwd: path87.resolve(this.cwd, target.cwd),
-              env: { PATH: process.env["PATH"] ?? "/usr/bin:/bin" },
-              timeout: target.timeout_ms,
-              encoding: "buffer",
-              maxBuffer: 64 * 1024 * 1024
-            });
-            exitCode = typeof r.status === "number" ? r.status : null;
-            stdoutSha = r.stdout ? sha2567(r.stdout) : null;
-            stderrSha = r.stderr ? sha2567(r.stderr) : null;
-            result2 = exitCode === 0 ? "pass" : "fail";
+            const cwdContained = checkContained(this.cwd, target.cwd, { policy: "physical" });
+            const cwdIsDir = !isRefused(cwdContained) && fs74.statSync(cwdContained.realPath, { throwIfNoEntry: false })?.isDirectory() === true;
+            if (cwdIsDir) {
+              const r = (0, import_child_process3.spawnSync)(target.argv[0], target.argv.slice(1), {
+                cwd: cwdContained.realPath,
+                env: { PATH: process.env["PATH"] ?? "/usr/bin:/bin" },
+                timeout: target.timeout_ms,
+                encoding: "buffer",
+                maxBuffer: 64 * 1024 * 1024
+              });
+              exitCode = typeof r.status === "number" ? r.status : null;
+              stdoutSha = r.stdout ? sha2567(r.stdout) : null;
+              stderrSha = r.stderr ? sha2567(r.stderr) : null;
+              result2 = exitCode === 0 ? "pass" : "fail";
+            }
           } else if (decoded.kind === "artifact_exists") {
             const target = decoded.value;
             const abs = path87.resolve(this.cwd, target.path);
@@ -48509,7 +48523,8 @@ var init_task_cell_controller = __esm({
             uid: currentUid(),
             trust_policy: this.principal.worker_trust_policy
           });
-          if (!writeExclusive(path87.resolve(this.cwd, rel2), body)) throw new ControllerRefusal("oracle_evidence_exists", rel2);
+          if (!isSafeSegment(item.id)) throw new ControllerRefusal("oracle_target_invalid", "oracle id is not a safe path segment");
+          if (!writeExclusiveContained(this.cwd, rel2, body)) throw new ControllerRefusal("oracle_evidence_exists", rel2);
           const settled = recordOracleOutcome({
             cwd: this.cwd,
             run_id: assignment.run_id,
@@ -53407,6 +53422,7 @@ var MANAGED_CLAUDE_PROFILE = Object.freeze({
 init_lifecycle();
 
 // scripts/task-cell-controller.ts
+init_config2();
 init_state();
 
 // scripts/lib/capability/definition-ref-for-dispatch.ts
@@ -55536,11 +55552,18 @@ var isNoServer = (r) => {
   const err = r.stderr.replace(/\n$/, "");
   return /^no server running on \/[^\s()\p{C}]+$/u.test(err) || /^error connecting to \/[^\s()\p{C}]+ \(No such file or directory\)$/u.test(err);
 };
-function probeServerCredential(run) {
+function probeServerCredential(run, session) {
+  const global = probeEnvScope(run, ["-g"]);
+  if (session === void 0 || global.state !== "absent") return global;
+  const scoped = probeEnvScope(run, session);
+  if (scoped.state === "no_server") return { state: "unverifiable", detail: "session show-environment reported no server" };
+  return scoped;
+}
+function probeEnvScope(run, scope) {
   const key = "GUILD_RUN_BINDING_REF";
   let r;
   try {
-    r = run("tmux", ["show-environment", "-g", key]);
+    r = run("tmux", ["show-environment", ...scope, key]);
   } catch {
     return { state: "unverifiable", detail: "show-environment threw" };
   }
@@ -55726,8 +55749,8 @@ var TmuxTaskCellWorkerPort = class {
    * `isNoServer` answer is no_server (a fresh server starts from the sanitized env;
    * accepted before the create only). Everything else is unverifiable.
    */
-  credentialProbe() {
-    return probeServerCredential(this.run);
+  credentialProbe(session) {
+    return probeServerCredential(this.run, session === void 0 ? void 0 : ["-t", session]);
   }
   matchesRecorded(id) {
     const view = paneServerView(id.pane_id, this.run);
@@ -55826,6 +55849,11 @@ var TmuxTaskCellWorkerPort = class {
     const probe = this.run("tmux", ["has-session", "-t", session]);
     if (probe.status === null) return refuse6("spawn_failed:tmux did not run (no create issued)");
     const exists = probe.status === 0;
+    if (exists) {
+      const scoped = this.credentialProbe(session);
+      if (scoped.state === "present") return refuse6(`credential_env_present_in_tmux_session:${scoped.detail}`);
+      if (scoped.state !== "absent") return refuse6(`credential_env_unverifiable: ${"detail" in scoped ? scoped.detail : scoped.state}`);
+    }
     const unknown = (reason) => ({ ok: false, reason, spawn_effect: "unknown" });
     const recordUnknown = (observed) => {
       try {
@@ -55885,7 +55913,7 @@ var TmuxTaskCellWorkerPort = class {
     };
     this.panes.set(inst.instance_id, identity);
     this.hostArgs.set(inst.instance_id, `--append-system-prompt-file ${snapshot}`);
-    const after = this.credentialProbe();
+    const after = this.credentialProbe(session);
     if (after.state !== "absent") {
       return unknown(
         `spawn_outcome_unknown: verified pane ${identity.pane_id} spawned but its server env was ${"detail" in after ? `${after.state} (${after.detail})` : "not observable (no server running)"}; identity retained`
@@ -56041,6 +56069,10 @@ function validateLaneInputs(lanes) {
     ids.add(lane.logical_task_id);
     const family = familyForHostId(lane.host?.host_id);
     if (!family) return { ok: false, reason: "host_unknown", detail: `${lane.logical_task_id}: host ${lane.host?.host_id} is not a registry host` };
+    const modelFamily = modelFamilyForHostFamily(family);
+    if (modelFamily === null || lane.host.host_family !== modelFamily) {
+      return { ok: false, reason: "host_family_mismatch", detail: `${lane.logical_task_id}: host ${lane.host.host_id} is ${modelFamily ?? `${family} (no model family)`}, lane declares ${String(lane.host.host_family)}` };
+    }
     families.add(family);
   }
   if (families.size !== 1) return { ok: false, reason: "host_family_mixed", detail: [...families].join(",") };

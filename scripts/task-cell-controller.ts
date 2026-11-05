@@ -38,6 +38,7 @@ import {
   type TaskCellController,
 } from "../src/domains/dispatch";
 import { familyForHostId, rungKeyForSession, rungPlanForFamily } from "../src/adapters";
+import { modelFamilyForHostFamily } from "../src/domains/config";
 import { parseYaml } from "../src/domains/state";
 import { resolveAdoptedDefinition } from "./lib/capability/definition-ref-for-dispatch";
 import { durableGuildDir } from "./lib/state/storage";
@@ -127,6 +128,11 @@ export function validateLaneInputs(lanes: unknown): { ok: true; lanes: LaneSpec[
     ids.add(lane.logical_task_id);
     const family = familyForHostId(lane.host?.host_id);
     if (!family) return { ok: false, reason: "host_unknown", detail: `${lane.logical_task_id}: host ${lane.host?.host_id} is not a registry host` };
+    // Review independence compares this declared (model) family; it must be the one the host's registry family maps to, never a free label.
+    const modelFamily = modelFamilyForHostFamily(family);
+    if (modelFamily === null || lane.host.host_family !== modelFamily) {
+      return { ok: false, reason: "host_family_mismatch", detail: `${lane.logical_task_id}: host ${lane.host.host_id} is ${modelFamily ?? `${family} (no model family)`}, lane declares ${String(lane.host.host_family)}` };
+    }
     families.add(family);
   }
   if (families.size !== 1) return { ok: false, reason: "host_family_mixed", detail: [...families].join(",") };

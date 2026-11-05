@@ -11979,6 +11979,9 @@ var init_policy_resolver = __esm({
 });
 
 // src/domains/config/session-binding.ts
+function modelFamilyForHostFamily(hostFamily) {
+  return Object.prototype.hasOwnProperty.call(HOST_TO_MODEL_FAMILY, hostFamily) ? HOST_TO_MODEL_FAMILY[hostFamily] : null;
+}
 function detectSession(env = process.env) {
   for (const sig of ENV_SIGNALS) {
     const raw = env[sig.env];
@@ -19813,6 +19816,7 @@ __export(config_exports, {
   maxComplexity: () => maxComplexity,
   migrationPreview: () => migrationPreview,
   modelCatalogCacheDir: () => modelCatalogCacheDir,
+  modelFamilyForHostFamily: () => modelFamilyForHostFamily,
   nextGeneration: () => nextGeneration,
   normalizeDiscovery: () => normalizeDiscovery,
   normalizeHostId: () => normalizeHostId,
@@ -50046,7 +50050,7 @@ var TmuxTeamBackend = class {
       return { ok: false, failedCommand: c, stderr, orchestratorPaneId: "", teammatePaneIds: {} };
     };
     if (!first) return { ok: false, failedCommand: null, stderr: "empty plan", orchestratorPaneId: "", teammatePaneIds: {} };
-    const before = probeServerCredential(this.run);
+    const before = probeServerCredential(this.run, plan.mode === "new-session" ? void 0 : []);
     if (before.state === "present" || before.state === "unverifiable") {
       capture.error = `refused before create: credential_env_${before.state === "present" ? "present_in_tmux_server" : "unverifiable"}: ${before.detail}`;
       return { ok: false, failedCommand: null, stderr: capture.error, orchestratorPaneId: "", teammatePaneIds: {} };
@@ -50067,7 +50071,7 @@ var TmuxTeamBackend = class {
         if (r.status !== 0) return fail(c, r.stderr);
       }
       capture.panes = captureLaunchPanes(capture.creating, this.run);
-      const after = probeServerCredential(this.run);
+      const after = probeServerCredential(this.run, ["-t", capture.creating.session_id]);
       if (after.state !== "absent") {
         capture.error = `post-create credential check: ${after.state}${"detail" in after ? ` (${after.detail})` : ""}`;
         return fail(first, capture.error);
@@ -50238,11 +50242,18 @@ var isNoServer = (r) => {
   const err = r.stderr.replace(/\n$/, "");
   return /^no server running on \/[^\s()\p{C}]+$/u.test(err) || /^error connecting to \/[^\s()\p{C}]+ \(No such file or directory\)$/u.test(err);
 };
-function probeServerCredential(run) {
+function probeServerCredential(run, session) {
+  const global = probeEnvScope(run, ["-g"]);
+  if (session === void 0 || global.state !== "absent") return global;
+  const scoped = probeEnvScope(run, session);
+  if (scoped.state === "no_server") return { state: "unverifiable", detail: "session show-environment reported no server" };
+  return scoped;
+}
+function probeEnvScope(run, scope) {
   const key = "GUILD_RUN_BINDING_REF";
   let r;
   try {
-    r = run("tmux", ["show-environment", "-g", key]);
+    r = run("tmux", ["show-environment", ...scope, key]);
   } catch {
     return { state: "unverifiable", detail: "show-environment threw" };
   }

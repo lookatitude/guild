@@ -87,6 +87,11 @@ const ENV_SIGNALS: ReadonlyArray<{ env: string; family?: string; fromValue?: boo
   { env: "GEMINI_CLI", family: "gemini" },
 ]);
 
+/** The model family of a registry host family, or null when the map does not name one. */
+export function modelFamilyForHostFamily(hostFamily: string): string | null {
+  return Object.prototype.hasOwnProperty.call(HOST_TO_MODEL_FAMILY, hostFamily) ? HOST_TO_MODEL_FAMILY[hostFamily]! : null;
+}
+
 const KNOWN_FAMILIES = new Set([...Object.keys(HOST_TO_MODEL_FAMILY), "cline", "zed", "aider", "windsurf", "pi"]);
 
 /**
