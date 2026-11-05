@@ -25,6 +25,7 @@ import {
   cancelInvocation,
   completeRound,
   initInvocationState,
+  invocationIdFor,
   invocationStateHash,
   loadInvocationState,
   openInvocation,
@@ -384,6 +385,18 @@ describe("negative control: restart cannot reset the budget or turn exhaustion i
     expect(refused(beginRound(ctx, basis, { invocation_id: inv, expected_round: 3 }))).toBe("state-stale");
   });
 
+  it("after crash recovery settles the head, replaying the pre-round snapshot is stale", () => {
+    const basis = compile();
+    const inv = runTwoRounds(basis);
+    const before = read(snap());
+    expect(() => beginRound(ctx, basis, { invocation_id: inv, expected_round: 3 }, { faults: { afterSnapshot: () => { throw new Error("crash"); } } })).toThrow();
+    expect(must(resumeInvocations(ctx, basis)).next).toEqual({ kind: "await-round", invocation_id: inv, round: 3 });
+    expect(JSON.parse(read(head())).phase).toBe("committed");
+    fs.writeFileSync(snap(), before);
+    expect(refused(resumeInvocations(ctx, basis))).toBe("state-stale");
+    expect(refused(beginRound(ctx, basis, { invocation_id: inv, expected_round: 3 }))).toBe("state-stale");
+  });
+
   it("restoring an older snapshot is refused as stale", () => {
     const basis = compile();
     must(initInvocationState(ctx, basis));
@@ -432,8 +445,8 @@ describe("negative control: restart cannot reset the budget or turn exhaustion i
     must(initInvocationState(ctx, basis));
     tamper((s) => {
       const l = s.basis.loops.find((x) => x.id === "r.fix")!;
-      s.invocations.push({ id: "inv:r.fix", loop_id: "r.fix", node_id: l.entry, parent: null, max_rounds: l.max_rounds, definition_hash: s.basis.definition_hash, subject_hash: SUBJECT, state: "active", escalation: null, cancel_reason: null, rounds: [] });
-      s.stack = ["inv:r.fix"];
+      s.invocations.push({ id: invocationIdFor("r.fix", null), loop_id: "r.fix", node_id: l.entry, parent: null, max_rounds: l.max_rounds, definition_hash: s.basis.definition_hash, subject_hash: SUBJECT, state: "active", escalation: null, cancel_reason: null, rounds: [] });
+      s.stack = [invocationIdFor("r.fix", null)];
     });
     expect(refused(loadInvocationState(ctx, basis))).toBe("state-corrupt");
   });
@@ -527,7 +540,7 @@ describe("invocation stack, nesting and inputs", () => {
     must(beginRound(ctx, basis, { invocation_id: a, expected_round: 1 }));
     expect(refused(openInvocation(ctx, basis, { loop_id: "b", subject_hash: SUBJECT, parent: { invocation_id: a, round: 1 } }))).toBe("invalid-input");
     const s = JSON.parse(read(snap())) as InvocationStateV1;
-    const child = { ...s.invocations[0], id: `${a}:1:b`, loop_id: "b", node_id: s.basis.loops.find((l) => l.id === "b")!.entry, parent: { invocation_id: a, round: 1 }, rounds: [] };
+    const child = { ...s.invocations[0], id: invocationIdFor("b", { invocation_id: a, round: 1 }), loop_id: "b", node_id: s.basis.loops.find((l) => l.id === "b")!.entry, parent: { invocation_id: a, round: 1 }, rounds: [] };
     s.invocations.push(child);
     s.stack.push(child.id);
     s.state_hash = invocationStateHash(s);
@@ -573,6 +586,37 @@ describe("invocation stack, nesting and inputs", () => {
     const c = must(cancelInvocation(ctx, basis, { invocation_id: inner, reason: "operator stopped the fix loop" }));
     expect(c.state).toBe("cancelled");
     expect(must(loadInvocationState(ctx, basis)).stack).toEqual([outer]);
+  });
+
+  it("deeply nested loops with long step ids keep bounded invocation ids", () => {
+    const id = (c: string) => c.repeat(32);
+    let body: unknown = task("work");
+    for (const c of ["d", "c", "b", "a"]) body = { kind: "repeat", id: id(c), max_rounds: 1, until: { kind: "outcome", equals: "ok" }, body };
+    const reg = createComponentRegistry([component("deep", ["write"], body)]);
+    if (!reg.ok) throw new Error("fixture");
+    const r = compileWorkflow(reg.registry, { class: "research", workflow: { source_id: "proj-a", id: "deep" }, root: { id: "deep", version: "1" }, policy: { roles: { developer: ["code"] } } });
+    if (!r.ok) throw new Error(JSON.stringify(r.violations));
+    const basis = { projection: r.projection, manifest: r.manifest };
+    must(initInvocationState(ctx, basis));
+    let parent: { invocation_id: string; round: number } | undefined;
+    for (const c of ["a", "b", "c", "d"]) {
+      const inv = must(openInvocation(ctx, basis, { loop_id: id(c), subject_hash: SUBJECT, ...(parent ? { parent } : {}) }));
+      expect(inv.id.length).toBeLessThanOrEqual(128);
+      must(beginRound(ctx, basis, { invocation_id: inv.id, expected_round: 1 }));
+      parent = { invocation_id: inv.id, round: 1 };
+    }
+    expect(must(loadInvocationState(ctx, basis)).stack.length).toBe(4);
+  });
+
+  it("an aliased list that would expand into millions of values is refused cheaply", () => {
+    const basis = compile();
+    const inv = runTwoRounds(basis);
+    must(beginRound(ctx, basis, { invocation_id: inv, expected_round: 3 }));
+    let x: unknown = "q";
+    for (let k = 0; k < 12; k++) x = Array(8).fill(x);
+    const t0 = Date.now();
+    expect(refused(completeRound(ctx, basis, { invocation_id: inv, round: 3, outcome: "approve", unresolved_questions: x as string[], evidence: [] }))).toBe("invalid-input");
+    expect(Date.now() - t0).toBeLessThan(1000);
   });
 
   it("unknown loops, malformed ids, bad hashes and oversize inputs are refused", () => {

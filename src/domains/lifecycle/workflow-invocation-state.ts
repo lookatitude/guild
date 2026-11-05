@@ -44,7 +44,7 @@ export const INVOCATION_STATE_FILE = "workflow-invocations.json" as const;
 export const INVOCATION_HEAD_FILE = "workflow-invocations.head.json" as const;
 export const INVOCATION_LOCK_FILE = "workflow-invocations.lock" as const;
 
-const LIMITS = Object.freeze({ fileBytes: 4 << 20, headBytes: 4096, lockBytes: 256, invocations: 1000, questions: 64, evidence: 64, artifacts: 64, reason: 500, depth: 16 });
+const LIMITS = Object.freeze({ inputNodes: 4096, fileNodes: 4 << 20, fileBytes: 4 << 20, headBytes: 4096, lockBytes: 256, invocations: 1000, questions: 64, evidence: 64, artifacts: 64, reason: 500, depth: 16 });
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const HASH = /^sha256:[a-f0-9]{64}$/;
 
@@ -195,8 +195,11 @@ function isPlain(v: unknown): v is Record<string, unknown> {
 }
 
 /** Copy untrusted data into plain values; accessors, symbols, exotic prototypes and cycles are refused. */
-function detach(v: unknown, rule: StoreRule, where: string, depth = 0): unknown {
+function detach(v: unknown, rule: StoreRule, where: string, depth = 0, budget: { left: number } = { left: LIMITS.inputNodes }): unknown {
   if (depth > LIMITS.depth) refuse(rule, `${where} nests too deeply`);
+  // Every visited node spends budget, so aliased arrays cannot expand an input
+  // into millions of copies before validation.
+  if (--budget.left < 0) refuse(rule, `${where}: input exceeds ${LIMITS.inputNodes} values`);
   if (v === null || typeof v === "string" || typeof v === "boolean") return v;
   if (typeof v === "number") {
     if (!Number.isFinite(v)) refuse(rule, `${where} holds a non-finite number`);
@@ -204,11 +207,12 @@ function detach(v: unknown, rule: StoreRule, where: string, depth = 0): unknown 
   }
   if (Array.isArray(v)) {
     if (Object.getPrototypeOf(v) !== Array.prototype) refuse(rule, `${where} is not a plain array`);
+    if (v.length > budget.left) refuse(rule, `${where}: input exceeds ${LIMITS.inputNodes} values`);
     const out: unknown[] = [];
     for (let i = 0; i < v.length; i++) {
       const d = Object.getOwnPropertyDescriptor(v, i);
       if (!d || !("value" in d)) refuse(rule, `${where}[${i}] is an accessor or hole`);
-      out.push(detach(d.value, rule, `${where}[${i}]`, depth + 1));
+      out.push(detach(d.value, rule, `${where}[${i}]`, depth + 1, budget));
     }
     return out;
   }
@@ -219,7 +223,7 @@ function detach(v: unknown, rule: StoreRule, where: string, depth = 0): unknown 
     const d = Object.getOwnPropertyDescriptor(v, k)!;
     if (!("value" in d)) refuse(rule, `${where}.${k} is an accessor`);
     if (d.value === undefined) continue;
-    out[k] = detach(d.value, rule, `${where}.${k}`, depth + 1);
+    out[k] = detach(d.value, rule, `${where}.${k}`, depth + 1, budget);
   }
   return out;
 }
@@ -299,7 +303,7 @@ function loopBody(p: WorkflowProjectionV2, entry: string, exit: string): string[
 }
 
 function basisOf(raw: InvocationBasis): StateBasis {
-  const b = detach(raw, "invalid-input", "basis") as unknown as InvocationBasis;
+  const b = detach(raw, "invalid-input", "basis", 0, { left: LIMITS.fileNodes }) as unknown as InvocationBasis;
   const p = b?.projection;
   const m = b?.manifest;
   if (!isPlain(p) || !isPlain(m)) refuse("invalid-input", "basis must carry a compiled projection and manifest");
@@ -374,8 +378,9 @@ function derive(inv: Pick<InvocationRecord, "rounds" | "max_rounds" | "cancel_re
   return { state: "active", escalation: null };
 }
 
-function invocationIdFor(loopId: string, parent: { invocation_id: string; round: number } | null): string {
-  return parent === null ? `inv:${loopId}` : `${parent.invocation_id}:${parent.round}:${loopId}`;
+/** Bounded, deterministic id: a digest of the loop and its parent round, never the concatenated ancestry. */
+export function invocationIdFor(loopId: string, parent: { invocation_id: string; round: number } | null): string {
+  return `inv:${crypto.createHash("sha256").update(canonicalJson({ loop: loopId, parent }), "utf8").digest("hex").slice(0, 32)}`;
 }
 
 // ---------------------------------------------------------------- validation
@@ -515,7 +520,7 @@ function readContained(root: string, rel: string, max: number): string | null {
 
 function parseJson(text: string, what: string): unknown {
   try {
-    return detach(JSON.parse(text), C, what);
+    return detach(JSON.parse(text), C, what, 0, { left: LIMITS.fileNodes });
   } catch (err) {
     if (err instanceof Refusal) throw err;
     refuse(C, `${what} is not JSON`);
@@ -531,7 +536,7 @@ function parseJson(text: string, what: string): unknown {
  * returned success) accepts its target or its named predecessor. Any other
  * snapshot is refused, whatever its own chain says.
  */
-function readState(ctx: StoreContext): InvocationStateV1 | null {
+function readState(ctx: StoreContext, settle = false): InvocationStateV1 | null {
   const p = paths(ctx);
   const headText = readContained(ctx.root, p.head, LIMITS.headBytes);
   const snapText = readContained(ctx.root, p.snap, LIMITS.fileBytes);
@@ -550,10 +555,23 @@ function readState(ctx: StoreContext): InvocationStateV1 | null {
     refuse("state-missing", "the head names a snapshot that is gone; refusing to restart the loop budget");
   }
   const state = checkState(parseJson(snapText, "snapshot"), ctx.run_id);
-  if (h.seq === state.seq && h.state_hash === state.state_hash && h.prev_state_hash === state.prev_state_hash) return state;
+  const exact = h.seq === state.seq && h.state_hash === state.state_hash && h.prev_state_hash === state.prev_state_hash;
   // Only a PENDING head (the write never returned success) may fall back to its predecessor.
-  if (h.phase === "pending" && h.seq === state.seq + 1 && h.prev_state_hash === state.state_hash) return state;
+  const predecessor = h.phase === "pending" && h.seq === state.seq + 1 && h.prev_state_hash === state.state_hash;
+  if (exact || predecessor) {
+    // Under the run lock, settle a pending head onto whichever snapshot was
+    // accepted, so a later replay of the other one is stale.
+    if (settle && h.phase === "pending") writeHead(ctx, state, "committed");
+    return state;
+  }
   refuse("state-stale", `snapshot seq ${state.seq} is not the one the head (seq ${String(h.seq)}) names`);
+}
+
+function writeHead(ctx: StoreContext, st: Pick<InvocationStateV1, "seq" | "state_hash" | "prev_state_hash">, phase: HeadV1["phase"]): void {
+  assertLockHeld(ctx);
+  const h: HeadV1 = { schema_version: WORKFLOW_INVOCATION_HEAD_SCHEMA, run_id: ctx.run_id, seq: st.seq, state_hash: st.state_hash, prev_state_hash: st.prev_state_hash, phase };
+  const w = writeContainedFile(ctx.root, paths(ctx).head, Buffer.from(JSON.stringify(h, null, 2) + "\n", "utf8"));
+  if (!w.written) refuse(w.code === "write-failed" ? "write-failed" : "path-not-contained", `head: ${w.detail ?? w.code}`);
 }
 
 function persist(ctx: StoreContext, prev: InvocationStateV1 | null, next: Omit<InvocationStateV1, "seq" | "prev_state_hash" | "state_hash">, opts: StoreOptions): InvocationStateV1 {
@@ -662,9 +680,9 @@ function withLock<T>(ctx: StoreContext, fn: () => T): T {
 }
 
 /** Load, verify and require the state to be bound to exactly this basis. */
-function loadBound(ctx: StoreContext, raw: InvocationBasis): { state: InvocationStateV1; basis: StateBasis } {
+function loadBound(ctx: StoreContext, raw: InvocationBasis, settle = false): { state: InvocationStateV1; basis: StateBasis } {
   const basis = basisOf(raw);
-  const state = readState(ctx);
+  const state = readState(ctx, settle);
   if (!state) refuse("no-state", "no invocation state on this run; call initInvocationState first");
   if (state.basis_hash !== sha256Of(basis)) {
     refuse("replan-required", `run state is bound to definition ${state.basis.definition_hash}; the current basis is ${basis.definition_hash} — replan explicitly`);
@@ -705,7 +723,7 @@ function input(raw: unknown, keys: readonly string[], optional: readonly string[
 export function initInvocationState(ctx: StoreContext, raw: InvocationBasis, opts: StoreOptions = {}): StoreResult<InvocationStateV1> {
   return guard(() => withLock(ctx, () => {
     const basis = basisOf(raw);
-    const existing = readState(ctx);
+    const existing = readState(ctx, true);
     if (existing) {
       if (existing.basis_hash !== sha256Of(basis)) refuse("replan-required", "the run already holds state for another definition");
       refuse("state-exists", "the run already holds invocation state; resume it");
@@ -719,10 +737,14 @@ export function loadInvocationState(ctx: StoreContext, raw: InvocationBasis): St
   return guard(() => loadBound(ctx, raw).state);
 }
 
-/** What a restarted controller must do next. Deterministic for the same bytes; never writes. */
+/**
+ * What a restarted controller must do next. Deterministic for the same bytes.
+ * Takes the run lock and settles a pending head (crash recovery); it never
+ * changes the snapshot.
+ */
 export function resumeInvocations(ctx: StoreContext, raw: InvocationBasis): StoreResult<{ state: InvocationStateV1; next: ResumeAction }> {
-  return guard(() => {
-    const { state } = loadBound(ctx, raw);
+  return guard(() => withLock(ctx, () => {
+    const { state } = loadBound(ctx, raw, true);
     const top = state.stack[state.stack.length - 1];
     if (top === undefined) return { state, next: { kind: "idle" } as ResumeAction };
     const inv = findInv(state, top);
@@ -730,7 +752,7 @@ export function resumeInvocations(ctx: StoreContext, raw: InvocationBasis): Stor
     const last = inv.rounds[inv.rounds.length - 1];
     if (last && last.status === "started") return { state, next: { kind: "await-round", invocation_id: inv.id, round: last.round } };
     return { state, next: { kind: "begin-round", invocation_id: inv.id, round: inv.rounds.length + 1 } };
-  });
+  }));
 }
 
 export interface OpenInvocationInput { loop_id: string; subject_hash: string; parent?: { invocation_id: string; round: number } }
@@ -742,7 +764,7 @@ export interface OpenInvocationInput { loop_id: string; subject_hash: string; pa
  */
 export function openInvocation(ctx: StoreContext, raw: InvocationBasis, rawIn: OpenInvocationInput, opts: StoreOptions = {}): StoreResult<InvocationRecord> {
   return guard(() => withLock(ctx, () => {
-    const { state } = loadBound(ctx, raw);
+    const { state } = loadBound(ctx, raw, true);
     const inp = input(rawIn, ["loop_id", "subject_hash"], ["parent"]);
     if (!isId(inp.loop_id) || !isHash(inp.subject_hash)) refuse("invalid-input", "loop_id must be an id and subject_hash a sha256:<hex> digest");
     const loop = loopOf(state.basis, inp.loop_id);
@@ -799,7 +821,7 @@ export function openInvocation(ctx: StoreContext, raw: InvocationBasis, rawIn: O
  */
 export function beginRound(ctx: StoreContext, raw: InvocationBasis, rawIn: { invocation_id: string; expected_round: number }, opts: StoreOptions = {}): StoreResult<{ invocation_id: string; round: number }> {
   return guard(() => withLock(ctx, () => {
-    const { state } = loadBound(ctx, raw);
+    const { state } = loadBound(ctx, raw, true);
     const inp = input(rawIn, ["invocation_id", "expected_round"]);
     if (!isInt(inp.expected_round, 1)) refuse("invalid-input", "expected_round must be a positive integer");
     const inv = findInv(state, inp.invocation_id);
@@ -832,7 +854,7 @@ export interface CompleteRoundInput {
 /** Record the in-flight round's result; derive accepted / active / blocked. Idempotent for an identical replay. */
 export function completeRound(ctx: StoreContext, raw: InvocationBasis, rawIn: CompleteRoundInput, opts: StoreOptions = {}): StoreResult<{ state: InvocationStatus; escalation: Escalation | null; replayed: boolean }> {
   return guard(() => withLock(ctx, () => {
-    const { state } = loadBound(ctx, raw);
+    const { state } = loadBound(ctx, raw, true);
     const inp = input(rawIn, ["invocation_id", "round", "outcome", "unresolved_questions", "evidence"], ["obligations_accepted", "artifacts"]);
     if (!isInt(inp.round, 1) || !isId(inp.outcome)) refuse("invalid-input", "round must be a positive integer and outcome an id");
     if (inp.obligations_accepted !== undefined && typeof inp.obligations_accepted !== "boolean") refuse("invalid-input", "obligations_accepted must be boolean");
@@ -870,7 +892,7 @@ export function completeRound(ctx: StoreContext, raw: InvocationBasis, rawIn: Co
 /** Operator/controller cancel of the innermost open invocation (the way past an exhausted loop short of a replan). */
 export function cancelInvocation(ctx: StoreContext, raw: InvocationBasis, rawIn: { invocation_id: string; reason: string }, opts: StoreOptions = {}): StoreResult<InvocationRecord> {
   return guard(() => withLock(ctx, () => {
-    const { state } = loadBound(ctx, raw);
+    const { state } = loadBound(ctx, raw, true);
     const inp = input(rawIn, ["invocation_id", "reason"]);
     if (typeof inp.reason !== "string" || inp.reason.trim() === "" || inp.reason.length > LIMITS.reason) refuse("invalid-input", `reason must be 1..${LIMITS.reason} chars`);
     const inv = findInv(state, inp.invocation_id);
@@ -899,7 +921,7 @@ export function replanInvocationState(ctx: StoreContext, raw: InvocationBasis, r
     const basis = basisOf(raw);
     const inp = input(rawIn, ["reason"]);
     if (typeof inp.reason !== "string" || inp.reason.trim() === "" || inp.reason.length > LIMITS.reason) refuse("invalid-input", `reason must be 1..${LIMITS.reason} chars`);
-    const old = readState(ctx);
+    const old = readState(ctx, true);
     if (!old) refuse("no-state", "nothing to replan; initialise instead");
     const basisHash = sha256Of(basis);
     if (old.basis_hash === basisHash) refuse("replan-unchanged", "the basis is unchanged; resume the existing invocations");

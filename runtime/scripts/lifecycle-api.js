@@ -49996,8 +49996,9 @@ function isPlain3(v) {
   const p = Object.getPrototypeOf(v);
   return p === Object.prototype || p === null;
 }
-function detach3(v, rule, where, depth = 0) {
+function detach3(v, rule, where, depth = 0, budget = { left: LIMITS2.inputNodes }) {
   if (depth > LIMITS2.depth) refuse7(rule, `${where} nests too deeply`);
+  if (--budget.left < 0) refuse7(rule, `${where}: input exceeds ${LIMITS2.inputNodes} values`);
   if (v === null || typeof v === "string" || typeof v === "boolean") return v;
   if (typeof v === "number") {
     if (!Number.isFinite(v)) refuse7(rule, `${where} holds a non-finite number`);
@@ -50005,11 +50006,12 @@ function detach3(v, rule, where, depth = 0) {
   }
   if (Array.isArray(v)) {
     if (Object.getPrototypeOf(v) !== Array.prototype) refuse7(rule, `${where} is not a plain array`);
+    if (v.length > budget.left) refuse7(rule, `${where}: input exceeds ${LIMITS2.inputNodes} values`);
     const out2 = [];
     for (let i = 0; i < v.length; i++) {
       const d = Object.getOwnPropertyDescriptor(v, i);
       if (!d || !("value" in d)) refuse7(rule, `${where}[${i}] is an accessor or hole`);
-      out2.push(detach3(d.value, rule, `${where}[${i}]`, depth + 1));
+      out2.push(detach3(d.value, rule, `${where}[${i}]`, depth + 1, budget));
     }
     return out2;
   }
@@ -50020,7 +50022,7 @@ function detach3(v, rule, where, depth = 0) {
     const d = Object.getOwnPropertyDescriptor(v, k);
     if (!("value" in d)) refuse7(rule, `${where}.${k} is an accessor`);
     if (d.value === void 0) continue;
-    out[k] = detach3(d.value, rule, `${where}.${k}`, depth + 1);
+    out[k] = detach3(d.value, rule, `${where}.${k}`, depth + 1, budget);
   }
   return out;
 }
@@ -50086,7 +50088,7 @@ function loopBody(p, entry, exit) {
   return [...a].filter((n) => b.has(n)).sort();
 }
 function basisOf(raw) {
-  const b = detach3(raw, "invalid-input", "basis");
+  const b = detach3(raw, "invalid-input", "basis", 0, { left: LIMITS2.fileNodes });
   const p = b?.projection;
   const m = b?.manifest;
   if (!isPlain3(p) || !isPlain3(m)) refuse7("invalid-input", "basis must carry a compiled projection and manifest");
@@ -50152,7 +50154,7 @@ function derive(inv, loop) {
   return { state: "active", escalation: null };
 }
 function invocationIdFor(loopId, parent) {
-  return parent === null ? `inv:${loopId}` : `${parent.invocation_id}:${parent.round}:${loopId}`;
+  return `inv:${crypto28.createHash("sha256").update(canonicalJson4({ loop: loopId, parent }), "utf8").digest("hex").slice(0, 32)}`;
 }
 function checkRound(r, n, last, where) {
   if (!isPlain3(r)) refuse7(C, `${where} is not an object`);
@@ -50276,13 +50278,13 @@ function readContained2(root, rel2, max) {
 }
 function parseJson(text, what) {
   try {
-    return detach3(JSON.parse(text), C, what);
+    return detach3(JSON.parse(text), C, what, 0, { left: LIMITS2.fileNodes });
   } catch (err) {
     if (err instanceof Refusal) throw err;
     refuse7(C, `${what} is not JSON`);
   }
 }
-function readState(ctx) {
+function readState(ctx, settle = false) {
   const p = paths(ctx);
   const headText = readContained2(ctx.root, p.head, LIMITS2.headBytes);
   const snapText = readContained2(ctx.root, p.snap, LIMITS2.fileBytes);
@@ -50300,9 +50302,19 @@ function readState(ctx) {
     refuse7("state-missing", "the head names a snapshot that is gone; refusing to restart the loop budget");
   }
   const state = checkState(parseJson(snapText, "snapshot"), ctx.run_id);
-  if (h.seq === state.seq && h.state_hash === state.state_hash && h.prev_state_hash === state.prev_state_hash) return state;
-  if (h.phase === "pending" && h.seq === state.seq + 1 && h.prev_state_hash === state.state_hash) return state;
+  const exact = h.seq === state.seq && h.state_hash === state.state_hash && h.prev_state_hash === state.prev_state_hash;
+  const predecessor = h.phase === "pending" && h.seq === state.seq + 1 && h.prev_state_hash === state.state_hash;
+  if (exact || predecessor) {
+    if (settle && h.phase === "pending") writeHead(ctx, state, "committed");
+    return state;
+  }
   refuse7("state-stale", `snapshot seq ${state.seq} is not the one the head (seq ${String(h.seq)}) names`);
+}
+function writeHead(ctx, st, phase) {
+  assertLockHeld(ctx);
+  const h = { schema_version: WORKFLOW_INVOCATION_HEAD_SCHEMA, run_id: ctx.run_id, seq: st.seq, state_hash: st.state_hash, prev_state_hash: st.prev_state_hash, phase };
+  const w = writeContainedFile(ctx.root, paths(ctx).head, Buffer.from(JSON.stringify(h, null, 2) + "\n", "utf8"));
+  if (!w.written) refuse7(w.code === "write-failed" ? "write-failed" : "path-not-contained", `head: ${w.detail ?? w.code}`);
 }
 function persist(ctx, prev, next, opts) {
   const p = paths(ctx);
@@ -50391,9 +50403,9 @@ function withLock(ctx, fn) {
     }
   }
 }
-function loadBound(ctx, raw) {
+function loadBound(ctx, raw, settle = false) {
   const basis = basisOf(raw);
-  const state = readState(ctx);
+  const state = readState(ctx, settle);
   if (!state) refuse7("no-state", "no invocation state on this run; call initInvocationState first");
   if (state.basis_hash !== sha256Of4(basis)) {
     refuse7("replan-required", `run state is bound to definition ${state.basis.definition_hash}; the current basis is ${basis.definition_hash} \u2014 replan explicitly`);
@@ -50428,7 +50440,7 @@ function input(raw, keys, optional = []) {
 function initInvocationState(ctx, raw, opts = {}) {
   return guard(() => withLock(ctx, () => {
     const basis = basisOf(raw);
-    const existing = readState(ctx);
+    const existing = readState(ctx, true);
     if (existing) {
       if (existing.basis_hash !== sha256Of4(basis)) refuse7("replan-required", "the run already holds state for another definition");
       refuse7("state-exists", "the run already holds invocation state; resume it");
@@ -50440,8 +50452,8 @@ function loadInvocationState(ctx, raw) {
   return guard(() => loadBound(ctx, raw).state);
 }
 function resumeInvocations(ctx, raw) {
-  return guard(() => {
-    const { state } = loadBound(ctx, raw);
+  return guard(() => withLock(ctx, () => {
+    const { state } = loadBound(ctx, raw, true);
     const top = state.stack[state.stack.length - 1];
     if (top === void 0) return { state, next: { kind: "idle" } };
     const inv = findInv(state, top);
@@ -50449,11 +50461,11 @@ function resumeInvocations(ctx, raw) {
     const last = inv.rounds[inv.rounds.length - 1];
     if (last && last.status === "started") return { state, next: { kind: "await-round", invocation_id: inv.id, round: last.round } };
     return { state, next: { kind: "begin-round", invocation_id: inv.id, round: inv.rounds.length + 1 } };
-  });
+  }));
 }
 function openInvocation(ctx, raw, rawIn, opts = {}) {
   return guard(() => withLock(ctx, () => {
-    const { state } = loadBound(ctx, raw);
+    const { state } = loadBound(ctx, raw, true);
     const inp = input(rawIn, ["loop_id", "subject_hash"], ["parent"]);
     if (!isId(inp.loop_id) || !isHash(inp.subject_hash)) refuse7("invalid-input", "loop_id must be an id and subject_hash a sha256:<hex> digest");
     const loop = loopOf(state.basis, inp.loop_id);
@@ -50504,7 +50516,7 @@ function openInvocation(ctx, raw, rawIn, opts = {}) {
 }
 function beginRound(ctx, raw, rawIn, opts = {}) {
   return guard(() => withLock(ctx, () => {
-    const { state } = loadBound(ctx, raw);
+    const { state } = loadBound(ctx, raw, true);
     const inp = input(rawIn, ["invocation_id", "expected_round"]);
     if (!isInt(inp.expected_round, 1)) refuse7("invalid-input", "expected_round must be a positive integer");
     const inv = findInv(state, inp.invocation_id);
@@ -50525,7 +50537,7 @@ function beginRound(ctx, raw, rawIn, opts = {}) {
 }
 function completeRound(ctx, raw, rawIn, opts = {}) {
   return guard(() => withLock(ctx, () => {
-    const { state } = loadBound(ctx, raw);
+    const { state } = loadBound(ctx, raw, true);
     const inp = input(rawIn, ["invocation_id", "round", "outcome", "unresolved_questions", "evidence"], ["obligations_accepted", "artifacts"]);
     if (!isInt(inp.round, 1) || !isId(inp.outcome)) refuse7("invalid-input", "round must be a positive integer and outcome an id");
     if (inp.obligations_accepted !== void 0 && typeof inp.obligations_accepted !== "boolean") refuse7("invalid-input", "obligations_accepted must be boolean");
@@ -50561,7 +50573,7 @@ function completeRound(ctx, raw, rawIn, opts = {}) {
 }
 function cancelInvocation(ctx, raw, rawIn, opts = {}) {
   return guard(() => withLock(ctx, () => {
-    const { state } = loadBound(ctx, raw);
+    const { state } = loadBound(ctx, raw, true);
     const inp = input(rawIn, ["invocation_id", "reason"]);
     if (typeof inp.reason !== "string" || inp.reason.trim() === "" || inp.reason.length > LIMITS2.reason) refuse7("invalid-input", `reason must be 1..${LIMITS2.reason} chars`);
     const inv = findInv(state, inp.invocation_id);
@@ -50582,7 +50594,7 @@ function replanInvocationState(ctx, raw, rawIn, opts = {}) {
     const basis = basisOf(raw);
     const inp = input(rawIn, ["reason"]);
     if (typeof inp.reason !== "string" || inp.reason.trim() === "" || inp.reason.length > LIMITS2.reason) refuse7("invalid-input", `reason must be 1..${LIMITS2.reason} chars`);
-    const old = readState(ctx);
+    const old = readState(ctx, true);
     if (!old) refuse7("no-state", "nothing to replan; initialise instead");
     const basisHash = sha256Of4(basis);
     if (old.basis_hash === basisHash) refuse7("replan-unchanged", "the basis is unchanged; resume the existing invocations");
@@ -50632,7 +50644,7 @@ var init_workflow_invocation_state = __esm({
     INVOCATION_STATE_FILE = "workflow-invocations.json";
     INVOCATION_HEAD_FILE = "workflow-invocations.head.json";
     INVOCATION_LOCK_FILE = "workflow-invocations.lock";
-    LIMITS2 = Object.freeze({ fileBytes: 4 << 20, headBytes: 4096, lockBytes: 256, invocations: 1e3, questions: 64, evidence: 64, artifacts: 64, reason: 500, depth: 16 });
+    LIMITS2 = Object.freeze({ inputNodes: 4096, fileNodes: 4 << 20, fileBytes: 4 << 20, headBytes: 4096, lockBytes: 256, invocations: 1e3, questions: 64, evidence: 64, artifacts: 64, reason: 500, depth: 16 });
     ID3 = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
     HASH = /^sha256:[a-f0-9]{64}$/;
     Refusal = class extends Error {
@@ -65574,6 +65586,7 @@ __export(index_exports, {
   initStableLockfile: () => initStableLockfile,
   initializeRunBindingExclusion: () => initializeRunBindingExclusion,
   intakeRouteTarget: () => intakeRouteTarget,
+  invocationIdFor: () => invocationIdFor,
   invocationStateHash: () => invocationStateHash,
   isCanonicalLaneReceipt: () => isCanonicalLaneReceipt,
   isCanonicalPhase: () => isCanonicalPhase,
@@ -66201,6 +66214,7 @@ init_index();
   initStableLockfile,
   initializeRunBindingExclusion,
   intakeRouteTarget,
+  invocationIdFor,
   invocationStateHash,
   isCanonicalLaneReceipt,
   isCanonicalPhase,
