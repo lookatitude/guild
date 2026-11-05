@@ -387,6 +387,44 @@ describe("AT13 · attempt ownership", () => {
 });
 
 describe("ingress robustness", () => {
+  it("an async effect is journaled done only after it settles; a fence meanwhile keeps it uncertain", async () => {
+    let effects = 0;
+    const a1 = dispatch("task-1", "att-1");
+    submitWorkerRecord(a1, { record_id: "i-1", kind: "effect_intent", effect_key: "slow", body: {} });
+    const p = ing.collect().permits[0]!;
+    let resolve!: () => void;
+    const pending = ing.runEffect(w, p, () => new Promise<void>((r) => { resolve = () => { effects++; r(); }; }));
+    ing.fenceAttempt(w, "att-1");
+    expect(code(() => ing.releaseAttempt(w, "att-1"))).toBe("effects_unreconciled");
+    expect(code(() => dispatch("task-1", "att-2"))).toBe("attempt_live");
+    resolve();
+    await expect(pending).rejects.toBeInstanceOf(IngressRefusal);
+    expect(ing.taskState("task-1").uncertain_effects).toEqual(["slow"]);
+    // A rejected async effect also stays started.
+    const b = dispatch("task-2", "att-b");
+    submitWorkerRecord(b, { record_id: "i-1", kind: "effect_intent", effect_key: "x", body: {} });
+    const pb = ing.collect().permits[0]!;
+    await expect(ing.runEffect(w, pb, () => Promise.reject(new Error("boom")))).rejects.toThrow("boom");
+    ing.fenceAttempt(w, "att-b");
+    expect(ing.taskState("task-2").uncertain_effects).toEqual(["x"]);
+    expect(effects).toBe(1);
+  });
+
+  it("the leak check fails closed when a directory cannot be listed", () => {
+    if (process.getuid?.() === 0) return;
+    const b = dispatch("task-1", "att-1");
+    const hidden = path.join(durableRoot, ".guild", "runs", RUN, "ui", "locked");
+    fs.mkdirSync(hidden, { recursive: true });
+    fs.writeFileSync(path.join(hidden, "leak.json"), b.grant.secret);
+    fs.chmodSync(hidden, 0o000);
+    try {
+      const r = checkShareableLeaks({ durableRoot, run_id: RUN, grants: [b.grant] });
+      expect(r).toMatchObject({ ok: false, complete: false });
+    } finally {
+      fs.chmodSync(hidden, 0o700);
+    }
+  });
+
   it("bounds directory scans by every entry, not only matching names", () => {
     ing.close();
     ing = open({ limits: { max_entries_scanned: 10 } });
@@ -403,9 +441,10 @@ describe("ingress robustness", () => {
     ing.collect();
     const copy = path.join(durableRoot, ".guild", "runs", RUN, "attempts", "att-1", "records", "obs-1.json");
     fs.rmSync(copy);
+    // The worker deletes its inbox file and the attempt is fenced: repair still comes from the journal.
     fs.rmSync(path.join(b.ingress_dir, "obs-1.json"));
-    submitWorkerRecord(b, { record_id: "obs-1", kind: "observation", body: { ok: 999 } });
-    expect(ing.collect().replayed).toContain("att-1/obs-1");
+    ing.fenceAttempt(w, "att-1");
+    ing.collect();
     expect(ing.verifyRecordCopy("att-1", "obs-1")).toEqual({ ok: true });
     expect(fs.readFileSync(copy, "utf8").includes('"ok":1')).toBe(true);
   });

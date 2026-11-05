@@ -184,8 +184,14 @@ export interface WorkerIngress {
   fenceAttempt(grant: WriterGrant, attempt_id: string): void;
   reconcileEffect(grant: WriterGrant, r: { task_id: string; effect_key: string; verdict: "applied" | "not_applied"; evidence_ref: string }): void;
   releaseAttempt(grant: WriterGrant, attempt_id: string): void;
-  /** Trusted effect executor: consumes a controller permit, journals start, runs `effect`, journals done. */
+  /**
+   * Trusted effect executor: consumes a controller permit, journals start, runs `effect`, journals done.
+   * An async effect is journaled done only after its promise fulfils; a throw, a rejection, or a fence
+   * meanwhile leaves it `started` (uncertain).
+   */
   runEffect<T>(grant: WriterGrant, permit: EffectPermit, effect: () => T): T;
+  /** Re-publish any durable record copy missing on disk from the journal. Returns how many were written. */
+  repairRecordCopies(): number;
   taskState(task_id: string): TaskState;
   verifyRecordCopy(attempt_id: string, record_id: string): { ok: true } | { ok: false; code: "record_unbound" | "record_copy_missing" | "record_copy_mismatch" };
   close(): void;
@@ -474,6 +480,18 @@ export function openWorkerIngress(opts: WorkerIngressOptions): WorkerIngress {
     };
   };
 
+  const repairCopies = (): number => {
+    let written = 0;
+    for (const [k, rec] of state().ingested) {
+      const [attempt_id, record_id] = k.split("/") as [string, string];
+      const rel = copyRel(attempt_id, record_id);
+      const c = checkContained(durableRoot, rel, { policy: "physical" });
+      if (isRefused(c) || fs.existsSync(c.realPath)) continue;
+      if (writeOnce(durableRoot, rel, Buffer.from(rec.copy, "utf8"))) written++;
+    }
+    return written;
+  };
+
   return {
     controller,
 
@@ -511,6 +529,8 @@ export function openWorkerIngress(opts: WorkerIngressOptions): WorkerIngress {
 
     collect() {
       controller.assertWritable();
+      // Copies lost between journal commit and publication come back from the journal, whatever the worker kept.
+      repairCopies();
       const report: IngressReport = { accepted: [], replayed: [], rejected: [], permits: [], truncated: false };
       const binds = [...state().binds.values()].filter((b) => !b.fenced && !b.released && b.grant_id !== null)
         .sort((x, y) => (x.attempt_id < y.attempt_id ? -1 : 1));
@@ -548,14 +568,7 @@ export function openWorkerIngress(opts: WorkerIngressOptions): WorkerIngress {
         for (const name of order) {
           const record_id = name.slice(0, -5);
           if (!ID_RE.test(record_id)) continue;
-          const done = f.ingested.get(`${b.attempt_id}/${record_id}`);
-          if (done) {
-            // Repair a durable copy lost to a crash between journal and publication.
-            const c = checkContained(durableRoot, copyRel(b.attempt_id, record_id), { policy: "physical" });
-            if (!isRefused(c) && !fs.existsSync(c.realPath)) writeOnce(durableRoot, copyRel(b.attempt_id, record_id), Buffer.from(done.copy, "utf8"));
-            report.replayed.push(`${b.attempt_id}/${record_id}`);
-            continue;
-          }
+          if (f.ingested.has(`${b.attempt_id}/${record_id}`)) { report.replayed.push(`${b.attempt_id}/${record_id}`); continue; }
           if (examined >= limits.max_records_per_collect || bytes >= limits.max_bytes_per_collect) { report.truncated = true; break; }
           examined++;
           last = name;
@@ -712,10 +725,25 @@ export function openWorkerIngress(opts: WorkerIngressOptions): WorkerIngress {
       }
       // Consume before acting: a crash from here on leaves the effect `started`, i.e. uncertain.
       extend(grant, { type: "effect_start", attempt_id: p.attempt_id, task_id: b.task_id, effect_key: p.effect_key });
+      const finish = (): void => {
+        // Journal done only while this attempt still owns a started effect; otherwise it stays uncertain.
+        const g = state();
+        const cur = g.effects.get(`${b.task_id}\0${p.effect_key}`);
+        const owner = g.binds.get(p.attempt_id);
+        if (!cur || cur.attempt_id !== p.attempt_id || cur.state !== "started" || !owner || owner.fenced || owner.released) {
+          throw new IngressRefusal("effect_refused", `effect ${p.effect_key} was fenced while running; it stays uncertain`);
+        }
+        extend(grant, { type: "effect_done", attempt_id: p.attempt_id, task_id: b.task_id, effect_key: p.effect_key });
+      };
       const out = effect();
-      extend(grant, { type: "effect_done", attempt_id: p.attempt_id, task_id: b.task_id, effect_key: p.effect_key });
+      if (out !== null && (typeof out === "object" || typeof out === "function") && typeof (out as { then?: unknown }).then === "function") {
+        return Promise.resolve(out).then((v) => { finish(); return v; }) as unknown as typeof out;
+      }
+      finish();
       return out;
     },
+
+    repairRecordCopies: repairCopies,
 
     verifyRecordCopy(attempt_id, record_id) {
       const bound = state().ingested.get(`${requireId(attempt_id, "attempt_id")}/${requireId(record_id, "record_id")}`);
@@ -793,7 +821,7 @@ export function checkShareableLeaks(opts: { durableRoot: string; run_id: string;
   let files = 0;
   const visit = (dir: string): void => {
     let ents: fs.Dirent[];
-    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { complete = false; return; }
     for (const d of ents) {
       const p = path.join(dir, d.name);
       if (d.isSymbolicLink()) continue;
