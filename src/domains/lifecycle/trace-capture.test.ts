@@ -695,3 +695,14 @@ describe("T01 scrubber confirm counterexamples", () => {
     expect(e.capture.state).toBe("unavailable");
   });
 });
+
+describe("T01 scrubber fragment budget", () => {
+  it("content past the embedded-fragment budget is withheld, not persisted unscrubbed", () => {
+    seed();
+    const content = "[] ".repeat(1000) + String.raw`note {"value":"grant-private-\u00611"} end`;
+    const e = captured(open("exec-a").observe(obs({ host_event_id: "b1", content })));
+    expect(e.payload_ref).toBeNull();
+    expect(e.capture.state).toBe("unavailable");
+    expect(auditTraceExport(root, RUN, { private_literals: [GRANT_A] }).ok).toBe(true);
+  });
+});
