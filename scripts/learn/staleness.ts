@@ -21,6 +21,7 @@ import * as path from "path";
 import { guildPaths, parseCwd, hasFlag, writeJson, readJson, computeLearnSourceBasis } from "./lib/paths";
 import { type ChannelState, type SourceBasis } from "../../src/domains/knowledge/source-basis";
 import { reconcileBoundary, type FreshnessMarker } from "../../src/domains/knowledge/freshness-boundary";
+import { publicationStatus, type PublicationStatus } from "../../src/domains/knowledge/publication-boundary";
 import { headSha } from "./lib/git";
 import { walkRepo } from "./lib/walk";
 import { isCodeLanguage, detectLanguage } from "./lib/languages";
@@ -64,10 +65,19 @@ function main(): void {
     return;
   }
 
+  // K03: verify the owner's published generation against the observed basis
+  // (consumes after-edit hints; a dropped hook still shows as drift).
+  let publication: PublicationStatus | { error: string } | null = null;
+  try {
+    publication = publicationStatus({ indexesDir: gp.indexesDir, observe: () => source });
+  } catch (err) {
+    publication = { error: String((err as Error).message ?? err) };
+  }
+
   const store = readJson<FingerprintStore & FreshnessMarker>(gp.fingerprint);
   if (!store) {
     process.stderr.write("[staleness] no baseline — treat as FULL (run --baseline after a build)\n");
-    const out = { state: "FULL", reason: "no fingerprint baseline", filesToReanalyze: Object.keys(tree), rerunArchitecture: true };
+    const out = { state: "FULL", reason: "no fingerprint baseline", filesToReanalyze: Object.keys(tree), rerunArchitecture: true, publication };
     if (hasFlag(argv, "print")) process.stdout.write(JSON.stringify(out, null, 2) + "\n");
     else process.stdout.write("FULL\n");
     return;
@@ -99,6 +109,7 @@ function main(): void {
     baseline_commit: store.generated_from_commit,
     head_commit: commit,
     stale: staleVsHead,
+    publication,
     analysis: {
       new: analysis.newFiles.length,
       deleted: analysis.deletedFiles.length,

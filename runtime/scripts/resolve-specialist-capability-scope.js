@@ -40044,11 +40044,67 @@ var init_redirect_route = __esm({
   }
 });
 
+// src/domains/knowledge/freshness-boundary.ts
+var BACKGROUND_STRUCTURAL_POLICY, BACKGROUND_HARD_LIMITS;
+var init_freshness_boundary = __esm({
+  "src/domains/knowledge/freshness-boundary.ts"() {
+    init_source_basis();
+    BACKGROUND_STRUCTURAL_POLICY = Object.freeze({
+      policy: "guild.learn.background_structural.v1",
+      channel: "structural_graph",
+      max_jobs: 4,
+      max_paths_per_job: 64
+    });
+    BACKGROUND_HARD_LIMITS = Object.freeze({ max_jobs: 16, max_paths_per_job: 256 });
+  }
+});
+
+// src/domains/knowledge/publication.ts
+var crypto20, os4, PUBLICATION_FAULT_STEPS, HOST, ORPHAN_GRACE_MS;
+var init_publication = __esm({
+  "src/domains/knowledge/publication.ts"() {
+    crypto20 = __toESM(require("node:crypto"));
+    os4 = __toESM(require("node:os"));
+    init_kernel();
+    init_source_basis();
+    PUBLICATION_FAULT_STEPS = Object.freeze([
+      "lock_acquired",
+      "artifact:knowledge-graph.json",
+      "artifact:knowledge-recall.json",
+      "layers_written",
+      "manifest_written",
+      "record_written",
+      "generation_renamed",
+      "successor_claimed",
+      "pointer_tmp_written",
+      "pointer_renamed",
+      "export:knowledge-graph.json",
+      "export:knowledge-recall.json",
+      "reclaimed"
+    ]);
+    HOST = crypto20.createHash("sha256").update(os4.hostname()).digest("hex").slice(0, 12);
+    ORPHAN_GRACE_MS = 10 * 6e4;
+  }
+});
+
+// src/domains/knowledge/publication-boundary.ts
+var AFTER_EDIT_BUDGET;
+var init_publication_boundary = __esm({
+  "src/domains/knowledge/publication-boundary.ts"() {
+    init_freshness_boundary();
+    init_publication();
+    init_source_basis();
+    init_state();
+    AFTER_EDIT_BUDGET = Object.freeze({ max_files: 0, max_bytes: 0 });
+  }
+});
+
 // src/domains/knowledge/refresh-touched.ts
 var init_refresh_touched = __esm({
   "src/domains/knowledge/refresh-touched.ts"() {
     init_state();
     init_knowledge_links_contract();
+    init_publication_boundary();
     init_wiki_index();
     init_working_set();
   }
@@ -40852,7 +40908,7 @@ function resolveRecallBeforeRead(cwd) {
   return true;
 }
 function hashQuery(query) {
-  return crypto20.createHash("sha256").update(query).digest("hex").slice(0, 16);
+  return crypto21.createHash("sha256").update(query).digest("hex").slice(0, 16);
 }
 function rankWikiDocs(docs, wikiBase, limit, composite) {
   const scoring = docs.filter((d) => d.score > 0);
@@ -41185,7 +41241,7 @@ function recall(query, opts) {
   const _traceBranch = allChunks.length === 0 ? "empty" : source === "combined" ? "combined" : source === "structural" ? "structural" : source;
   try {
     const _analysisTs = (/* @__PURE__ */ new Date()).toISOString();
-    const _spanId = crypto20.createHash("sha256").update(`${runId ?? ""}|recall|${_analysisTs}|${_laneId}`).digest("hex").slice(0, 16);
+    const _spanId = crypto21.createHash("sha256").update(`${runId ?? ""}|recall|${_analysisTs}|${_laneId}`).digest("hex").slice(0, 16);
     emitTraceEvent(
       makeAnalysisTraceEvent({
         ts: new Date(_traceStart).toISOString(),
@@ -41351,12 +41407,12 @@ function runRecallCli() {
   }
   process.stdout.write(JSON.stringify(result2) + "\n");
 }
-var fs67, path77, crypto20, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
+var fs67, path77, crypto21, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
 var init_recall = __esm({
   "src/domains/knowledge/recall.ts"() {
     fs67 = __toESM(require("node:fs"));
     path77 = __toESM(require("node:path"));
-    crypto20 = __toESM(require("node:crypto"));
+    crypto21 = __toESM(require("node:crypto"));
     init_state();
     init_wiki_recall();
     init_fs_scanner();
@@ -44598,7 +44654,7 @@ var init_lifecycle = __esm({
 
 // src/domains/distribution/release-distribution-contract.ts
 function sha2566(value) {
-  return crypto21.createHash("sha256").update(value).digest("hex");
+  return crypto22.createHash("sha256").update(value).digest("hex");
 }
 function stableJson(value) {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
@@ -44640,10 +44696,10 @@ function verifyReleaseClaim(claim, archive) {
   if (claim.host_support.supported !== false) errors.push("unsupported host cannot be promoted");
   return errors;
 }
-var crypto21, RELEASE_CLAIM_SCHEMA, OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS;
+var crypto22, RELEASE_CLAIM_SCHEMA, OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS;
 var init_release_distribution_contract = __esm({
   "src/domains/distribution/release-distribution-contract.ts"() {
-    crypto21 = __toESM(require("node:crypto"));
+    crypto22 = __toESM(require("node:crypto"));
     RELEASE_CLAIM_SCHEMA = "guild.release_claim.v1";
     OPERATION_KINDS = Object.freeze(["render", "install", "activate", "update", "uninstall", "verify"]);
     ACCEPTED_CONFORMANCE_ARTIFACTS = Object.freeze([
@@ -45759,7 +45815,7 @@ function buildBatteryModuleWorkspace(base) {
 }
 function batteryWorkspace() {
   if (batteryWorkspaceSingleton !== null) return batteryWorkspaceSingleton;
-  const base = fs74.mkdtempSync(path86.join(os4.tmpdir(), "a21x-integration-battery-"));
+  const base = fs74.mkdtempSync(path86.join(os5.tmpdir(), "a21x-integration-battery-"));
   const journalRoot = path86.join(base, "journal-root");
   const migrationJournalRoot = path86.join(base, "migration-journal-root");
   fs74.mkdirSync(journalRoot, { recursive: true });
@@ -45944,11 +46000,11 @@ function refusesWithControl(implementation, request, control) {
   if (!isRecord2(result2.outcome) || result2.outcome.disposition !== "refused") return false;
   return ownField(result2.outcome.facts, "refusal_control") === control;
 }
-var fs74, os4, path86, RELEASE_INTEGRATION_REQUEST_MEMBERS, RELEASE_INTEGRATION_OWNER_BOUNDARIES, CONTROL_NOT_TEXT, CONTROL_CALLER_PACKETS, CONTROL_CALLER_REQUIRED_SET2, CONTROL_CALLER_OUTCOMES, CONTROL_OWNER_FAILED, CONTROL_CLAIM_INCOMPLETE, CONTROL_ASSEMBLY_REFUSED, RELEASE_INTEGRATION_REFUSAL_CONTROLS, RELEASE_INTEGRATION_OWNER_INPUT_MEMBERS, FORBIDDEN_OWNER_INPUT_KEYS, MH02_SNAPSHOT_HASH, MH02_SUPPORTED_CAPABILITY, MH02_ABSENT_CAPABILITY, MH02_DENIED_OPERATION, MH02_ALLOWED_OPERATION, MH02_CONDITION_GATE, MH02_OPEN_GATE, MH02_OBSERVATION, MH02_POLICY, MH02_GATES, MH02_HOST_PROBES, MH02_PROBES, hostAdapterConformanceOwner, batteryWorkspaceSingleton, BATTERY_MODULE_PUBLIC_API, BATTERY_IDENTITY, BATTERY_CLAIMANT, BATTERY_RUN_ID, BATTERY_CLAIM, batteryRecomputedPacketsSingleton, RELEASE_INTEGRATION_CONTROL_BATTERY, RELEASE_INTEGRATION_CONTROLS;
+var fs74, os5, path86, RELEASE_INTEGRATION_REQUEST_MEMBERS, RELEASE_INTEGRATION_OWNER_BOUNDARIES, CONTROL_NOT_TEXT, CONTROL_CALLER_PACKETS, CONTROL_CALLER_REQUIRED_SET2, CONTROL_CALLER_OUTCOMES, CONTROL_OWNER_FAILED, CONTROL_CLAIM_INCOMPLETE, CONTROL_ASSEMBLY_REFUSED, RELEASE_INTEGRATION_REFUSAL_CONTROLS, RELEASE_INTEGRATION_OWNER_INPUT_MEMBERS, FORBIDDEN_OWNER_INPUT_KEYS, MH02_SNAPSHOT_HASH, MH02_SUPPORTED_CAPABILITY, MH02_ABSENT_CAPABILITY, MH02_DENIED_OPERATION, MH02_ALLOWED_OPERATION, MH02_CONDITION_GATE, MH02_OPEN_GATE, MH02_OBSERVATION, MH02_POLICY, MH02_GATES, MH02_HOST_PROBES, MH02_PROBES, hostAdapterConformanceOwner, batteryWorkspaceSingleton, BATTERY_MODULE_PUBLIC_API, BATTERY_IDENTITY, BATTERY_CLAIMANT, BATTERY_RUN_ID, BATTERY_CLAIM, batteryRecomputedPacketsSingleton, RELEASE_INTEGRATION_CONTROL_BATTERY, RELEASE_INTEGRATION_CONTROLS;
 var init_release_conformance_integration = __esm({
   "src/domains/distribution/release-conformance-integration.ts"() {
     fs74 = __toESM(require("node:fs"));
-    os4 = __toESM(require("node:os"));
+    os5 = __toESM(require("node:os"));
     path86 = __toESM(require("node:path"));
     init_lifecycle();
     init_config2();
@@ -51587,7 +51643,7 @@ function buildStationTaskCellResult(station, teamPlanRef, lanes) {
 init_teams();
 
 // scripts/lib/core/contracts/specialist-identity.ts
-var crypto22 = __toESM(require("crypto"));
+var crypto23 = __toESM(require("crypto"));
 var import_util5 = require("util");
 
 // scripts/lib/roster.ts
@@ -51841,7 +51897,7 @@ function hashSpecialistProfile(profile) {
   return sha256Hex3(canonicalJson3(profile));
 }
 function sha256Hex3(s) {
-  return crypto22.createHash("sha256").update(s, "utf8").digest("hex");
+  return crypto23.createHash("sha256").update(s, "utf8").digest("hex");
 }
 var TOOL_TO_CAPABILITY = Object.freeze({
   Read: "read-files",
@@ -51949,12 +52005,12 @@ function specialistProfileFromAgentFrontmatter(fm, boundType) {
 }
 
 // scripts/lib/capability/definition-ref-for-dispatch.ts
-var crypto24 = __toESM(require("node:crypto"));
+var crypto25 = __toESM(require("node:crypto"));
 var fs86 = __toESM(require("node:fs"));
 var path99 = __toESM(require("node:path"));
 
 // scripts/lib/core/contracts/adoption-manifest.ts
-var crypto23 = __toESM(require("crypto"));
+var crypto24 = __toESM(require("crypto"));
 var import_util6 = require("util");
 var ADOPTION_MANIFEST_SCHEMA = "guild.adoption_manifest.v1";
 var ADOPTION_REASONS = Object.freeze([
@@ -52054,7 +52110,7 @@ function entryDigest(entry) {
   try {
     const valid = validateAdoptionEntry(entry);
     if (valid === null) return INVALID_DIGEST;
-    return crypto23.createHash("sha256").update(JSON.stringify(canonicalize2(valid)), "utf8").digest("hex");
+    return crypto24.createHash("sha256").update(JSON.stringify(canonicalize2(valid)), "utf8").digest("hex");
   } catch {
     return INVALID_DIGEST;
   }
@@ -52070,7 +52126,7 @@ function manifestCommitment(manifest) {
     const payload = COMMITMENT_DOMAIN + JSON.stringify([m.schema_version, m.project_id, m.entries.length, tip]);
     return {
       ok: true,
-      digest: crypto23.createHash("sha256").update(payload, "utf8").digest("hex"),
+      digest: crypto24.createHash("sha256").update(payload, "utf8").digest("hex"),
       empty: m.entries.length === 0
     };
   } catch {
@@ -53703,7 +53759,7 @@ function shippedDefinitionRef(pluginRoot, lane) {
     kind: "agent",
     id: name,
     relative_path: definition,
-    content_hash: `sha256:${crypto24.createHash("sha256").update(bytes).digest("hex")}`,
+    content_hash: `sha256:${crypto25.createHash("sha256").update(bytes).digest("hex")}`,
     source_commit: null,
     specialist_profile_hash: identity.profileHash,
     specialist_type_hash: identity.typeHash,
@@ -54067,7 +54123,7 @@ init_dispatch();
 var import_child_process5 = require("child_process");
 var nodefs = __toESM(require("fs"));
 var nodepath = __toESM(require("path"));
-var os5 = __toESM(require("os"));
+var os6 = __toESM(require("os"));
 var ADAPTER_VERSION = "1";
 var defaultRun3 = (cmd, args, opts = {}) => {
   const r = (0, import_child_process5.spawnSync)(cmd, args, { encoding: "utf8", ...opts });
@@ -54292,7 +54348,7 @@ function probeCodexPreToolUseEnforcement(opts = {}) {
   });
   const readSeam = (p) => fsSeam.readFileSync ? fsSeam.readFileSync(p, "utf8") : nodefs.readFileSync(p, "utf8");
   const projectCwd = opts.cwd ?? process.cwd();
-  const codexHome = (env["CODEX_HOME"] ?? "").trim() || nodepath.join(os5.homedir(), ".codex");
+  const codexHome = (env["CODEX_HOME"] ?? "").trim() || nodepath.join(os6.homedir(), ".codex");
   const pluginRoot = env["GUILD_PLUGIN_ROOT"] ?? env["PLUGIN_ROOT"] ?? env["CLAUDE_PLUGIN_ROOT"] ?? "";
   const candidates = opts.manifestPaths ?? [
     nodepath.join(codexHome, "hooks.json"),
@@ -54386,7 +54442,7 @@ function probeCodexPreToolUseEnforcement(opts = {}) {
     );
   }
   checks.sole_owner = true;
-  const sandbox = nodefs.mkdtempSync(nodepath.join(os5.tmpdir(), "guild-codex-probe-"));
+  const sandbox = nodefs.mkdtempSync(nodepath.join(os6.tmpdir(), "guild-codex-probe-"));
   const attempt = (permissionMode) => {
     const runDir3 = nodepath.join(sandbox, "run");
     nodefs.mkdirSync(runDir3, { recursive: true });
@@ -54522,7 +54578,7 @@ var CodexPaneAdapter = class _CodexPaneAdapter {
   /** Resolve the auth.json path, honouring CODEX_HOME env override. */
   authJsonPath() {
     const codexHome = (this.env_["CODEX_HOME"] ?? "").trim();
-    const base = codexHome || nodepath.join(os5.homedir(), ".codex");
+    const base = codexHome || nodepath.join(os6.homedir(), ".codex");
     return nodepath.join(base, "auth.json");
   }
   /** Returns true when auth.json exists at the resolved path and is non-empty. */

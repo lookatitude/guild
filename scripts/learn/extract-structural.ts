@@ -44,7 +44,9 @@
  */
 
 import * as path from "path";
-import { guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson, SCHEMA } from "./lib/paths";
+import { guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson, SCHEMA, computeLearnSourceBasis } from "./lib/paths";
+import { assertPublished, GRAPH_ARTIFACT, publishLearnArtifacts, readLearnBase } from "./lib/publish";
+import { carryLabels, ownerArtifactTarget } from "./lib/publish";
 import { headSha, isTracked } from "./lib/git";
 import { walkRepo } from "./lib/walk";
 import {
@@ -125,10 +127,21 @@ function main(): void {
   // deleted file's map entry became a phantom file node. Both modes now share
   // walkRepo's inventory/ignore semantics; the scan command and its map remain
   // independently scoped (the map is no longer consulted here).
+  // K03: the default target is published as a generation. The basis is taken
+  // before any source byte is read and re-observed under the publisher lock.
+  const outKind = ownerArtifactTarget(gp, outPath);
+  if (outKind === "store") {
+    process.stderr.write(`refusing to write inside the generation store: ${outPath}\n`);
+    process.exit(1);
+  }
+  const publishing = outKind === "export";
+  const target = { indexesDir: gp.indexesDir, repoRoot, sourceRoot };
+  const basis = publishing ? computeLearnSourceBasis(sourceRoot) : undefined;
   const relFiles = walkRepo(sourceRoot).files;
   const readFile = (abs: string) => fs.readFileSync(abs, "utf8");
 
-  const existing = readJson<ExistingGraph>(outPath);
+  const learnBase = publishing ? readLearnBase(target) : null;
+  const existing = (learnBase ? learnBase.graph : readJson<ExistingGraph>(outPath)) as ExistingGraph | null;
 
   // ── Extract: incremental (reuse cache) or full (rebuild + seed cache) ───────
   let structural: StructuralGraph;
@@ -140,8 +153,6 @@ function main(): void {
   // (cascade-delete of changed/deleted/descoped files), while every foreign
   // (LLM-tier) node/edge is preserved. I15 (legacy G3-F4): the full path
   // previously unioned as-is, so nodes of files that LEFT scope lingered.
-  let mergeNodes = existing?.nodes ?? [];
-  let mergeEdges = existing?.edges ?? [];
 
   let prior = incremental ? readJson<StructuralCache>(cachePath) : null;
   // FIX-T4.1-r7: enforce LOCAL-ONLY at reuse time, not just via .gitignore. The
@@ -187,62 +198,87 @@ function main(): void {
   // while every foreign (LLM-tier) node is preserved (collided nodes revert to
   // pure-LLM; stripStructural semantics). Previously only --incremental
   // stripped; the plain full run unioned as-is and leaked stale nodes.
-  const stripped = stripStructural(mergeNodes, mergeEdges);
-  mergeNodes = stripped.nodes;
-  mergeEdges = stripped.edges;
+  // Merge onto a destination graph: run once on the pinned base, and again on a
+  // newer generation if another writer published first (K03 rebase).
+  const assemble = (existing: ExistingGraph | null) => {
+    let mergeNodes = existing?.nodes ?? [];
+    let mergeEdges = existing?.edges ?? [];
+    const stripped = stripStructural(mergeNodes, mergeEdges);
+    mergeNodes = stripped.nodes;
+    mergeEdges = stripped.edges;
 
-  // Merge into the existing graph (if any) without clobbering LLM-tier nodes.
-  const mergedRaw = mergeStructuralInto(mergeNodes, mergeEdges, structural);
+    // Merge into the existing graph (if any) without clobbering LLM-tier nodes.
+    const mergedRaw = mergeStructuralInto(mergeNodes, mergeEdges, structural);
 
-  // I15: a (foreign or structural) edge survives only when BOTH endpoints
-  // resolve in the merged graph — a foreign edge whose structural endpoint was
-  // pruned would otherwise dangle. Removals are counted and reported.
-  const mergedIds = new Set(mergedRaw.nodes.map((n) => n.id));
-  const keptEdges = mergedRaw.edges.filter(
-    (e) => mergedIds.has(e.source) && mergedIds.has(e.target),
-  );
-  const danglingEdgesRemoved = mergedRaw.edges.length - keptEdges.length;
-  const merged = { nodes: mergedRaw.nodes, edges: keptEdges };
-
-  const out: Record<string, unknown> = {
-    version: existing?.version ?? SCHEMA.knowledgeGraph,
-    kind: existing?.kind ?? "codebase",
-    // FIX G2-2 (determinism): commit/run metadata lives in the SIDECAR only. The
-    // graph artifact is a pure function of (source, config) — never the HEAD sha —
-    // so two identical trees at different commits produce byte-identical graphs.
-    // ALWAYS write the commit-independent constant: a stale sha carried by an
-    // existing (pre-fix) graph must be NORMALIZED away, not preserved.
-    generated_from_commit: "structural",
-    project: existing?.project ?? { name: path.basename(repoRoot), description: "" },
-    nodes: merged.nodes,
-    edges: merged.edges,
-    layers: existing?.layers ?? [],
-    tour: existing?.tour ?? [],
-  };
-
-  // FIX G1-3: validate BEFORE write on the real artifact. Fail (non-zero exit) if
-  // any structural node/edge is dropped or the graph is fatally invalid.
-  const preCount = structuralSubset(out as { nodes: GraphNode[]; edges: GraphEdge[] });
-  const validation = validateGraph(out);
-  if (!validation.success || !validation.data) {
-    process.stderr.write(`[extract-structural] FATAL: graph failed schema validation: ${validation.fatal}\n`);
-    process.exit(1);
-  }
-  const postCount = structuralSubset(validation.data);
-  if (postCount.nodes.length < preCount.nodes.length || postCount.edges.length < preCount.edges.length) {
-    process.stderr.write(
-      `[extract-structural] FATAL: validation dropped structural items ` +
-      `(nodes ${preCount.nodes.length}→${postCount.nodes.length}, edges ${preCount.edges.length}→${postCount.edges.length})\n`,
+    // I15: a (foreign or structural) edge survives only when BOTH endpoints
+    // resolve in the merged graph — a foreign edge whose structural endpoint was
+    // pruned would otherwise dangle. Removals are counted and reported.
+    const mergedIds = new Set(mergedRaw.nodes.map((n) => n.id));
+    const keptEdges = mergedRaw.edges.filter(
+      (e) => mergedIds.has(e.source) && mergedIds.has(e.target),
     );
-    process.exit(1);
-  }
+    const danglingEdgesRemoved = mergedRaw.edges.length - keptEdges.length;
+    const merged = { nodes: mergedRaw.nodes, edges: keptEdges };
+
+    const out: Record<string, unknown> = {
+      version: existing?.version ?? SCHEMA.knowledgeGraph,
+      kind: existing?.kind ?? "codebase",
+      // FIX G2-2 (determinism): commit/run metadata lives in the SIDECAR only. The
+      // graph artifact is a pure function of (source, config) — never the HEAD sha —
+      // so two identical trees at different commits produce byte-identical graphs.
+      // ALWAYS write the commit-independent constant: a stale sha carried by an
+      // existing (pre-fix) graph must be NORMALIZED away, not preserved.
+      generated_from_commit: "structural",
+      project: existing?.project ?? { name: path.basename(repoRoot), description: "" },
+      nodes: carryLabels(existing, { nodes: merged.nodes }).nodes,
+      edges: merged.edges,
+      layers: existing?.layers ?? [],
+      tour: existing?.tour ?? [],
+    };
+
+    // FIX G1-3: validate BEFORE write on the real artifact. Fail (non-zero exit) if
+    // any structural node/edge is dropped or the graph is fatally invalid.
+    const preCount = structuralSubset(out as { nodes: GraphNode[]; edges: GraphEdge[] });
+    const validation = validateGraph(out);
+    if (!validation.success || !validation.data) {
+      process.stderr.write(`[extract-structural] FATAL: graph failed schema validation: ${validation.fatal}\n`);
+      process.exit(1);
+    }
+    const postCount = structuralSubset(validation.data);
+    if (postCount.nodes.length < preCount.nodes.length || postCount.edges.length < preCount.edges.length) {
+      process.stderr.write(
+        `[extract-structural] FATAL: validation dropped structural items ` +
+        `(nodes ${preCount.nodes.length}→${postCount.nodes.length}, edges ${preCount.edges.length}→${postCount.edges.length})\n`,
+      );
+      process.exit(1);
+    }
+    return { out, validated: validation.data, danglingEdgesRemoved };
+  };
+  const first = assemble(existing);
+  let { out, danglingEdgesRemoved } = first;
 
   // FIX G2-3: write the VALIDATED graph (validation.data), not the original `out`.
   // Any auto-fix/normalization the validator applied is then what lands on disk —
   // we never persist an unvalidated artifact that silently differs from what the
   // validator accepted.
   try {
-    writeJson(outPath, validation.data);
+    if (learnBase) {
+      assertPublished(
+        publishLearnArtifacts(target, {
+          channels: ["structural_graph"],
+          base: learnBase,
+          basis,
+          build: (b) => {
+            const a = b === learnBase ? first : assemble(b.graph as ExistingGraph | null);
+            ({ out, danglingEdgesRemoved } = a);
+            return { [GRAPH_ARTIFACT]: a.validated };
+          },
+        }),
+        "extract-structural",
+      );
+    } else {
+      writeJson(outPath, first.validated);
+    }
   } catch (err) {
     process.stderr.write(`[extract-structural] ERROR writing graph: ${String(err)}\n`);
     process.exit(1);

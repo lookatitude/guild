@@ -12,10 +12,11 @@
  */
 
 import * as path from "path";
-import { guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson } from "./lib/paths";
+import { guildPaths, parseCwd, parseFlag, hasFlag } from "./lib/paths";
 import { assignLayers } from "./lib/layers";
 import type { KnowledgeGraph } from "./lib/schema";
 import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
+import { runGraphStage } from "./lib/publish";
 
 function main(): void {
   const argv = process.argv.slice(2);
@@ -25,13 +26,20 @@ function main(): void {
   const inPath = parseFlag(argv, "in");
   const target = inPath ? path.resolve(cwd, inPath) : gp.knowledgeGraph;
 
-  const graph = readJson<KnowledgeGraph>(target);
+  // K03: the owner graph is read from and published to the generation store.
+  const graph = runGraphStage<KnowledgeGraph>(gp, {
+    target: inPath ? target : null,
+    who: "layers",
+    channels: ["semantic_graph"],
+    transform: (g) => {
+      g.layers = assignLayers(g);
+      return g;
+    },
+  });
   if (!graph) {
     process.stderr.write(`[layers] ERROR: cannot read ${target}\n`);
     process.exit(1);
   }
-
-  graph.layers = assignLayers(graph);
 
   // Invariant check: every file node in exactly one layer.
   const fileNodes = graph.nodes.filter((n) => n.type === "file").map((n) => n.id);
@@ -43,7 +51,6 @@ function main(): void {
     process.stderr.write(`[layers] WARN invariant: missing=${missing.length} dup=${dup.length}\n`);
   }
 
-  writeJson(target, graph);
   process.stderr.write(
     `[layers] ${graph.layers.length} layers over ${fileNodes.length} file nodes → ${path.relative(gp.repoRoot, target)}\n`,
   );

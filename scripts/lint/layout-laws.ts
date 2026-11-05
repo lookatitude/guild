@@ -1909,10 +1909,13 @@ const KTD29_DEEP_IMPORTS: ReadonlyMap<string, readonly string[]> = new Map<strin
   ["scripts/learn/lib/tsconfig-chain.ts", LEARN_SOURCE_BASIS],
   ["scripts/learn/scan.ts", LEARN_SOURCE_BASIS],
   // K02 (CW-16): same bundle reason; staleness also reaches the freshness boundary.
-  ["scripts/learn/staleness.ts", ["knowledge/source-basis", "knowledge/freshness-boundary"]],
+  ["scripts/learn/staleness.ts", ["knowledge/source-basis", "knowledge/freshness-boundary", "knowledge/publication-boundary"]],
   ["scripts/learn/lib/dependency-manifest.ts", LEARN_SOURCE_BASIS],
   ["scripts/learn/lib/dependency-invalidation.test.ts", ["knowledge/source-basis", "knowledge/freshness-boundary"]],
   ["scripts/learn/lib/source-basis.test.ts", ["knowledge/source-basis", "knowledge/working-set"]],
+  // K03 (CW-20): same bundle reason; learn writers publish through the generation store.
+  ["scripts/learn/lib/publish.ts", ["knowledge/publication", "knowledge/source-basis"]],
+  ["scripts/learn/lib/publication-writers.test.ts", ["knowledge/publication"]],
 ]);
 
 const CHECKS: Check[] = [
