@@ -25,6 +25,7 @@ import * as path from "node:path";
 import { loadYamlApi } from "../kernel";
 import { createGuildStorage, type GuildStorage } from "../state";
 import { WORKFLOW_CLASSES, type WorkflowClass } from "./workflow-graph-overlay";
+import { PROTECTED_PATHS_VERSION, verifyProtectedPaths, type ProtectedPathRule } from "./workflow-protected-paths";
 
 export const WORKFLOW_COMPONENT_SCHEMA_VERSION = "guild.workflow_component.v1" as const;
 export const WORKFLOW_COMPILE_MANIFEST_SCHEMA_VERSION = "guild.workflow_compile_manifest.v1" as const;
@@ -129,7 +130,7 @@ export type CompileRule =
   | "class-gate-missing"
   | "gate-not-protected"
   | "invalid-gate-scope"
-  | "release-bypasses-gate";
+  | ProtectedPathRule;
 
 export interface CompileViolation { rule: CompileRule; detail: string }
 
@@ -228,6 +229,7 @@ const COMPILER_HASH = sha256Of({
   step_kinds: COMPONENT_STEP_KINDS,
   condition_kinds: COMPONENT_CONDITION_KINDS,
   edge_outcomes: ["next", "repeat"],
+  protected_paths: PROTECTED_PATHS_VERSION,
 });
 
 // ---------------------------------------------------------------- shape validation
@@ -833,6 +835,9 @@ export function compileWorkflow(registry: WorkflowComponentRegistry, rawRequest:
       obligations: [],
       invocations: [],
     };
+    // W02: post-expansion dominance, gate order, scope and disguise checks on the emitted graph.
+    const verified = verifyProtectedPaths(projection);
+    if (!verified.ok) return { ok: false, violations: verified.violations };
     const manifest: CompileManifest = {
       schema_version: WORKFLOW_COMPILE_MANIFEST_SCHEMA_VERSION,
       compiler: { id: WORKFLOW_COMPILER_ID, version: WORKFLOW_COMPILER_VERSION, hash: COMPILER_HASH },

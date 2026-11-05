@@ -7494,6 +7494,38 @@ var init_ingest_pause = __esm({
   }
 });
 
+// src/domains/security/privileged-actions.ts
+var RELEASE_LIKE_TOKENS, PRIVILEGED_TOKENS;
+var init_privileged_actions = __esm({
+  "src/domains/security/privileged-actions.ts"() {
+    RELEASE_LIKE_TOKENS = Object.freeze([
+      "release",
+      "releases",
+      "publish",
+      "deploy",
+      "deployment",
+      "ship",
+      "merge",
+      "promote",
+      "rollout"
+    ]);
+    PRIVILEGED_TOKENS = Object.freeze([
+      "permission",
+      "permissions",
+      "grant",
+      "grants",
+      "secret",
+      "secrets",
+      "credential",
+      "credentials",
+      "admin",
+      "sudo",
+      "privilege",
+      "privileged"
+    ]);
+  }
+});
+
 // src/domains/security/index.ts
 var init_security = __esm({
   "src/domains/security/index.ts"() {
@@ -7508,6 +7540,7 @@ var init_security = __esm({
     init_events();
     init_d5_permission_content();
     init_ingest_pause();
+    init_privileged_actions();
     init_config();
     init_secrets();
   }

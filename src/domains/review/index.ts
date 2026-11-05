@@ -12,6 +12,8 @@ export const MODULE_PUBLIC_API_VERSION = "guild.module.public-api.v1" as const;
 export * from "./review-pairing";
 export * from "./review-progress";
 export * from "./advisory-contract";
+// W02: subject-bound assurance ledger (C8 v2 obligations).
+export * from "./assurance-ledger";
 
 // ── from src/modules/quality ──────────────────────────────────────────
 export * from "./quality-catalog";
