@@ -114,7 +114,7 @@ function main(): void {
   if (input && typeof input === "object") delete (input as Record<string, unknown>)._merge_report;
 
   const dispatchedV2 = isV2Input(input);
-  const result = validateWithDispatch(input, gp.repoRoot);
+  const result = validateWithDispatch(input, gp.sourceRoot);
   const counts = result.issues.reduce<Record<string, number>>((m, i) => {
     m[i.level] = (m[i.level] ?? 0) + 1;
     return m;
