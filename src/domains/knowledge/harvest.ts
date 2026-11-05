@@ -833,13 +833,14 @@ function stageDecisionCandidate(
     );
   }
   delete op.wiki_path;
+  // K04: list it by reference in the owner's candidate manifest, the baseline that
+  // makes a later disappearance visible, BEFORE the op turns terminal. Rebuilt from
+  // the directory on every call, so a later staging also lists an orphan.
+  const manifest = publishDecisionCandidates({ guildDir: scope.definitions(), autopromote: false, now });
   op.candidate_path = candidateAbs;
   op.status = "candidate";
   upsertOp(input.run_id, op, storeOpts);
   emitHarvestEvent(input.runDir, input.run_id, op);
-  // K04: list it by reference in the owner's candidate manifest, the baseline that
-  // makes a later disappearance visible. Rebuilt from the directory on every call.
-  const manifest = publishDecisionCandidates({ guildDir: scope.definitions(), autopromote: false, now });
   return {
     op,
     promoted: false,
@@ -955,12 +956,14 @@ function finishHarvest(
   // ── pin hit → replan, without rewriting the spec (KTD53 / R65) ────────────
   const pinned = new Set([
     ...(input.pinned_decision_ids ?? []),
+    ...(op.replan_decision_ids ?? []),
     ...dependents.flatMap((d) => d.stale_decisions.map((s) => s.pinned.id)),
   ]);
   const stale = [...affected].filter((id) => pinned.has(id)).sort();
   const replan = stale.length > 0;
   if (replan) {
     op.pinned_in_flight = true;
+    op.replan_decision_ids = stale;
     op.status = "replan_queued";
     upsertOp(input.run_id, op, storeOpts);
     emitHarvestEvent(input.runDir, input.run_id, op);

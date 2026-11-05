@@ -76,6 +76,8 @@ export interface HarvestOp {
   superseded_ids?: string[];
   /** true → T0 must emit `replan` after `indexed` (KTD53). */
   pinned_in_flight?: boolean;
+  /** K04: the pinned ids that queued the replan, restored on resume. */
+  replan_decision_ids?: string[];
   status: HarvestStatus;
   refuse_reason?: HarvestRefuseReason;
 }

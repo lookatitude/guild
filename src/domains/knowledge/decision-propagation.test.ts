@@ -572,4 +572,25 @@ describe("K04 R1 regressions", () => {
     const again = publishDecisionCandidates({ guildDir: r.guildDir, autopromote: false });
     expect(again.status === "ok" && again.missing).toHaveLength(1);
   });
+
+  it("R4-F1: a replan queued by pinned_decision_ids alone survives a resume without that input", () => {
+    const r = mkRoot("repo");
+    const first = harvest(r, "next", { superseded_ids: ["decision:old"], pinned_decision_ids: ["decision:old"] });
+    expect(first.replan_queued).toBe(true);
+    upsertOp(RUN_ID, { ...first.op, status: "replan_queued" }, { storage: r.storage });
+    const resumed = harvest(r, "next", { superseded_ids: ["decision:old"], op_id: first.op.op_id });
+    expect(resumed.replan_queued).toBe(true);
+    expect(resumed.stale_decision_ids).toEqual(["decision:old"]);
+  });
+
+  it("R4-F2: a lost events directory with a retained checkpoint is truncation, and nothing re-accepts", () => {
+    const { r } = at37Fixture();
+    harvest(r, "retry-policy-v2", { replaces: "decision:retry-policy-v1" });
+    fs.rmSync(path.join(decisionsHome(r.guildDir), "events"), { recursive: true });
+    expect(() => readDecisionLedger(r.guildDir)).toThrow(/truncated/);
+    const re = recordAcceptedDecision({ guildDir: r.guildDir, pagePath: path.join(r.guildDir, "wiki", "decisions", "retry-policy-v1.md") });
+    expect(re.status === "refused" && re.reason).toBe("ledger_corrupt");
+    fs.rmSync(path.join(decisionsHome(r.guildDir), "pins"), { recursive: true });
+    expect(() => decisionPublicationRefs(r.guildDir)).toThrow(/truncated/);
+  });
 });

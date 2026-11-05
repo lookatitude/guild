@@ -13350,17 +13350,14 @@ function readDecisionLedger(guildDir, allowMissingCheckpoint = false) {
   const dir = path39.join(decisionsHome(guildDir), "events");
   const c = checkContained(guildDir, dir, { policy: "physical" });
   const ledger = { head: null, events: [], decisions: /* @__PURE__ */ new Map(), tombstones: /* @__PURE__ */ new Map() };
-  if (isRefused(c)) {
-    if (absent(c.code)) return ledger;
-    throw new DecisionLedgerError(`events dir: ${c.code}`);
-  }
-  if (!fs34.existsSync(c.realPath)) return ledger;
-  const seqs = fs34.readdirSync(c.realPath).map((n) => EVENT_FILE.exec(n)).filter((m) => m !== null).map((m) => Number(m[1])).sort((a, b) => a - b);
+  if (isRefused(c) && !absent(c.code)) throw new DecisionLedgerError(`events dir: ${c.code}`);
+  const eventsDir = isRefused(c) ? null : c.realPath;
+  const seqs = (eventsDir && fs34.existsSync(eventsDir) ? fs34.readdirSync(eventsDir) : []).map((n) => EVENT_FILE.exec(n)).filter((m) => m !== null).map((m) => Number(m[1])).sort((a, b) => a - b);
   let prev = null;
   const chainShas = [];
   for (let i = 0; i < seqs.length; i++) {
     if (seqs[i] !== i + 1) throw new DecisionLedgerError(`event sequence has a gap at ${i + 1}`);
-    const bytes = readInside(guildDir, path39.join(c.realPath, eventName(i + 1)));
+    const bytes = readInside(guildDir, path39.join(eventsDir, eventName(i + 1)));
     if (!bytes) throw new DecisionLedgerError(`event ${i + 1} vanished`);
     const ev = parseEvent(bytes, i + 1, prev);
     prev = sha2(bytes);
@@ -13508,7 +13505,7 @@ function computeReport(guildDir, now) {
 }
 function decisionPublicationRefs(guildDir, now) {
   const home = decisionsHome(guildDir);
-  if (!fs34.existsSync(path39.join(home, "events")) && !fs34.existsSync(path39.join(home, "pins"))) return null;
+  if (!["events", "pins", "head.json"].some((n) => fs34.existsSync(path39.join(home, n)))) return null;
   const r = computeReport(path39.resolve(guildDir), now ?? (/* @__PURE__ */ new Date()).toISOString());
   if (r.decision_refs.length > C13_ENTITY_CAP || r.replan_required.length > C13_ENTITY_CAP) {
     throw new DecisionLedgerError(`decision refs exceed the C13 cap of ${C13_ENTITY_CAP}`);

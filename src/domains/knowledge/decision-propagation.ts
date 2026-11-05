@@ -193,13 +193,10 @@ export function readDecisionLedger(guildDir: string, allowMissingCheckpoint = fa
   const dir = path.join(decisionsHome(guildDir), "events");
   const c = checkContained(guildDir, dir, { policy: "physical" });
   const ledger: DecisionLedger = { head: null, events: [], decisions: new Map(), tombstones: new Map() };
-  if (isRefused(c)) {
-    if (absent(c.code)) return ledger;
-    throw new DecisionLedgerError(`events dir: ${c.code}`);
-  }
-  if (!fs.existsSync(c.realPath)) return ledger;
-  const seqs = fs
-    .readdirSync(c.realPath)
+  if (isRefused(c) && !absent(c.code)) throw new DecisionLedgerError(`events dir: ${c.code}`);
+  // A missing events dir is an empty chain, still checked against the checkpoint below.
+  const eventsDir = isRefused(c) ? null : c.realPath;
+  const seqs = (eventsDir && fs.existsSync(eventsDir) ? fs.readdirSync(eventsDir) : [])
     .map((n) => EVENT_FILE.exec(n))
     .filter((m): m is RegExpExecArray => m !== null)
     .map((m) => Number(m[1]))
@@ -208,7 +205,7 @@ export function readDecisionLedger(guildDir: string, allowMissingCheckpoint = fa
   const chainShas: Sha256[] = [];
   for (let i = 0; i < seqs.length; i++) {
     if (seqs[i] !== i + 1) throw new DecisionLedgerError(`event sequence has a gap at ${i + 1}`);
-    const bytes = readInside(guildDir, path.join(c.realPath, eventName(i + 1)));
+    const bytes = readInside(guildDir, path.join(eventsDir as string, eventName(i + 1)));
     if (!bytes) throw new DecisionLedgerError(`event ${i + 1} vanished`);
     const ev = parseEvent(bytes, i + 1, prev);
     prev = sha(bytes);
@@ -673,7 +670,7 @@ export interface DecisionPublicationRefs {
  */
 export function decisionPublicationRefs(guildDir: string, now?: string): DecisionPublicationRefs | null {
   const home = decisionsHome(guildDir);
-  if (!fs.existsSync(path.join(home, "events")) && !fs.existsSync(path.join(home, "pins"))) return null;
+  if (!["events", "pins", "head.json"].some((n) => fs.existsSync(path.join(home, n)))) return null;
   const r = computeReport(path.resolve(guildDir), now ?? new Date().toISOString());
   if (r.decision_refs.length > C13_ENTITY_CAP || r.replan_required.length > C13_ENTITY_CAP) {
     throw new DecisionLedgerError(`decision refs exceed the C13 cap of ${C13_ENTITY_CAP}`);
