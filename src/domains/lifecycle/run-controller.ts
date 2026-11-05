@@ -569,6 +569,10 @@ export function openRunController(opts: OpenControllerOptions): RunController {
     throw new ControllerRefusal("journal_identity_mismatch", "run is anchored to another controller authority");
   }
   const view = loadJournal(privateDir, key);
+  if (existingAnchor === null && view.entries.length > 0) {
+    // An established run whose anchor vanished fails closed; restoring it is an operator action.
+    throw new ControllerRefusal("journal_identity_mismatch", "controller anchor is missing for an established run");
+  }
   if (existingAnchor === null) {
     try {
       publishDurable(durableRoot, anchorRel, anchorBytes, "journal_identity_mismatch");
@@ -643,6 +647,10 @@ export function openRunController(opts: OpenControllerOptions): RunController {
     if (view.epoch !== epoch) throw new ControllerRefusal("controller_fenced", `epoch ${epoch} superseded by ${view.epoch}`);
     if (suspended || view.suspended) throw new ControllerRefusal("controller_unavailable", "controller suspended");
     if (expired()) throw new ControllerRefusal("controller_unavailable", "lease expired");
+    // A missing or replaced anchor means another authority may exist: stop writing.
+    if (readDurable(durableRoot, anchorRel, 4096) !== anchorBytes.toString("utf8")) {
+      throw new ControllerRefusal("controller_unavailable", "controller anchor missing or replaced");
+    }
     // The journal decides authority; the lease only signals liveness. A lease
     // removed or overwritten by an older epoch (a stale heartbeat or close) is
     // restored by the current epoch instead of wedging it.
@@ -651,13 +659,13 @@ export function openRunController(opts: OpenControllerOptions): RunController {
     if (lease && lease.epoch === epoch && lease.token !== token) throw new ControllerRefusal("controller_unavailable", "lease lost");
     if (!lease || lease.epoch < epoch) writeLease(privateDir, { pid, host_id, token, heartbeat_ms: heartbeatAt, epoch });
   };
-  const write = (kind: JournalEntry["kind"], body: Record<string, unknown>): JournalEntry => {
+  const write = (kind: JournalEntry["kind"], body: Record<string, unknown>, still?: () => void): JournalEntry => {
     assertLive();
     // Two-phase: a provisional entry, then a `commit` naming it. Only committed
     // entries have effect, so a crash, an expired lease or a newer epoch taking
     // the next sequence leaves the provisional entry inert. Lease validity is
     // checked after fsync, immediately before each link(2).
-    const live = () => { if (commitExpired()) throw new ControllerRefusal("controller_unavailable", "lease expired before commit"); };
+    const live = () => { if (commitExpired()) throw new ControllerRefusal("controller_unavailable", "lease expired before commit"); still?.(); };
     const lost = (): never => {
       loadJournal(privateDir, k, view);
       if (view.epoch !== epoch) throw new ControllerRefusal("controller_fenced", `epoch ${epoch} superseded by ${view.epoch}`);
@@ -857,7 +865,14 @@ export function openRunController(opts: OpenControllerOptions): RunController {
           const admission = effectiveAdmission(g);
           if (admission === "revoked") { reject("admission_revoked"); continue; }
           if (admission === "sealed") { reject("admission_sealed"); continue; }
-          write("observation", { execution_id, observation_id, grant_id: g.grant_id, digest, admission });
+          try {
+            write("observation", { execution_id, observation_id, grant_id: g.grant_id, digest, admission }, () => {
+              if (now() > g.expires_at_ms) throw new ControllerRefusal("request_invalid", "grant expired before commit");
+            });
+          } catch (err) {
+            if (err instanceof ControllerRefusal && err.code === "request_invalid") { reject("grant_expired"); continue; }
+            throw err;
+          }
           report.accepted.push({ observation_id, execution_id, admission });
         }
       }

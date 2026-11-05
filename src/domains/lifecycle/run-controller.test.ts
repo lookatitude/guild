@@ -502,6 +502,41 @@ describe("R02 · codex r3 regressions", () => {
   });
 });
 
+describe("R02 · codex r4 regressions", () => {
+  it("F1: deleting the anchor stops the original controller and blocks recovery; it never yields two authorities", () => {
+    const c = open();
+    const w = c.issueWriterGrant("s");
+    fs.rmSync(path.join(durableRoot, ".guild", "runs", RUN, "controller", "anchor.json"));
+    expect(code(() => c.control(w, { operation_id: "op-1", action: "accept", subject: "a" }))).toBe("controller_unavailable");
+    const c2 = open({ host_id: "host-2", privateDir: path.join(tmp, "host2-state", "controller", RUN) });
+    const w2 = c2.issueWriterGrant("s");
+    c2.control(w2, { operation_id: "op-2", action: "accept", subject: "a" });
+    expect(code(() => c.control(w, { operation_id: "op-3", action: "accept", subject: "a" }))).toBe("controller_unavailable");
+    clock += LEASE + 1;
+    // host-2 now holds the anchor; the original host cannot resume against it.
+    expect(code(() => open())).toBe("controller_failover_refused");
+  });
+
+  it("F1: an established run whose anchor vanished refuses to reopen", () => {
+    open().close();
+    fs.rmSync(path.join(durableRoot, ".guild", "runs", RUN, "controller", "anchor.json"));
+    clock += LEASE + 1;
+    expect(code(() => open())).toBe("journal_identity_mismatch");
+  });
+
+  it("F2: a grant that expires during observation publication is rejected", () => {
+    const c = open();
+    const g = c.issueAttemptGrant({ execution_id: "e", attempt_id: "a", scope: "s", expires_at_ms: clock + 1_000 });
+    writeWorkerObservation(durableRoot, RUN, g, { observation_id: "obs-1", body: {} });
+    const real = fs.fsyncSync;
+    const spy = spyOn(fs, "fsyncSync").mockImplementation((fd: number) => { clock += 1_001; real(fd); });
+    let rep;
+    try { rep = c.collectObservations(); } finally { spy.mockRestore(); }
+    expect(rep.rejected).toEqual([{ observation_id: "obs-1", code: "grant_expired" }]);
+    expect(readControllerJournal({ privateDir }).observations.size).toBe(0);
+  });
+});
+
 describe("W02 carry-over · authority-bound assurance ledger", () => {
   const canonical = (v: unknown): string => {
     if (v === null || typeof v !== "object") return JSON.stringify(v);
