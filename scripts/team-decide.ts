@@ -299,7 +299,7 @@ export function main(argv: string[] = process.argv.slice(2)): number {
       if (!loaded.ok) return refused(loaded.violations);
       // The registry loader reads every *.yaml under the component tree; prove the
       // tree and each file resolve inside the project root before it does.
-      const storage = createGuildStorage(cwd);
+      const storage = createGuildStorage(cwd, { activeRoot: cwd, profile: "standalone" }); // no discovery reads outside the checked root
       const compDir = storage.definition(COMPONENT_DEFINITION_SEGMENT);
       const escapes: Array<{ rule: string; detail: string }> = [];
       const relDir = path.relative(cwd, compDir);

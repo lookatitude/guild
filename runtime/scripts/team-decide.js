@@ -53559,7 +53559,7 @@ function main6(argv = process.argv.slice(2)) {
       };
       const loaded = loadPhaseCompositionInputs({ root: cwd, proposal: f["proposal"], plan: f["plan"], qa_policy: f["qa_policy"] });
       if (!loaded.ok) return refused(loaded.violations);
-      const storage = createGuildStorage(cwd);
+      const storage = createGuildStorage(cwd, { activeRoot: cwd, profile: "standalone" });
       const compDir = storage.definition(COMPONENT_DEFINITION_SEGMENT);
       const escapes2 = [];
       const relDir = path81.relative(cwd, compDir);
