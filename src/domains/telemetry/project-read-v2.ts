@@ -111,16 +111,20 @@ function readRun(root: string, sourceId: string, runId: string, asOf: string, pr
   }
   const leaves: UsageFact[] = ledger.leaves.map((leaf) => {
     const u = leaf.normalized_usage;
+    // The ledger names a conflict when observations of one request disagree on its task: its lineage is unknown.
+    const conflict = leaf.allocation === "unallocated" && leaf.allocation_reason === "observations carry conflicting task bindings";
     const ev = leaf.usage ? byObservation.get(`${leaf.usage.accounting_identity}\u0000${leaf.usage.observation_id}\u0000${leaf.usage.revision}`) : undefined;
     // The ledger's field rule: a counter is known when the leaf is covered, or reports it with known semantics.
     const known = (k: "input_inclusive" | "output" | "cache_read_subset" | "cache_write_subset" | "total") =>
       leaf.covered || (leaf.usage !== null && u[k] !== null && u.usage_semantics !== "unknown") ? u[k] : null;
     return {
       accounting_identity: leaf.accounting_identity, at: ev?.at ?? null,
-      execution_id: leaf.execution_id, logical_task_id: leaf.logical_task_id, attempt_id: leaf.attempt_id, agent_instance_id: leaf.agent_instance_id,
+      execution_id: conflict ? null : leaf.execution_id, logical_task_id: conflict ? null : leaf.logical_task_id,
+      attempt_id: conflict ? null : leaf.attempt_id, agent_instance_id: conflict ? null : leaf.agent_instance_id,
       requested_model: leaf.requested_model, observed_model: leaf.observed_identity.status === "observed" ? leaf.observed_identity.model : null,
       input: known("input_inclusive"), output: known("output"), cache_read: known("cache_read_subset"), cache_write: known("cache_write_subset"), total: known("total"),
       measured_usd: leaf.measured_usd, derived_usd: leaf.derived_estimate_usd, covered: leaf.covered, allocated: leaf.allocation === "allocated",
+      binding_conflict: conflict,
       usage_semantics: u.usage_semantics,
       evidence: ev
         ? recordEvidence(ev)
@@ -158,7 +162,7 @@ function readSource(s: ProjectSource, asOf: string, pricing: PriceTable | null):
   try {
     const l = fs.lstatSync(runsDir);
     if (!l.isDirectory()) return unavailableSource(s, ".guild/runs is not a directory");
-    names = fs.readdirSync(runsDir).filter((n) => TRACE_ID_RE.test(n)).sort();
+    names = fs.readdirSync(runsDir).sort();
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") return unavailableSource(s, ".guild/runs is unreadable");
     names = [];
@@ -170,9 +174,11 @@ function readSource(s: ProjectSource, asOf: string, pricing: PriceTable | null):
   for (const n of names) {
     let l: fs.Stats;
     try { l = fs.lstatSync(path.join(runsDir, n)); } catch { unsupportedReasons.set(n, "run entry cannot be inspected"); continue; }
+    if (!l.isDirectory() && !l.isSymbolicLink()) continue;
+    // KTD16 retention rotates run dirs into runs/_archive/; that container is not a run and is not read.
+    if (n === "_archive" && l.isDirectory()) continue;
     if (l.isSymbolicLink()) unsupportedReasons.set(n, "run directory is a symlink");
-    else if (!l.isDirectory()) continue;
-    else if (n.includes(":")) unsupportedReasons.set(n, "run directory name is not a contract path segment");
+    else if (!TRACE_ID_RE.test(n) || n.includes(":")) unsupportedReasons.set(n, "run directory name is not a contract path segment");
     else dirs.push(n);
   }
   const unsupported = [...unsupportedReasons.keys()];
@@ -201,8 +207,9 @@ function readSource(s: ProjectSource, asOf: string, pricing: PriceTable | null):
     diag.duplicates += r.duplicates;
     diag.pending_requests = diag.pending_requests === null || r.pending === null ? (r.run.usage_state === "available" ? null : diag.pending_requests) : diag.pending_requests + r.pending;
   }
-  for (const [n, reason] of unsupportedReasons) diag.run_errors.push({ run_id: n, reason });
-  const generation = sha256(canonicalJson({ source_id: s.source_id, runs: gens, unsupported }));
+  // Names are diagnostic text here, not ids: keep them printable and bounded.
+  for (const [n, reason] of unsupportedReasons) diag.run_errors.push({ run_id: JSON.stringify(n).slice(1, -1).slice(0, 128), reason });
+  const generation = sha256(canonicalJson({ source_id: s.source_id, runs: gens, unsupported: unsupported.map((n) => [n, unsupportedReasons.get(n)]) }));
   return { facts: { source_id: s.source_id, generation, state: "available", reason: null, runs, unenumerated_runs: unsupported.length, outcomes: "not_collected", tasks: [] }, diag };
 }
 

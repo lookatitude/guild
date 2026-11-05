@@ -518,6 +518,54 @@ describe("AT29 · query snapshot", () => {
     expect(pt(series(snap, "M13.unallocated_usd"))).toMatchObject({ value: 0.2, cost_basis: "measured" });
   });
 
+  it("an outcome cohort over sources with no outcome producer is unknown, not an empty cohort", () => {
+    at28Sources();
+    const snap = open();
+    const q = projectQuery(snap, { metric_id: "M07.output_tokens", grain: "logical_task", window: { from: "2026-10-26T00:00:00Z", to: AS_OF, basis: "accepted_outcome_cohort" } });
+    const r = readMetricSeries(snap, readRequest(q, "metric_series", { request_id: "q-16", session_id: "s-1" }), { group_by: "source" }) as MetricSeriesV2;
+    expect(validateMetricSeriesV2(r)).toEqual({ ok: true });
+    for (const p of r.points) expect(p).toMatchObject({ value: null, exact_total: null, coverage: { state: "unavailable" } });
+    expect(pt(r, "source-a").coverage.reason).toContain("no task outcome producer");
+  });
+
+  it("a request whose observations conflict on its task matches no task filter exactly", () => {
+    const m = (rev: number) => ({ ...use("req-1", 1, 1), observation_id: `obs-${rev}`, revision: rev, cost_usd: 0.1, cost_basis: "measured" as const });
+    put("source-a", "runs/run-1/trace.jsonl", jsonl([ev("source-a", "run-1", 1, m(1), { task: "task-1" }), ev("source-a", "run-1", 2, m(2), { task: "task-2" })]));
+    put("source-b", "runs/run-1/trace.jsonl", jsonl([ev("source-b", "run-1", 1, use("req-1", 1, 1))]));
+    const snap = open();
+    const leaf = snap.facts.sources[0]!.runs[0]!.leaves[0]!;
+    expect(leaf).toMatchObject({ binding_conflict: true, logical_task_id: null, allocated: false });
+    for (const task of ["task-1", "task-2"]) {
+      const p = pt(series(snap, "M10.measured_spend_usd", { filters: [{ dimension: "task", values: [task] }] }));
+      expect(`${task}:${p.exact_total}:${p.coverage.state}`).toBe(`${task}:null:unavailable`);
+    }
+    expect(pt(series(snap, "M13.unallocated_usd"))).toMatchObject({ value: 0.1, cost_basis: "measured" });
+  });
+
+  it("allocated cost uses one basis across grouped points, so groups reconcile with the total", () => {
+    const measured = { ...use("req-1", 1, 1), cost_usd: 0.1, cost_basis: "measured" as const };
+    put("source-a", "runs/run-1/trace.jsonl", jsonl([ev("source-a", "run-1", 1, measured, { task: "task-1" })]));
+    put("source-b", "runs/run-1/trace.jsonl", jsonl([ev("source-b", "run-1", 1, use("req-1", 1000000, 0), { task: "task-2" })]));
+    const snap = open();
+    const total = pt(series(snap, "M13.allocated_usd"));
+    const bySource = series(snap, "M13.allocated_usd", { group_by: "source" });
+    expect(total).toMatchObject({ value: 0.1, cost_basis: "measured", exact_total: null });
+    expect(bySource.points.map((p) => p.cost_basis)).toEqual(["measured", "measured"]);
+    expect(bySource.points.reduce((a, p) => a + (p.value ?? 0), 0)).toBe(total.value!);
+  });
+
+  it("a run directory whose name is not a contract id keeps the enumeration unknown", () => {
+    at28Sources();
+    fs.mkdirSync(path.join(rootOf("source-b"), ".guild/runs/bad run"));
+    fs.mkdirSync(path.join(rootOf("source-b"), ".guild/runs/_archive"));
+    const snap = open();
+    expect(pt(series(snap, "M01.run_count"))).toMatchObject({ value: 2, exact_total: null, coverage: { state: "partial" } });
+    expect(snap.diagnostics.find((d) => d.source_id === "source-b")!.run_errors).toEqual([{ run_id: "bad run", reason: "run directory name is not a contract path segment" }]);
+    const before = snap.facts.snapshot.input_manifest_digest;
+    fs.rmdirSync(path.join(rootOf("source-b"), ".guild/runs/bad run"));
+    expect(open().facts.snapshot.input_manifest_digest).not.toBe(before);
+  });
+
   it("ids containing ':' never merge two runs into one point", () => {
     put("a", "runs/c/trace.jsonl", jsonl([ev("a", "c", 1, use("req-1", 1, 1))]));
     put("a:b", "runs/c/trace.jsonl", jsonl([ev("a:b", "c", 1, use("req-1", 1, 1))]));

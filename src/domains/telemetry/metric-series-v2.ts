@@ -87,6 +87,8 @@ export interface UsageFact {
   /** Each counter is null unless the leaf reports it with known semantics (the T02 ledger rule). */
   input: number | null; output: number | null; cache_read: number | null; cache_write: number | null; total: number | null;
   measured_usd: number | null; derived_usd: number | null; covered: boolean; allocated: boolean;
+  /** Its observations name conflicting task bindings: its execution/task/attempt/agent are unknown, not either one. */
+  binding_conflict: boolean;
   usage_semantics: string; evidence: Evidence;
 }
 /** One valid trace record's lineage: what the run names even without usage (dispatch, phase, lifecycle). */
@@ -189,6 +191,8 @@ interface Scope {
   unknownRuns: { source_id: string; run_id: string }[];
   /** Per available source, run directories that could not be enumerated as runs. */
   unenumerated: { source_id: string; count: number }[];
+  /** Under an outcome cohort, sources with no outcome producer: which of their records belong is unknown. */
+  cohortUnknown: string[];
   /** Available sources with no outcome producer: their outcome facts are unknown too. */
   noOutcomeSources: string[];
   /** A leaf-level filter or activity window is active: unattributable extras make eligibility unknown. */
@@ -225,6 +229,7 @@ function selectScope(facts: FactSet, q: QueryIdentity, outcomeMetric: boolean): 
   const unknownSources: string[] = [];
   const unknownRuns: { source_id: string; run_id: string }[] = [];
   const unenumerated: { source_id: string; count: number }[] = [];
+  const cohortUnknown: string[] = [];
   const noOutcomeSources: string[] = [];
   const runs: ScopedRun[] = [];
   const tasks: TaskFact[] = [];
@@ -235,6 +240,7 @@ function selectScope(facts: FactSet, q: QueryIdentity, outcomeMetric: boolean): 
     if (s.state !== "available") { unknownSources.push(sid); continue; }
     if (s.outcomes !== "collected") noOutcomeSources.push(sid);
     if (s.unenumerated_runs > 0) unenumerated.push({ source_id: sid, count: s.unenumerated_runs });
+    if (w.basis === "accepted_outcome_cohort" && s.outcomes !== "collected") { cohortUnknown.push(sid); continue; }
     // Cohort selection first: under accepted_outcome_cohort, usage follows the selected tasks across all attempts.
     const selected = new Set<string>();
     for (const t of s.tasks) {
@@ -272,14 +278,16 @@ function selectScope(facts: FactSet, q: QueryIdentity, outcomeMetric: boolean): 
         && (w.basis !== "accepted_outcome_cohort" || (o.logical_task_id !== null && selected.has(`${r.run_id}\u0000${o.logical_task_id}`))));
       if (recordLevel) {
         // Membership is decided by the run's records; without a complete trace it is unknown, not absent.
-        if (r.usage_state !== "available" || !r.trace_complete) unknownRuns.push({ source_id: r.source_id, run_id: r.run_id });
+        // A leaf with conflicting task bindings matches no lineage filter, but may belong: unknown too.
+        const conflicted = leafFilters.some((f) => f.dimension !== "observed_model" && f.dimension !== "requested_model") && r.leaves.some((l) => l.binding_conflict);
+        if (r.usage_state !== "available" || !r.trace_complete || conflicted) unknownRuns.push({ source_id: r.source_id, run_id: r.run_id });
         if (leaves.length === 0 && observations.length === 0) continue;
       }
       if (w.basis === "accepted_outcome_cohort" && leaves.length === 0 && observations.length === 0 && !tasks.some((t) => t.source_id === r.source_id && t.run_id === r.run_id)) continue;
       runs.push({ run: r, leaves, observations });
     }
   }
-  return { runs, tasks, unknownSources, unknownRuns, unenumerated, noOutcomeSources, leafFiltered: leafFilters.length > 0 || w.basis !== "as_of_snapshot", exclusions, taskExclusions };
+  return { runs, tasks, unknownSources, unknownRuns, unenumerated, cohortUnknown, noOutcomeSources, leafFiltered: leafFilters.length > 0 || w.basis !== "as_of_snapshot", exclusions, taskExclusions };
 }
 
 // ── Point computation ────────────────────────────────────────────────────────
@@ -294,10 +302,11 @@ const unknownReason = (s: Scope, extra: string[] = []) => [
   ...s.unknownRuns.slice(0, 20).map((x) => `run ${x.source_id}:${x.run_id} membership unknown (no complete trace)`),
   ...(s.unknownRuns.length > 20 ? [`${s.unknownRuns.length - 20} more runs with unknown membership`] : []),
   ...s.unenumerated.map((x) => `source ${x.source_id} has ${x.count} run directories that are not contract runs`),
+  ...s.cohortUnknown.map((x) => `source ${x} has no task outcome producer; cohort membership unknown`),
   ...extra,
 ].join("; ").slice(0, 4000) || null;
 /** The scope's run enumeration is fully known. */
-const enumKnown = (s: Scope) => s.unknownSources.length === 0 && s.unknownRuns.length === 0 && s.unenumerated.length === 0;
+const enumKnown = (s: Scope) => s.unknownSources.length === 0 && s.unknownRuns.length === 0 && s.unenumerated.length === 0 && s.cohortUnknown.length === 0;
 
 /** Eligible leaf requests in scope: null when any part of the enumeration is unknown. */
 function leafEligibility(s: Scope): { eligible: number | null; reasons: string[] } {
@@ -375,14 +384,21 @@ function outcomeTasks(s: Scope): { tasks: TaskFact[]; unknown: number } {
 
 class OutcomesNotCollected extends Error { constructor(readonly sources: string[]) { super(`no task outcome producer for source ${sources.join(", ")}`); } }
 
-function computeCalc(metric: AtomicMetric, s: Scope, facts: FactSet, grain: string): Calc {
-  try { return computeCalcInner(metric, s, facts, grain); } catch (err) {
+/** Series-wide choices every point must share (so grouped points reconcile with the ungrouped total). */
+interface SeriesContext { m13Basis: "measured" | "derived_estimate" | null }
+function seriesContext(s: Scope, facts: FactSet): SeriesContext {
+  const anyMeasured = s.runs.some(({ leaves }) => leaves.some((l) => l.measured_usd !== null));
+  return { m13Basis: anyMeasured ? "measured" : facts.pricing ? "derived_estimate" : null };
+}
+
+function computeCalc(metric: AtomicMetric, s: Scope, facts: FactSet, grain: string, ctx: SeriesContext): Calc {
+  try { return computeCalcInner(metric, s, facts, grain, ctx); } catch (err) {
     if (err instanceof OutcomesNotCollected) return unavailableCalc(`task outcome axes not collected: ${err.message}`, COST_UNITS.has(metric.unit));
     throw err;
   }
 }
 
-function computeCalcInner(metric: AtomicMetric, s: Scope, facts: FactSet, grain: string): Calc {
+function computeCalcInner(metric: AtomicMetric, s: Scope, facts: FactSet, grain: string, ctx: SeriesContext): Calc {
   const id = metric.id;
   const fam = familyOf(id);
   const cost = COST_UNITS.has(metric.unit);
@@ -495,9 +511,8 @@ function computeCalcInner(metric: AtomicMetric, s: Scope, facts: FactSet, grain:
     case "M13.unallocated_usd": {
       // Known cost keeps its basis: measured spend when the scope has any, else the pinned derived estimate.
       const want = id === "M13.allocated_usd";
-      const anyMeasured = s.runs.some(({ leaves }) => leaves.some((l) => l.measured_usd !== null));
-      if (anyMeasured) return sumCalc(s, (l) => (l.measured_usd === null ? null : l.allocated === want ? l.measured_usd : 0), "measured", "some requests have no measured spend");
-      if (!facts.pricing) return unavailableCalc("no measured spend and no pricing table pinned; allocated cost unavailable", true);
+      if (ctx.m13Basis === "measured") return sumCalc(s, (l) => (l.measured_usd === null ? null : l.allocated === want ? l.measured_usd : 0), "measured", "some requests have no measured spend");
+      if (ctx.m13Basis === null) return unavailableCalc("no measured spend and no pricing table pinned; allocated cost unavailable", true);
       return sumCalc(s, (l) => (l.derived_usd === null ? null : l.allocated === want ? l.derived_usd : 0), "derived_estimate");
     }
     case "M14.outcome_count": {
@@ -567,6 +582,7 @@ function groupKeys(s: Scope, by: GroupBy): Map<string, Scope> {
         unknownSources: own ? [] : s.unknownSources,
         unknownRuns: by === "source" ? s.unknownRuns.filter((x) => x.source_id === src) : by === "run" ? s.unknownRuns.filter((x) => x.source_id === src && x.run_id === runId) : [...s.unknownRuns, ...opaque],
         unenumerated: by === "source" ? s.unenumerated.filter((x) => x.source_id === src) : by === "run" ? [] : s.unenumerated,
+        cohortUnknown: own ? s.cohortUnknown.filter((x) => x === src) : s.cohortUnknown,
         noOutcomeSources: own ? s.noOutcomeSources.filter((x) => x === src) : s.noOutcomeSources };
       out.set(key, g);
     }
@@ -600,7 +616,8 @@ function groupKeys(s: Scope, by: GroupBy): Map<string, Scope> {
     g?.tasks.push(t);
   }
   // Unavailable sources are unknown in every group, so per-source points still name them.
-  if (by === "source") for (const sid of s.unknownSources) if (!out.has(sid)) out.set(sid, { ...s, runs: [], tasks: [], unknownSources: [sid], unknownRuns: [], unenumerated: [], noOutcomeSources: [] });
+  if (by === "source") for (const sid of s.unknownSources) if (!out.has(sid)) out.set(sid, { ...s, runs: [], tasks: [], unknownSources: [sid], unknownRuns: [], unenumerated: [], cohortUnknown: [], noOutcomeSources: [] });
+  if (by === "source") for (const sid of s.cohortUnknown) if (!out.has(sid)) out.set(sid, { ...s, runs: [], tasks: [], unknownSources: [], unknownRuns: [], unenumerated: [], cohortUnknown: [sid], noOutcomeSources: [] });
   if (out.size > SERIES_LIMITS.points) throw new SeriesRefusal("invalid_request", `${out.size} groups exceed the ${SERIES_LIMITS.points}-point bound; narrow the filters`);
   return new Map([...out.entries()].sort((a, b) => cmp(a[0], b[0])));
 }
@@ -661,8 +678,9 @@ export function computeMetricSeries(facts: FactSet, q: QueryIdentity, opts: { gr
   const records = new Map<string, Evidence[]>();
   const points: SeriesPoint[] = [];
   const groups = groupKeys(scope, opts.group_by ?? "all");
+  const ctx = seriesContext(scope, facts);
   for (const [key, g] of groups) {
-    const c = computeCalc(effective, g, facts, q.grain);
+    const c = computeCalc(effective, g, facts, q.grain, ctx);
     const rs = sortEvidence(c.records);
     records.set(key, rs);
     points.push({
@@ -671,7 +689,7 @@ export function computeMetricSeries(facts: FactSet, q: QueryIdentity, opts: { gr
       drilldown: { query_hash: hash, cursor: rs.length && opts.cursor ? opts.cursor(key, 0, rs.length) : null },
     });
   }
-  const whole = computeCalc(effective, scope, facts, q.grain).coverage;
+  const whole = computeCalc(effective, scope, facts, q.grain, ctx).coverage;
   const unit = effective.unit as string;
   const derived = points.some((p) => p.cost_basis === "derived_estimate");
   return {
