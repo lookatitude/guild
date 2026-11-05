@@ -11,6 +11,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { readContainedFile } from "../../../src/domains/knowledge/source-basis";
 
 /** Forked default exclusions (Understand-Anything ignore-filter, MIT). */
 export const DEFAULT_IGNORE_PATTERNS: readonly string[] = Object.freeze([
@@ -118,9 +119,11 @@ function compile(patterns: string[]): Rule[] {
 export function createIgnoreFilter(projectRoot: string): IgnoreFilter {
   const patterns: string[] = [...DEFAULT_IGNORE_PATTERNS];
 
-  const rootIgnore = path.join(projectRoot, ".guildignore");
-  if (fs.existsSync(rootIgnore)) {
-    patterns.push(...fs.readFileSync(rootIgnore, "utf-8").split("\n"));
+  // K01: contained, symlink-free read only; a refused file contributes nothing
+  // (computeLearnSourceBasis records it as unresolved).
+  const rootIgnore = readContainedFile(projectRoot, ".guildignore");
+  if (rootIgnore) {
+    patterns.push(...rootIgnore.toString("utf-8").split("\n"));
   }
 
   const rules = compile(patterns);

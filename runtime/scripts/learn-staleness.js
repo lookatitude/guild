@@ -24,12 +24,12 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // scripts/learn/staleness.ts
-var fs6 = __toESM(require("fs"));
-var path7 = __toESM(require("path"));
+var fs7 = __toESM(require("fs"));
+var path8 = __toESM(require("path"));
 
 // scripts/learn/lib/paths.ts
-var fs3 = __toESM(require("fs"));
-var path3 = __toESM(require("path"));
+var fs6 = __toESM(require("fs"));
+var path6 = __toESM(require("path"));
 var import_child_process = require("child_process");
 
 // scripts/lib/state/ensure-storage-layout.ts
@@ -86,12 +86,12 @@ function detect(cwd = process.cwd()) {
 var upgradeChunk = null;
 function upgradeChain() {
   if (upgradeChunk === null) {
-    const candidates = [
+    const candidates2 = [
       path2.join(__dirname, "upgrade-chain.js"),
       path2.join(__dirname, "lib", "state", "upgrade-chain"),
       path2.join(__dirname, "upgrade-chain")
     ];
-    const spec = candidates.find((c) => fs2.existsSync(c) || fs2.existsSync(`${c}.ts`)) ?? candidates[2];
+    const spec = candidates2.find((c) => fs2.existsSync(c) || fs2.existsSync(`${c}.ts`)) ?? candidates2[2];
     upgradeChunk = require(spec);
   }
   return upgradeChunk;
@@ -143,86 +143,147 @@ if (isProcessEntry()) {
   }
 }
 
-// scripts/learn/lib/paths.ts
-function parseCwd(argv) {
-  return parseFlag(argv, "cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
-}
-function parseFlag(argv, name) {
-  const eq = `--${name}=`;
-  for (let i = 0; i < argv.length; i++) {
-    const v = argv[i] === `--${name}` ? argv[i + 1] : argv[i].startsWith(eq) ? argv[i].slice(eq.length) : void 0;
-    if (v === void 0 && argv[i] !== `--${name}`) continue;
-    if (!v || v.startsWith("--")) throw new Error(`--${name} needs a value (--${name} <v> or --${name}=<v>)`);
-    return v;
+// src/domains/knowledge/source-basis.ts
+var crypto = __toESM(require("node:crypto"));
+var import_node_child_process = require("node:child_process");
+var fs3 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
+function canonicalJson(value) {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error("canonicalJson: non-finite number");
+    return JSON.stringify(value);
   }
-  return void 0;
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (typeof value === "object") {
+    const obj = value;
+    const keys = Object.keys(obj).filter((k) => obj[k] !== void 0).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`).join(",")}}`;
+  }
+  throw new Error(`canonicalJson: unsupported ${typeof value}`);
 }
-function hasFlag(argv, name) {
-  return argv.includes(`--${name}`);
+function basisDigest(value) {
+  return `sha256:${crypto.createHash("sha256").update(canonicalJson(value), "utf8").digest("hex")}`;
 }
-function resolveMainRepoRoot(cwd) {
+function bytesDigest(bytes) {
+  return `sha256:${crypto.createHash("sha256").update(bytes).digest("hex")}`;
+}
+function realRoot(root) {
   try {
-    const commonDir = (0, import_child_process.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
-      cwd,
-      encoding: "utf-8"
-    }).trim();
-    const abs = path3.isAbsolute(commonDir) ? commonDir : path3.resolve(cwd, commonDir);
-    const root = path3.dirname(abs);
-    if (fs3.existsSync(root)) return root;
+    return fs3.realpathSync(root);
   } catch {
+    return path3.resolve(root);
   }
-  return path3.resolve(cwd);
 }
-function guildPaths(cwd) {
-  const repoRoot = resolveMainRepoRoot(cwd);
-  const guildDir = durableGuildDir(repoRoot);
-  const indexesDir = path3.join(guildDir, "indexes");
-  const runsDir = path3.join(guildDir, "runs");
-  return {
-    repoRoot,
-    guildDir,
-    indexesDir,
-    runsDir,
-    codebaseMap: path3.join(indexesDir, "codebase-map.json"),
-    knowledgeGraph: path3.join(indexesDir, "knowledge-graph.json"),
-    knowledgeLinks: path3.join(indexesDir, "knowledge-links.json"),
-    knowledgeRecall: path3.join(indexesDir, "knowledge-recall.json"),
-    fingerprint: path3.join(indexesDir, "understand-fingerprint.json"),
-    partialGraph: path3.join(indexesDir, "understand-partial-graph.json")
-  };
+function sourceWorktreeId(root) {
+  return `worktree-${crypto.createHash("sha256").update(realRoot(root), "utf8").digest("hex").slice(0, 32)}`;
 }
-function writeJson(filePath, data) {
-  fs3.mkdirSync(path3.dirname(filePath), { recursive: true });
-  fs3.writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf8");
-}
-function readJson(filePath) {
+function git(cwd, args) {
   try {
-    return JSON.parse(fs3.readFileSync(filePath, "utf8"));
+    return (0, import_node_child_process.execFileSync)("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   } catch {
     return null;
   }
 }
-
-// scripts/learn/lib/git.ts
-var import_child_process2 = require("child_process");
-function git(cwd, args) {
-  return (0, import_child_process2.execFileSync)("git", args, { cwd, encoding: "utf-8" }).trim();
+function resolveSourceWorktreeRoot(cwd) {
+  const top = git(cwd, ["rev-parse", "--show-toplevel"])?.trim();
+  return realRoot(top ? top : cwd);
 }
-function headSha(cwd) {
-  try {
-    return git(cwd, ["rev-parse", "HEAD"]);
-  } catch {
-    return "unknown";
+function readWorktreeEntry(root, rel) {
+  if (path3.isAbsolute(rel) || rel.includes("\\")) return { kind: "refused" };
+  const segs = rel.split("/");
+  if (segs.some((seg) => seg === "" || seg === "." || seg === "..")) return { kind: "refused" };
+  let cur = root;
+  for (let i = 0; i < segs.length; i++) {
+    cur = path3.join(cur, segs[i]);
+    let st;
+    try {
+      st = fs3.lstatSync(cur);
+    } catch {
+      return { kind: "absent" };
+    }
+    const last = i === segs.length - 1;
+    if (st.isSymbolicLink()) return last ? { kind: "symlink", target: fs3.readlinkSync(cur) } : { kind: "refused" };
+    if (!last && !st.isDirectory()) return { kind: "absent" };
+    if (last) return st.isFile() ? { kind: "file", bytes: fs3.readFileSync(cur) } : { kind: "refused" };
   }
+  return { kind: "refused" };
 }
-
-// scripts/learn/lib/walk.ts
-var fs5 = __toESM(require("fs"));
-var path5 = __toESM(require("path"));
+function readContainedFile(root, rel) {
+  const e = readWorktreeEntry(root, rel);
+  return e.kind === "file" ? e.bytes : null;
+}
+function gitBlobOid(e, algo) {
+  const body = e.kind === "file" ? e.bytes : e.kind === "symlink" ? Buffer.from(e.target, "utf8") : null;
+  if (!body) return null;
+  const oid = crypto.createHash(algo).update(`blob ${body.length}\0`).update(body).digest("hex");
+  return { mode: e.kind === "symlink" ? "link" : "blob", oid };
+}
+function headEntries(root) {
+  const map = /* @__PURE__ */ new Map();
+  const out = git(root, ["ls-tree", "-r", "-z", "--full-tree", "HEAD"]);
+  if (out === null) return map;
+  for (const rec of out.split("\0")) {
+    const tab = rec.indexOf("	");
+    if (tab < 0) continue;
+    const p = rec.slice(tab + 1);
+    const [mode, , oid] = rec.slice(0, tab).split(" ");
+    map.set(p, { mode: mode === "120000" ? "link" : mode.startsWith("100") ? "blob" : "other", oid });
+  }
+  return map;
+}
+function computeSourceBasis(input) {
+  const root = resolveSourceWorktreeRoot(input.sourceRoot);
+  const headOid = git(root, ["rev-parse", "--verify", "-q", "HEAD"])?.trim() ?? "";
+  const algo = headOid.length === 64 ? "sha256" : "sha1";
+  const head = headEntries(root);
+  const inventory = [];
+  const dirty = [];
+  for (const rel of [...new Set(input.files)].sort()) {
+    const e = readWorktreeEntry(root, rel);
+    if (e.kind !== "file") continue;
+    const sha = bytesDigest(e.bytes);
+    inventory.push({ path: rel, sha256: sha });
+    const h = head.get(rel);
+    const w = gitBlobOid(e, algo);
+    if (!h || h.mode !== w.mode || h.oid !== w.oid) dirty.push({ path: rel, sha256: sha });
+  }
+  const scanned = new Set(inventory.map((e) => e.path));
+  for (const rel of head.keys()) {
+    if (scanned.has(rel) || !input.inScope(rel)) continue;
+    const kind = readWorktreeEntry(root, rel).kind;
+    if (kind === "absent" || kind === "refused") dirty.push({ path: rel, sha256: null });
+  }
+  dirty.sort((x, y) => x.path < y.path ? -1 : x.path > y.path ? 1 : 0);
+  const resolverUnresolved = [...new Set(input.resolverUnresolved ?? [])].sort();
+  const resolverInputs = {};
+  for (const rel of [...new Set(input.resolverInputs ?? [])].sort()) {
+    const e = readWorktreeEntry(root, rel);
+    resolverInputs[rel] = e.kind === "file" ? bytesDigest(e.bytes) : null;
+  }
+  const commit = git(root, ["rev-parse", "--verify", "-q", "HEAD"])?.trim() || null;
+  const treeOid = commit ? git(root, ["rev-parse", "HEAD^{tree}"])?.trim() ?? null : null;
+  const basis = {
+    commit,
+    tree: basisDigest({ git_tree: treeOid }),
+    dirty_blob_manifest: basisDigest(dirty),
+    file_inventory: basisDigest(inventory),
+    resolver_policy: basisDigest({ policy: input.resolverPolicy, inputs: resolverInputs, unresolved: resolverUnresolved }),
+    scan_policy: basisDigest(input.scanPolicy),
+    source_worktree_id: sourceWorktreeId(root)
+  };
+  return { source_root: root, basis, source_basis_hash: basisDigest(basis), inventory, dirty, resolver_unresolved: resolverUnresolved };
+}
+function freshnessFor(published, observed) {
+  if (!observed) return "unknown";
+  if (basisDigest(published.basis) !== published.source_basis_hash) return "unknown";
+  if (basisDigest(observed.basis) !== observed.source_basis_hash) return "unknown";
+  if (published.basis.source_worktree_id !== observed.basis.source_worktree_id) return "unknown";
+  if (published.resolver_unresolved?.length || observed.resolver_unresolved?.length) return "unknown";
+  return published.source_basis_hash === observed.source_basis_hash ? "current_for_basis" : "stale";
+}
 
 // scripts/learn/lib/ignore.ts
-var fs4 = __toESM(require("fs"));
-var path4 = __toESM(require("path"));
 var DEFAULT_IGNORE_PATTERNS = Object.freeze([
   "node_modules/",
   ".git/",
@@ -346,9 +407,9 @@ function compile(patterns) {
 }
 function createIgnoreFilter(projectRoot) {
   const patterns = [...DEFAULT_IGNORE_PATTERNS];
-  const rootIgnore = path4.join(projectRoot, ".guildignore");
-  if (fs4.existsSync(rootIgnore)) {
-    patterns.push(...fs4.readFileSync(rootIgnore, "utf-8").split("\n"));
+  const rootIgnore = readContainedFile(projectRoot, ".guildignore");
+  if (rootIgnore) {
+    patterns.push(...rootIgnore.toString("utf-8").split("\n"));
   }
   const rules = compile(patterns);
   return {
@@ -364,11 +425,13 @@ function createIgnoreFilter(projectRoot) {
 }
 
 // scripts/learn/lib/walk.ts
+var fs4 = __toESM(require("fs"));
+var path4 = __toESM(require("path"));
 function registeredSubGuildPaths(repoRoot) {
   const out = /* @__PURE__ */ new Set();
   let manifest;
   try {
-    manifest = JSON.parse(fs5.readFileSync(path5.join(durableGuildDir(repoRoot), "workspace.json"), "utf8"));
+    manifest = JSON.parse(fs4.readFileSync(path4.join(durableGuildDir(repoRoot), "workspace.json"), "utf8"));
   } catch {
     return out;
   }
@@ -383,36 +446,410 @@ function walkRepo(repoRoot, maxFiles = 2e4) {
   const filter = createIgnoreFilter(repoRoot);
   const subGuilds = registeredSubGuildPaths(repoRoot);
   const out = [];
+  let truncated = false;
+  const unreadable = [];
+  const unsupported = [];
   const visit = (absDir) => {
-    if (out.length >= maxFiles) return;
+    if (truncated) return;
     let entries;
     try {
-      entries = fs5.readdirSync(absDir, { withFileTypes: true });
+      entries = fs4.readdirSync(absDir, { withFileTypes: true });
     } catch {
+      unreadable.push(path4.relative(repoRoot, absDir).replace(/\\/g, "/"));
       return;
     }
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const e of entries) {
-      const abs = path5.join(absDir, e.name);
-      const rel = path5.relative(repoRoot, abs).replace(/\\/g, "/");
+      const abs = path4.join(absDir, e.name);
+      if (path4.sep === "/" && e.name.includes("\\") || e.name.includes("\uFFFD")) {
+        unsupported.push(path4.relative(repoRoot, abs));
+        continue;
+      }
+      const rel = path4.relative(repoRoot, abs).replace(/\\/g, "/");
       if (e.isDirectory()) {
         if (subGuilds.has(rel)) continue;
         if (filter.isIgnored(rel) || filter.isIgnored(rel + "/")) continue;
         visit(abs);
       } else if (e.isFile()) {
         if (filter.isIgnored(rel)) continue;
+        if (out.length >= maxFiles) {
+          truncated = true;
+          return;
+        }
         out.push(rel);
-        if (out.length >= maxFiles) return;
       }
     }
   };
   visit(repoRoot);
   out.sort();
-  return { files: out, filter };
+  return { files: out, filter, truncated, unreadable: unreadable.sort(), unsupported: unsupported.sort() };
+}
+
+// scripts/learn/lib/tsconfig-chain.ts
+var fs5 = __toESM(require("fs"));
+var path5 = __toESM(require("path"));
+var TSCONFIG_MAX_DEPTH = 8;
+var LINE_BREAK = /[\n\r\u2028\u2029]/;
+function parseJsonc(text) {
+  const src = text.charCodeAt(0) === 65279 ? text.slice(1) : text;
+  let noComments = "";
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (c === '"') {
+      let j = i + 1;
+      while (j < src.length && src[j] !== '"') j += src[j] === "\\" ? 2 : 1;
+      if (j >= src.length) throw new SyntaxError("parseJsonc: unterminated string");
+      noComments += src.slice(i, j + 1);
+      i = j;
+    } else if (c === "/" && src[i + 1] === "/") {
+      while (i < src.length && !LINE_BREAK.test(src[i])) i++;
+      noComments += "\n";
+    } else if (c === "/" && src[i + 1] === "*") {
+      const end = src.indexOf("*/", i + 2);
+      if (end < 0) throw new SyntaxError("parseJsonc: unterminated block comment");
+      noComments += " ";
+      i = end + 1;
+    } else {
+      noComments += c;
+    }
+  }
+  let out = "";
+  for (let i = 0; i < noComments.length; i++) {
+    const c = noComments[i];
+    if (c === '"') {
+      let j = i + 1;
+      while (j < noComments.length && noComments[j] !== '"') j += noComments[j] === "\\" ? 2 : 1;
+      out += noComments.slice(i, j + 1);
+      i = j;
+      continue;
+    }
+    if (c === ",") {
+      let k = i + 1;
+      while (k < noComments.length && /\s/.test(noComments[k])) k++;
+      if (noComments[k] === "}" || noComments[k] === "]") continue;
+    }
+    out += c;
+  }
+  return JSON.parse(out);
+}
+function contained(root, abs) {
+  const rel = path5.relative(root, abs);
+  if (rel === "" || rel.startsWith("..") || path5.isAbsolute(rel)) return null;
+  return rel.split(path5.sep).join("/");
+}
+function isAbsentError(err) {
+  const code = err?.code;
+  return code === "ENOENT" || code === "ENOTDIR";
+}
+function entryPresent(root, rel) {
+  try {
+    fs5.lstatSync(path5.join(root, rel));
+    return true;
+  } catch (err) {
+    return !isAbsentError(err);
+  }
+}
+function presentNonDirectory(root, rel) {
+  try {
+    return !fs5.lstatSync(path5.join(root, rel)).isDirectory();
+  } catch (err) {
+    return !isAbsentError(err);
+  }
+}
+function readJson(root, rel) {
+  const bytes = readContainedFile(root, rel);
+  if (!bytes) return null;
+  try {
+    const v = parseJsonc(bytes.toString("utf8"));
+    return v && typeof v === "object" && !Array.isArray(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+function candidates(root, fromRel, spec, probed, refuse) {
+  const fromDir = path5.join(root, path5.posix.dirname(fromRel));
+  const withJson = (p) => p.endsWith(".json") ? [p] : [p, `${p}.json`];
+  if (spec.startsWith("./") || spec.startsWith("../") || path5.isAbsolute(spec)) {
+    const rels = withJson(path5.resolve(fromDir, spec)).map((abs) => contained(root, abs));
+    return rels.every((r) => r === null) ? "escape" : rels.filter((r) => r !== null);
+  }
+  const out = [];
+  const push = (abs) => {
+    const rel = contained(root, abs);
+    if (rel) out.push(rel);
+  };
+  for (let dir = fromDir; ; dir = path5.dirname(dir)) {
+    const base = path5.join(dir, "node_modules", spec);
+    for (const abs of withJson(base)) push(abs);
+    const pkgRel = contained(root, path5.join(base, "package.json"));
+    if (pkgRel) probed.add(pkgRel);
+    const pkg = pkgRel ? readJson(root, pkgRel) : null;
+    if (pkgRel && !pkg && entryPresent(root, pkgRel)) refuse(`${pkgRel}: not a contained, parseable regular file`);
+    if (pkg && pkg.tsconfig !== void 0) {
+      if (typeof pkg.tsconfig !== "string") refuse(`${pkgRel}: tsconfig field is not a string`);
+      else if (contained(root, path5.join(base, pkg.tsconfig)) === null) refuse(`${pkgRel}: tsconfig ${pkg.tsconfig} outside worktree`);
+      else push(path5.join(base, pkg.tsconfig));
+    }
+    push(path5.join(base, "tsconfig.json"));
+    if (contained(root, dir) === null) break;
+  }
+  return out;
+}
+function loadTsconfigChain(root, rootConfig = "tsconfig.json") {
+  const hops = [];
+  const unresolved = [];
+  const probedSet = /* @__PURE__ */ new Set();
+  const done = () => ({ hops, unresolved, probed: [...probedSet].sort() });
+  const byPath = /* @__PURE__ */ new Map();
+  probedSet.add(rootConfig);
+  if (!entryPresent(root, rootConfig)) return done();
+  if (!readContainedFile(root, rootConfig)) {
+    unresolved.push(`${rootConfig}: not a contained regular file`);
+    return done();
+  }
+  const first = readJson(root, rootConfig);
+  if (!first) {
+    unresolved.push(`${rootConfig}: unparseable`);
+    return done();
+  }
+  const top = { path: rootConfig, json: first, parents: [] };
+  hops.push(top);
+  byPath.set(rootConfig, top);
+  const visit = (from, stack) => {
+    const ext = from.json.extends;
+    const specs = typeof ext === "string" ? [ext] : Array.isArray(ext) ? ext.filter((s) => typeof s === "string") : [];
+    for (const spec of specs) {
+      const tag = `${from.path} -> ${spec}`;
+      if (stack.size > TSCONFIG_MAX_DEPTH) {
+        unresolved.push(`${tag}: depth>${TSCONFIG_MAX_DEPTH}`);
+        continue;
+      }
+      const refused = [];
+      const cands = candidates(root, from.path, spec, probedSet, (why) => refused.push(why));
+      if (refused.length) {
+        for (const why of refused) unresolved.push(`${tag}: ${why}`);
+        continue;
+      }
+      if (cands === "escape") {
+        unresolved.push(`${tag}: outside worktree`);
+        continue;
+      }
+      let hit;
+      let refusedHit;
+      for (const rel of cands) {
+        probedSet.add(rel);
+        if (readContainedFile(root, rel) !== null) {
+          hit = rel;
+          break;
+        }
+        if (presentNonDirectory(root, rel)) {
+          refusedHit = rel;
+          break;
+        }
+      }
+      if (refusedHit) {
+        unresolved.push(`${tag}: not a contained regular file`);
+        continue;
+      }
+      if (!hit) {
+        unresolved.push(`${tag}: not a contained regular file`);
+        continue;
+      }
+      if (stack.has(hit)) {
+        unresolved.push(`${tag}: cycle`);
+        continue;
+      }
+      let hop = byPath.get(hit);
+      if (!hop) {
+        const json = readJson(root, hit);
+        if (!json) {
+          unresolved.push(`${tag}: unparseable`);
+          continue;
+        }
+        hop = { path: hit, json, parents: [] };
+        byPath.set(hit, hop);
+        hops.push(hop);
+        visit(hop, /* @__PURE__ */ new Set([...stack, hit]));
+      }
+      from.parents.push(hop);
+    }
+  };
+  visit(top, /* @__PURE__ */ new Set([rootConfig]));
+  return done();
+}
+
+// scripts/learn/lib/paths.ts
+function parseCwd(argv) {
+  return parseFlag(argv, "cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
+}
+function parseFlag(argv, name) {
+  const eq = `--${name}=`;
+  for (let i = 0; i < argv.length; i++) {
+    const v = argv[i] === `--${name}` ? argv[i + 1] : argv[i].startsWith(eq) ? argv[i].slice(eq.length) : void 0;
+    if (v === void 0 && argv[i] !== `--${name}`) continue;
+    if (!v || v.startsWith("--")) throw new Error(`--${name} needs a value (--${name} <v> or --${name}=<v>)`);
+    return v;
+  }
+  return void 0;
+}
+function hasFlag(argv, name) {
+  return argv.includes(`--${name}`);
+}
+function resolveMainRepoRoot(cwd) {
+  try {
+    const commonDir = (0, import_child_process.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
+      cwd,
+      encoding: "utf-8"
+    }).trim();
+    const abs = path6.isAbsolute(commonDir) ? commonDir : path6.resolve(cwd, commonDir);
+    const root = path6.dirname(abs);
+    if (fs6.existsSync(root)) return root;
+  } catch {
+  }
+  return path6.resolve(cwd);
+}
+function isLink(p) {
+  try {
+    return fs6.lstatSync(p).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+function sameDir(a, b) {
+  try {
+    return fs6.realpathSync(a) === fs6.realpathSync(b);
+  } catch {
+    return path6.resolve(a) === path6.resolve(b);
+  }
+}
+function guildPaths(cwd) {
+  const repoRoot = resolveMainRepoRoot(cwd);
+  const sourceRoot = resolveSourceWorktreeRoot(cwd);
+  const guildDir = durableGuildDir(repoRoot);
+  const indexesDir = path6.join(guildDir, "indexes");
+  const runsDir = path6.join(guildDir, "runs");
+  return {
+    repoRoot,
+    sourceRoot: sameDir(sourceRoot, repoRoot) ? repoRoot : sourceRoot,
+    guildDir,
+    indexesDir,
+    runsDir,
+    codebaseMap: path6.join(indexesDir, "codebase-map.json"),
+    knowledgeGraph: path6.join(indexesDir, "knowledge-graph.json"),
+    knowledgeLinks: path6.join(indexesDir, "knowledge-links.json"),
+    knowledgeRecall: path6.join(indexesDir, "knowledge-recall.json"),
+    fingerprint: path6.join(indexesDir, "understand-fingerprint.json"),
+    partialGraph: path6.join(indexesDir, "understand-partial-graph.json")
+  };
+}
+var SCAN_MAX_FILES = 2e4;
+function computeLearnSourceBasis(cwd, opts = {}) {
+  const sourceRoot = resolveSourceWorktreeRoot(cwd);
+  const maxFiles = opts.maxFiles ?? SCAN_MAX_FILES;
+  const { files, filter, truncated, unreadable, unsupported } = walkRepo(sourceRoot, maxFiles);
+  const subGuilds = [...registeredSubGuildPaths(sourceRoot)].sort();
+  const guildignore = readContainedFile(sourceRoot, ".guildignore");
+  const ignorePath = path6.join(sourceRoot, ".guildignore");
+  const guildignoreRefused = !guildignore && (isLink(ignorePath) || fs6.existsSync(ignorePath));
+  const scanPolicy = {
+    policy: "guild.learn.scan_policy.v1",
+    walker: "walkRepo",
+    default_ignore: [...DEFAULT_IGNORE_PATTERNS],
+    guildignore: guildignore ? guildignore.toString("utf8") : null,
+    sub_guilds_skipped: subGuilds,
+    symlinks: "not_followed",
+    max_files: maxFiles,
+    bytes: "raw"
+  };
+  const tsconfig = loadTsconfigChain(sourceRoot);
+  return computeSourceBasis({
+    sourceRoot,
+    files,
+    inScope: (rel) => !filter.isIgnored(rel) && !subGuilds.some((g) => rel === g || rel.startsWith(`${g}/`)),
+    scanPolicy,
+    resolverPolicy: {
+      policy: "guild.learn.resolver_policy.v1",
+      resolver: "structural",
+      version: 1,
+      tsconfig: `extends chain; contained regular files only; depth<=${TSCONFIG_MAX_DEPTH}`
+    },
+    resolverInputs: ["package.json", ...tsconfig.hops.map((h) => h.path), ...tsconfig.probed],
+    resolverUnresolved: [
+      ...tsconfig.unresolved,
+      ...guildignoreRefused ? [".guildignore: not a contained regular file"] : [],
+      // K02: files past the cap are neither inventoried nor compared.
+      ...truncated ? [`scan: max_files (${maxFiles}) exceeded; inventory incomplete`] : [],
+      ...unreadable.map((d) => `scan: directory ${d || "."} unreadable; inventory incomplete`),
+      ...unsupported.map((p) => `scan: ${JSON.stringify(p)} has a backslash or non-UTF-8 bytes in its name; inventory incomplete`)
+    ]
+  });
+}
+function writeJson(filePath, data) {
+  fs6.mkdirSync(path6.dirname(filePath), { recursive: true });
+  fs6.writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf8");
+}
+function readJson2(filePath) {
+  try {
+    return JSON.parse(fs6.readFileSync(filePath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+// src/domains/knowledge/freshness-boundary.ts
+function hasBasis(m) {
+  const sb = m?.source_basis;
+  return !!sb && typeof sb === "object" && !!sb.basis && typeof sb.basis === "object" && typeof sb.source_basis_hash === "string";
+}
+function inventoryDrift(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return [];
+  const before = new Map(a.map((e) => [e.path, e.sha256]));
+  const after = new Map(b.map((e) => [e.path, e.sha256]));
+  const out = /* @__PURE__ */ new Set();
+  for (const [p, h] of before) if (after.get(p) !== h) out.add(p);
+  for (const p of after.keys()) if (!before.has(p)) out.add(p);
+  return [...out].sort();
+}
+function reconcileBoundary(input) {
+  const verdict = (state2, verified, reason2, drift2 = []) => {
+    const hinted = new Set(input.hints);
+    return { state: state2, verified, reason: reason2, drift: drift2, hints_missed: drift2.filter((p) => !hinted.has(p)) };
+  };
+  if (!hasBasis(input.marker)) return verdict("unknown", false, "marker carries no source basis; its claims are not evidence");
+  const { files, bytes } = input.estimate;
+  const { max_files, max_bytes } = input.budget;
+  if (!(Number.isFinite(files) && Number.isFinite(bytes)) || files > max_files || bytes > max_bytes) {
+    return verdict("pending", false, `verification (${files} files, ${bytes} bytes) exceeds budget (${max_files} files, ${max_bytes} bytes)`);
+  }
+  const observed = input.observe();
+  const state = freshnessFor(input.marker.source_basis, observed);
+  const drift = state === "stale" ? inventoryDrift(input.marker.source_basis.inventory, observed.inventory) : [];
+  const reason = state === "current_for_basis" ? "observed basis equals published basis" : state === "stale" ? "observed basis differs from published basis" : "basis from another worktree or with unresolved resolver inputs";
+  return verdict(state, true, reason, drift);
+}
+var BACKGROUND_STRUCTURAL_POLICY = Object.freeze({
+  policy: "guild.learn.background_structural.v1",
+  channel: "structural_graph",
+  max_jobs: 4,
+  max_paths_per_job: 64
+});
+var BACKGROUND_HARD_LIMITS = Object.freeze({ max_jobs: 16, max_paths_per_job: 256 });
+
+// scripts/learn/lib/git.ts
+var import_child_process2 = require("child_process");
+function git2(cwd, args) {
+  return (0, import_child_process2.execFileSync)("git", args, { cwd, encoding: "utf-8" }).trim();
+}
+function headSha(cwd) {
+  try {
+    return git2(cwd, ["rev-parse", "HEAD"]);
+  } catch {
+    return "unknown";
+  }
 }
 
 // scripts/learn/lib/languages.ts
-var path6 = __toESM(require("path"));
+var path7 = __toESM(require("path"));
 var EXT_LANG = {
   ".ts": "typescript",
   ".tsx": "typescript",
@@ -468,9 +905,9 @@ var BASENAME_LANG = {
   ".gitignore": "config"
 };
 function detectLanguage(filePath) {
-  const base = path6.basename(filePath);
+  const base = path7.basename(filePath);
   if (BASENAME_LANG[base]) return BASENAME_LANG[base];
-  const ext = path6.extname(filePath).toLowerCase();
+  const ext = path7.extname(filePath).toLowerCase();
   return EXT_LANG[ext] ?? "unknown";
 }
 function isCodeLanguage(lang) {
@@ -930,7 +1367,7 @@ function readTree(repoRoot) {
   for (const rel of files) {
     if (!isCodeLanguage(detectLanguage(rel))) continue;
     try {
-      out[rel] = fs6.readFileSync(path7.join(repoRoot, rel), "utf8");
+      out[rel] = fs7.readFileSync(path8.join(repoRoot, rel), "utf8");
     } catch {
     }
   }
@@ -940,19 +1377,27 @@ function main() {
   const argv = process.argv.slice(2);
   const cwd = parseCwd(argv);
   const gp = guildPaths(cwd);
-  const commit = headSha(gp.repoRoot);
-  const tree = readTree(gp.repoRoot);
+  const commit = headSha(gp.sourceRoot);
+  const tree = readTree(gp.sourceRoot);
+  const source = computeLearnSourceBasis(gp.sourceRoot);
   if (hasFlag(argv, "baseline")) {
-    const store2 = buildStore(tree, commit);
+    const store2 = {
+      ...buildStore(tree, commit),
+      source_basis: {
+        basis: source.basis,
+        source_basis_hash: source.source_basis_hash,
+        resolver_unresolved: source.resolver_unresolved
+      }
+    };
     writeJson(gp.fingerprint, store2);
     process.stderr.write(
-      `[staleness] baseline written: ${Object.keys(store2.files).length} files @ ${commit.slice(0, 8)} \u2192 ${path7.relative(gp.repoRoot, gp.fingerprint)}
+      `[staleness] baseline written: ${Object.keys(store2.files).length} files @ ${commit.slice(0, 8)} \u2192 ${path8.relative(gp.repoRoot, gp.fingerprint)}
 `
     );
     process.stdout.write("BASELINE\n");
     return;
   }
-  const store = readJson(gp.fingerprint);
+  const store = readJson2(gp.fingerprint);
   if (!store) {
     process.stderr.write("[staleness] no baseline \u2014 treat as FULL (run --baseline after a build)\n");
     const out2 = { state: "FULL", reason: "no fingerprint baseline", filesToReanalyze: Object.keys(tree), rerunArchitecture: true };
@@ -960,12 +1405,21 @@ function main() {
     else process.stdout.write("FULL\n");
     return;
   }
+  const freshness = reconcileBoundary({
+    marker: store,
+    hints: [],
+    estimate: { files: source.inventory.length, bytes: 0 },
+    budget: { max_files: Number.MAX_SAFE_INTEGER, max_bytes: Number.MAX_SAFE_INTEGER },
+    observe: () => source
+  }).state;
+  const foreign = freshness === "unknown";
   const analysis = analyzeChanges(store, tree);
   const knownFiles = Object.keys(store.files);
-  const decision = classify(analysis, knownFiles.length, knownFiles);
-  const staleVsHead = store.generated_from_commit !== commit;
+  const decision = foreign ? { state: "FULL", reason: "baseline has no source identity or was taken from another worktree", filesToReanalyze: Object.keys(tree), rerunArchitecture: true } : classify(analysis, knownFiles.length, knownFiles);
+  const staleVsHead = foreign || store.generated_from_commit !== commit;
   const out = {
     ...decision,
+    freshness,
     baseline_commit: store.generated_from_commit,
     head_commit: commit,
     stale: staleVsHead,
