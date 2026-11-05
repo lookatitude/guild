@@ -142,9 +142,10 @@ const SCAN_MAX_FILES = 20000;
  * (walkRepo: defaults + root .guildignore, regular files only, symlinks not
  * followed, registered sub-guilds skipped, bytes read raw).
  */
-export function computeLearnSourceBasis(cwd: string): SourceBasis {
+export function computeLearnSourceBasis(cwd: string, opts: { maxFiles?: number } = {}): SourceBasis {
   const sourceRoot = resolveSourceWorktreeRoot(cwd);
-  const { files, filter } = walkRepo(sourceRoot, SCAN_MAX_FILES);
+  const maxFiles = opts.maxFiles ?? SCAN_MAX_FILES;
+  const { files, filter, truncated, unreadable, unsupported } = walkRepo(sourceRoot, maxFiles);
   const subGuilds = [...registeredSubGuildPaths(sourceRoot)].sort();
   const guildignore = readContainedFile(sourceRoot, ".guildignore");
   const ignorePath = path.join(sourceRoot, ".guildignore");
@@ -156,7 +157,7 @@ export function computeLearnSourceBasis(cwd: string): SourceBasis {
     guildignore: guildignore ? guildignore.toString("utf8") : null,
     sub_guilds_skipped: subGuilds,
     symlinks: "not_followed",
-    max_files: SCAN_MAX_FILES,
+    max_files: maxFiles,
     bytes: "raw",
   };
   const tsconfig = loadTsconfigChain(sourceRoot);
@@ -175,6 +176,10 @@ export function computeLearnSourceBasis(cwd: string): SourceBasis {
     resolverUnresolved: [
       ...tsconfig.unresolved,
       ...(guildignoreRefused ? [".guildignore: not a contained regular file"] : []),
+      // K02: files past the cap are neither inventoried nor compared.
+      ...(truncated ? [`scan: max_files (${maxFiles}) exceeded; inventory incomplete`] : []),
+      ...unreadable.map((d) => `scan: directory ${d || "."} unreadable; inventory incomplete`),
+      ...unsupported.map((p) => `scan: ${JSON.stringify(p)} has a backslash or non-UTF-8 bytes in its name; inventory incomplete`),
     ],
   });
 }

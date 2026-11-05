@@ -276,6 +276,8 @@ function computeSourceBasis(input) {
 }
 function freshnessFor(published, observed) {
   if (!observed) return "unknown";
+  if (basisDigest(published.basis) !== published.source_basis_hash) return "unknown";
+  if (basisDigest(observed.basis) !== observed.source_basis_hash) return "unknown";
   if (published.basis.source_worktree_id !== observed.basis.source_worktree_id) return "unknown";
   if (published.resolver_unresolved?.length || observed.resolver_unresolved?.length) return "unknown";
   return published.source_basis_hash === observed.source_basis_hash ? "current_for_basis" : "stale";
@@ -444,17 +446,25 @@ function walkRepo(repoRoot, maxFiles = 2e4) {
   const filter = createIgnoreFilter(repoRoot);
   const subGuilds = registeredSubGuildPaths(repoRoot);
   const out = [];
+  let truncated = false;
+  const unreadable = [];
+  const unsupported = [];
   const visit = (absDir) => {
-    if (out.length >= maxFiles) return;
+    if (truncated) return;
     let entries;
     try {
       entries = fs4.readdirSync(absDir, { withFileTypes: true });
     } catch {
+      unreadable.push(path4.relative(repoRoot, absDir).replace(/\\/g, "/"));
       return;
     }
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const e of entries) {
       const abs = path4.join(absDir, e.name);
+      if (path4.sep === "/" && e.name.includes("\\") || e.name.includes("\uFFFD")) {
+        unsupported.push(path4.relative(repoRoot, abs));
+        continue;
+      }
       const rel = path4.relative(repoRoot, abs).replace(/\\/g, "/");
       if (e.isDirectory()) {
         if (subGuilds.has(rel)) continue;
@@ -462,20 +472,24 @@ function walkRepo(repoRoot, maxFiles = 2e4) {
         visit(abs);
       } else if (e.isFile()) {
         if (filter.isIgnored(rel)) continue;
+        if (out.length >= maxFiles) {
+          truncated = true;
+          return;
+        }
         out.push(rel);
-        if (out.length >= maxFiles) return;
       }
     }
   };
   visit(repoRoot);
   out.sort();
-  return { files: out, filter };
+  return { files: out, filter, truncated, unreadable: unreadable.sort(), unsupported: unsupported.sort() };
 }
 
 // scripts/learn/lib/tsconfig-chain.ts
 var fs5 = __toESM(require("fs"));
 var path5 = __toESM(require("path"));
 var TSCONFIG_MAX_DEPTH = 8;
+var LINE_BREAK = /[\n\r\u2028\u2029]/;
 function parseJsonc(text) {
   const src = text.charCodeAt(0) === 65279 ? text.slice(1) : text;
   let noComments = "";
@@ -484,15 +498,17 @@ function parseJsonc(text) {
     if (c === '"') {
       let j = i + 1;
       while (j < src.length && src[j] !== '"') j += src[j] === "\\" ? 2 : 1;
+      if (j >= src.length) throw new SyntaxError("parseJsonc: unterminated string");
       noComments += src.slice(i, j + 1);
       i = j;
     } else if (c === "/" && src[i + 1] === "/") {
-      while (i < src.length && src[i] !== "\n") i++;
+      while (i < src.length && !LINE_BREAK.test(src[i])) i++;
       noComments += "\n";
     } else if (c === "/" && src[i + 1] === "*") {
       const end = src.indexOf("*/", i + 2);
+      if (end < 0) throw new SyntaxError("parseJsonc: unterminated block comment");
       noComments += " ";
-      i = end < 0 ? src.length : end + 1;
+      i = end + 1;
     } else {
       noComments += c;
     }
@@ -521,12 +537,23 @@ function contained(root, abs) {
   if (rel === "" || rel.startsWith("..") || path5.isAbsolute(rel)) return null;
   return rel.split(path5.sep).join("/");
 }
+function isAbsentError(err) {
+  const code = err?.code;
+  return code === "ENOENT" || code === "ENOTDIR";
+}
 function entryPresent(root, rel) {
   try {
     fs5.lstatSync(path5.join(root, rel));
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    return !isAbsentError(err);
+  }
+}
+function presentNonDirectory(root, rel) {
+  try {
+    return !fs5.lstatSync(path5.join(root, rel)).isDirectory();
+  } catch (err) {
+    return !isAbsentError(err);
   }
 }
 function readJson(root, rel) {
@@ -539,7 +566,7 @@ function readJson(root, rel) {
     return null;
   }
 }
-function candidates(root, fromRel, spec, probed) {
+function candidates(root, fromRel, spec, probed, refuse) {
   const fromDir = path5.join(root, path5.posix.dirname(fromRel));
   const withJson = (p) => p.endsWith(".json") ? [p] : [p, `${p}.json`];
   if (spec.startsWith("./") || spec.startsWith("../") || path5.isAbsolute(spec)) {
@@ -557,7 +584,12 @@ function candidates(root, fromRel, spec, probed) {
     const pkgRel = contained(root, path5.join(base, "package.json"));
     if (pkgRel) probed.add(pkgRel);
     const pkg = pkgRel ? readJson(root, pkgRel) : null;
-    if (pkg && typeof pkg.tsconfig === "string") push(path5.join(base, pkg.tsconfig));
+    if (pkgRel && !pkg && entryPresent(root, pkgRel)) refuse(`${pkgRel}: not a contained, parseable regular file`);
+    if (pkg && pkg.tsconfig !== void 0) {
+      if (typeof pkg.tsconfig !== "string") refuse(`${pkgRel}: tsconfig field is not a string`);
+      else if (contained(root, path5.join(base, pkg.tsconfig)) === null) refuse(`${pkgRel}: tsconfig ${pkg.tsconfig} outside worktree`);
+      else push(path5.join(base, pkg.tsconfig));
+    }
     push(path5.join(base, "tsconfig.json"));
     if (contained(root, dir) === null) break;
   }
@@ -592,18 +624,32 @@ function loadTsconfigChain(root, rootConfig = "tsconfig.json") {
         unresolved.push(`${tag}: depth>${TSCONFIG_MAX_DEPTH}`);
         continue;
       }
-      const cands = candidates(root, from.path, spec, probedSet);
+      const refused = [];
+      const cands = candidates(root, from.path, spec, probedSet, (why) => refused.push(why));
+      if (refused.length) {
+        for (const why of refused) unresolved.push(`${tag}: ${why}`);
+        continue;
+      }
       if (cands === "escape") {
         unresolved.push(`${tag}: outside worktree`);
         continue;
       }
       let hit;
+      let refusedHit;
       for (const rel of cands) {
         probedSet.add(rel);
         if (readContainedFile(root, rel) !== null) {
           hit = rel;
           break;
         }
+        if (presentNonDirectory(root, rel)) {
+          refusedHit = rel;
+          break;
+        }
+      }
+      if (refusedHit) {
+        unresolved.push(`${tag}: not a contained regular file`);
+        continue;
       }
       if (!hit) {
         unresolved.push(`${tag}: not a contained regular file`);
@@ -697,9 +743,10 @@ function guildPaths(cwd) {
   };
 }
 var SCAN_MAX_FILES = 2e4;
-function computeLearnSourceBasis(cwd) {
+function computeLearnSourceBasis(cwd, opts = {}) {
   const sourceRoot = resolveSourceWorktreeRoot(cwd);
-  const { files, filter } = walkRepo(sourceRoot, SCAN_MAX_FILES);
+  const maxFiles = opts.maxFiles ?? SCAN_MAX_FILES;
+  const { files, filter, truncated, unreadable, unsupported } = walkRepo(sourceRoot, maxFiles);
   const subGuilds = [...registeredSubGuildPaths(sourceRoot)].sort();
   const guildignore = readContainedFile(sourceRoot, ".guildignore");
   const ignorePath = path6.join(sourceRoot, ".guildignore");
@@ -711,7 +758,7 @@ function computeLearnSourceBasis(cwd) {
     guildignore: guildignore ? guildignore.toString("utf8") : null,
     sub_guilds_skipped: subGuilds,
     symlinks: "not_followed",
-    max_files: SCAN_MAX_FILES,
+    max_files: maxFiles,
     bytes: "raw"
   };
   const tsconfig = loadTsconfigChain(sourceRoot);
@@ -729,7 +776,11 @@ function computeLearnSourceBasis(cwd) {
     resolverInputs: ["package.json", ...tsconfig.hops.map((h) => h.path), ...tsconfig.probed],
     resolverUnresolved: [
       ...tsconfig.unresolved,
-      ...guildignoreRefused ? [".guildignore: not a contained regular file"] : []
+      ...guildignoreRefused ? [".guildignore: not a contained regular file"] : [],
+      // K02: files past the cap are neither inventoried nor compared.
+      ...truncated ? [`scan: max_files (${maxFiles}) exceeded; inventory incomplete`] : [],
+      ...unreadable.map((d) => `scan: directory ${d || "."} unreadable; inventory incomplete`),
+      ...unsupported.map((p) => `scan: ${JSON.stringify(p)} has a backslash or non-UTF-8 bytes in its name; inventory incomplete`)
     ]
   });
 }
@@ -744,6 +795,45 @@ function readJson2(filePath) {
     return null;
   }
 }
+
+// src/domains/knowledge/freshness-boundary.ts
+function hasBasis(m) {
+  const sb = m?.source_basis;
+  return !!sb && typeof sb === "object" && !!sb.basis && typeof sb.basis === "object" && typeof sb.source_basis_hash === "string";
+}
+function inventoryDrift(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return [];
+  const before = new Map(a.map((e) => [e.path, e.sha256]));
+  const after = new Map(b.map((e) => [e.path, e.sha256]));
+  const out = /* @__PURE__ */ new Set();
+  for (const [p, h] of before) if (after.get(p) !== h) out.add(p);
+  for (const p of after.keys()) if (!before.has(p)) out.add(p);
+  return [...out].sort();
+}
+function reconcileBoundary(input) {
+  const verdict = (state2, verified, reason2, drift2 = []) => {
+    const hinted = new Set(input.hints);
+    return { state: state2, verified, reason: reason2, drift: drift2, hints_missed: drift2.filter((p) => !hinted.has(p)) };
+  };
+  if (!hasBasis(input.marker)) return verdict("unknown", false, "marker carries no source basis; its claims are not evidence");
+  const { files, bytes } = input.estimate;
+  const { max_files, max_bytes } = input.budget;
+  if (!(Number.isFinite(files) && Number.isFinite(bytes)) || files > max_files || bytes > max_bytes) {
+    return verdict("pending", false, `verification (${files} files, ${bytes} bytes) exceeds budget (${max_files} files, ${max_bytes} bytes)`);
+  }
+  const observed = input.observe();
+  const state = freshnessFor(input.marker.source_basis, observed);
+  const drift = state === "stale" ? inventoryDrift(input.marker.source_basis.inventory, observed.inventory) : [];
+  const reason = state === "current_for_basis" ? "observed basis equals published basis" : state === "stale" ? "observed basis differs from published basis" : "basis from another worktree or with unresolved resolver inputs";
+  return verdict(state, true, reason, drift);
+}
+var BACKGROUND_STRUCTURAL_POLICY = Object.freeze({
+  policy: "guild.learn.background_structural.v1",
+  channel: "structural_graph",
+  max_jobs: 4,
+  max_paths_per_job: 64
+});
+var BACKGROUND_HARD_LIMITS = Object.freeze({ max_jobs: 16, max_paths_per_job: 256 });
 
 // scripts/learn/lib/git.ts
 var import_child_process2 = require("child_process");
@@ -1315,7 +1405,13 @@ function main() {
     else process.stdout.write("FULL\n");
     return;
   }
-  const freshness = store.source_basis?.basis ? freshnessFor(store.source_basis, source) : "unknown";
+  const freshness = reconcileBoundary({
+    marker: store,
+    hints: [],
+    estimate: { files: source.inventory.length, bytes: 0 },
+    budget: { max_files: Number.MAX_SAFE_INTEGER, max_bytes: Number.MAX_SAFE_INTEGER },
+    observe: () => source
+  }).state;
   const foreign = freshness === "unknown";
   const analysis = analyzeChanges(store, tree);
   const knownFiles = Object.keys(store.files);

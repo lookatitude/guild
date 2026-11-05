@@ -19,7 +19,8 @@
 import * as fs from "fs";
 import * as path from "path";
 import { guildPaths, parseCwd, hasFlag, writeJson, readJson, computeLearnSourceBasis } from "./lib/paths";
-import { freshnessFor, type ChannelState } from "../../src/domains/knowledge/source-basis";
+import { type ChannelState, type SourceBasis } from "../../src/domains/knowledge/source-basis";
+import { reconcileBoundary, type FreshnessMarker } from "../../src/domains/knowledge/freshness-boundary";
 import { headSha } from "./lib/git";
 import { walkRepo } from "./lib/walk";
 import { isCodeLanguage, detectLanguage } from "./lib/languages";
@@ -63,7 +64,7 @@ function main(): void {
     return;
   }
 
-  const store = readJson<FingerprintStore & { source_basis?: Parameters<typeof freshnessFor>[0] }>(gp.fingerprint);
+  const store = readJson<FingerprintStore & FreshnessMarker>(gp.fingerprint);
   if (!store) {
     process.stderr.write("[staleness] no baseline — treat as FULL (run --baseline after a build)\n");
     const out = { state: "FULL", reason: "no fingerprint baseline", filesToReanalyze: Object.keys(tree), rerunArchitecture: true };
@@ -74,7 +75,16 @@ function main(): void {
 
   // A baseline without a worktree identity, or from another worktree, proves
   // nothing about these bytes: freshness is unknown and the verdict is FULL.
-  const freshness: ChannelState = store.source_basis?.basis ? freshnessFor(store.source_basis, source) : "unknown";
+  // K02: the stored basis is compared with the observed one; the baseline's
+  // commit stamp alone is a marker and never evidence. The basis is already
+  // computed, so the budget is the scan cap it ran under.
+  const freshness: ChannelState = reconcileBoundary({
+    marker: store,
+    hints: [],
+    estimate: { files: source.inventory.length, bytes: 0 },
+    budget: { max_files: Number.MAX_SAFE_INTEGER, max_bytes: Number.MAX_SAFE_INTEGER },
+    observe: (): SourceBasis => source,
+  }).state;
   const foreign = freshness === "unknown";
   const analysis = analyzeChanges(store, tree);
   const knownFiles = Object.keys(store.files);
