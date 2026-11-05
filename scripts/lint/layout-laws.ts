@@ -1898,6 +1898,10 @@ const SKILL_VERSIONS_DELETER = "src/domains/state/upgrade-steps.ts";
 const KTD29_DEEP_IMPORTS: ReadonlyMap<string, string> = new Map([
   ["scripts/lib/guild-root.ts", "state/guild-root"],
   ["scripts/lib/shared/config-defaults.ts", "config/config-defaults"],
+  // A04: only the packaged Stack entrypoints carry the v2 reader and its ~250KB contract
+  // JSON; the lifecycle barrel is whole-required by other bundles, so it must not export them.
+  ["scripts/stack-operations.ts", "lifecycle/stack-contract-reader"],
+  ["scripts/lib/stack-contract-reader-validator.ts", "lifecycle/stack-contracts.v2.generated.json"],
 ]);
 
 const CHECKS: Check[] = [
