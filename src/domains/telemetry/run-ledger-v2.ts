@@ -201,6 +201,7 @@ function costValue(basis: CostValue["basis"], pricing: string | null, eligible: 
   const coverage = coverageOf(eligible, samples.length, reason);
   if (samples.length === 0) return { value: null, known_subtotal: null, exact_total: null, coverage: coverageOf(eligible, 0, reason ?? "no cost observed"), reason: reason ?? "no cost observed", basis, currency: "USD", pricing_version: pricing };
   const v = femtoToUsd(samples.reduce((s, x) => s + x, 0n));
+  if (!Number.isFinite(v)) return { value: null, known_subtotal: null, exact_total: null, coverage: coverageOf(eligible, 0, "cost sum is not representable"), reason: "cost sum is not representable", basis, currency: "USD", pricing_version: pricing };
   return { value: v, known_subtotal: v, exact_total: coverage.state === "complete" ? v : null, coverage, reason: coverage.reason, basis, currency: "USD", pricing_version: pricing };
 }
 
@@ -251,7 +252,8 @@ function priceLeaf(u: TraceUsage, id: TraceObservedIdentity, prices: Prices | nu
   const uncachedTokens = BigInt(u.input_inclusive) - BigInt(u.cache_read_subset) - write;
   if (uncachedTokens < 0n) return "cache subsets exceed inclusive input";
   // tokens × (USD per 1M × 1e9) = USD × 1e15
-  return uncachedTokens * p.uncached + BigInt(u.cache_read_subset) * p.cacheRead + write * (p.cacheWrite ?? 0n) + BigInt(u.output) * p.output;
+  const f = uncachedTokens * p.uncached + BigInt(u.cache_read_subset) * p.cacheRead + write * (p.cacheWrite ?? 0n) + BigInt(u.output) * p.output;
+  return Number.isFinite(femtoToUsd(f)) ? f : "derived cost is not representable";
 }
 
 // ── Usage ────────────────────────────────────────────────────────────────────
@@ -296,11 +298,14 @@ function selectRevision(obs: readonly TraceAnalysisV3[], poisoned: boolean, loss
     else losses.add("provisional_superseded", "interim stream revision replaced by the final cumulative counters");
   }
   const upTo = revs.filter((r) => r <= chosenRev).map((r) => byRev.get(r)![0]!.usage!);
-  for (let i = 1; i < upTo.length; i++) {
-    const a = upTo[i - 1]!, b = upTo[i]!;
-    const fields = native ? (["native_cumulative_usd"] as const) : COUNTERS;
-    const fell = fields.some((k) => a[k] !== null && b[k] !== null && (b[k] as number) < (a[k] as number));
-    const rebased = native && a.native_baseline_usd !== b.native_baseline_usd;
+  // Compare with the running maximum, so a null revision cannot hide a decrease.
+  const fields = native ? (["native_cumulative_usd"] as const) : COUNTERS;
+  const peak = new Map<string, number>();
+  for (let i = 0; i < upTo.length; i++) {
+    const b = upTo[i]!;
+    const fell = fields.some((k) => b[k] !== null && peak.has(k) && (b[k] as number) < peak.get(k)!);
+    for (const k of fields) if (b[k] !== null) peak.set(k, Math.max(peak.get(k) ?? 0, b[k] as number));
+    const rebased = native && i > 0 && upTo[0]!.native_baseline_usd !== b.native_baseline_usd;
     if (fell || rebased) {
       trusted = false;
       reason = native ? "native session counter reset or rebased" : "cumulative counters decrease across revisions";
@@ -326,17 +331,20 @@ function normalizeUsage(input: RunLedgerInput, prices: Prices | null, priceRefus
   // 1 · admit: validate, keep this source's run, dedupe event ids.
   const byId = new Map<string, { sig: string; event: TraceAnalysisV3 }>();
   const conflictedIds = new Set<string>();
+  const copies = new Map<string, { sig: string; event: TraceAnalysisV3 }[]>();
   let invalid = 0, replays = 0;
   for (const raw of input.events) {
     const e = parseEvent(raw);
     if (!validateTraceAnalysisV3(e).ok) { invalid++; losses.add("invalid_event", "event is not a valid guild.trace.analysis.v3 record"); continue; }
     const ev = e as TraceAnalysisV3;
     if (ev.lineage.source_id !== input.source_id || ev.lineage.run_id !== input.run_id) { losses.add("foreign_event", "event belongs to another source or run"); continue; }
-    const sig = canonical(ev);
-    const seen = byId.get(ev.event_id);
-    if (!seen) byId.set(ev.event_id, { sig, event: ev });
-    else if (seen.sig === sig) { replays++; losses.add("replayed_event", "identical replay of an admitted event"); }
-    else if (!conflictedIds.has(ev.event_id)) { conflictedIds.add(ev.event_id); losses.add("event_id_conflict", "one event id carries two contents; its request is unknown"); }
+    push(copies, ev.event_id, { sig: canonical(ev), event: ev });
+  }
+  // Decided per id over all copies, so input order cannot change replay or conflict counts.
+  for (const [id, cs] of copies) {
+    if (new Set(cs.map((c) => c.sig)).size > 1) { conflictedIds.add(id); losses.add("event_id_conflict", "one event id carries two contents; its request is unknown"); continue; }
+    byId.set(id, cs[0]!);
+    if (cs.length > 1) { replays += cs.length - 1; losses.add("replayed_event", "identical replay of an admitted event", cs.length - 1); }
   }
   // 2 · route observations.
   const leafObs = new Map<string, TraceAnalysisV3[]>();
@@ -359,10 +367,12 @@ function normalizeUsage(input: RunLedgerInput, prices: Prices | null, priceRefus
     else push(leafObs, u.accounting_identity, e);
   }
   // The conflicting copies of an event id also poison the identity they name.
+  const conflictedNative = new Set<string>();
   for (const id of conflictedIds) {
-    for (const raw of input.events) {
-      const e = parseEvent(raw) as TraceAnalysisV3 | undefined;
-      if (isObj(e) && e.event_id === id && isObj(e.usage) && isId((e.usage as TraceUsage).accounting_identity)) poisonedAccts.add((e.usage as TraceUsage).accounting_identity);
+    for (const { event: e } of copies.get(id)!) {
+      if (!e.usage) continue;
+      poisonedAccts.add(e.usage.accounting_identity);
+      if (e.usage.granularity === "native_session") conflictedNative.add(e.usage.accounting_identity);
     }
   }
   // 3 · leaves.
@@ -425,7 +435,7 @@ function normalizeUsage(input: RunLedgerInput, prices: Prices | null, priceRefus
   });
   // Session-only accounting and conflicting event ids both hide how many leaf requests ran.
   const eligibleKnown = input.capture !== null && input.capture.state === "complete" && invalid === 0 && conflictedIds.size === 0 && nativeObs.size === 0;
-  return { leaves, femto, pending, nativeFemto, nativeSessions: nativeObs.size, eligibleKnown, duplicates: replays + losses.get("mirror_suppressed"), invalid };
+  return { leaves, femto, pending, nativeFemto, nativeSessions: new Set([...nativeObs.keys(), ...conflictedNative]).size, eligibleKnown, duplicates: replays + losses.get("mirror_suppressed"), invalid };
 }
 
 function push<K, V>(m: Map<K, V[]>, k: K, v: V): void {
@@ -516,6 +526,7 @@ function normalizeTime(rawSpansOrNull: readonly unknown[] | null, asOf: string |
   const byId = new Map<string, { sig: string; span: Span | null; kind: SpanKind }>();
   const conflicted = new Set<string>();
   const mismatched = new Set<string>();
+  const groups = new Map<string, { kind: SpanKind; sig: string; parsed: Span | "mismatch" | null }[]>();
   let anonymous = 0;
   for (const raw of rawSpans) {
     const kind = isObj(raw) && (raw.kind === "run" || raw.kind === "active" || raw.kind === "wait") ? (raw.kind as SpanKind) : null;
@@ -523,15 +534,18 @@ function normalizeTime(rawSpansOrNull: readonly unknown[] | null, asOf: string |
     const rec = raw as Record<string, unknown>;
     const parsed = parseSpan(rec, kind);
     const id = isId(rec.span_id) ? rec.span_id : `\u0000anon-${anonymous++}`;
-    if (parsed === null) { losses.add("invalid_span", "span is malformed"); eligible[kind].add(id); continue; }
-    eligible[kind].add(id);
-    const sig = canonical(rec);
-    const seen = byId.get(id);
-    if (!seen) {
-      if (parsed === "mismatch") mismatched.add(id);
-      byId.set(id, { sig, span: parsed === "mismatch" ? null : parsed, kind });
-    } else if (seen.sig === sig) losses.add("duplicate_span", "identical span counted once");
-    else if (!conflicted.has(id)) { conflicted.add(id); losses.add("span_conflict", "one span id carries two intervals; both are excluded"); }
+    // A malformed copy gets a unique signature: next to any other copy it is a conflict.
+    const sig = parsed === null ? `\u0000invalid-${anonymous++}` : canonical(rec);
+    if (parsed === null) losses.add("invalid_span", "span is malformed");
+    push(groups, id, { kind, sig, parsed });
+  }
+  for (const [id, cs] of groups) {
+    for (const c of cs) eligible[c.kind].add(id);
+    if (new Set(cs.map((c) => c.sig)).size > 1) { conflicted.add(id); losses.add("span_conflict", "one span id carries two intervals; all copies are excluded"); continue; }
+    if (cs.length > 1) losses.add("duplicate_span", "identical span counted once", cs.length - 1);
+    const { kind, sig, parsed } = cs[0]!;
+    if (parsed === "mismatch") mismatched.add(id);
+    byId.set(id, { sig, span: parsed === "mismatch" ? null : parsed, kind });
   }
   if (mismatched.size) losses.add("duration_mismatch", "span duration disagrees with its bounds", mismatched.size);
   const live = (k: SpanKind) => [...byId.entries()].filter(([id, x]) => x.kind === k && x.span && !conflicted.has(id)).map(([, x]) => x.span!);

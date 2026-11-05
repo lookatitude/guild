@@ -802,3 +802,47 @@ describe("review round 2 regressions", () => {
     expect(r.active_union_ms.exact_total).toBeNull();
   });
 });
+
+describe("review round 3 regressions", () => {
+  it("R3-F8: replay and conflict counts do not depend on input order", () => {
+    const a = ev({ id: "same", cls: "phase", request: null });
+    const b = { ...structuredClone(a), sequence: a.sequence + 1 };
+    const x = normalizeRunLedger(base({ events: [a, b, a] }));
+    const y = normalizeRunLedger(base({ events: [b, a, a] }));
+    expect(x.coverage.duplicates).toBe(y.coverage.duplicates);
+    expect(x.losses).toEqual(y.losses);
+  });
+
+  it("R3-F10: an unrepresentable derived cost is refused, never Infinity", () => {
+    const r = normalizeRunLedger(base({ events: [ev({ id: "huge", usage: use({ acct: "huge", input: 1e300, cache: 0, write: 0, output: 0 }) })], pricing: { ...P1, entries: [{ ...P1.entries[0]!, uncached_input: 1e30 }] } }));
+    expect(leafOf(r, "huge").derived_estimate_usd).toBeNull();
+    expect(r.cost.derived_estimate.value).toBeNull();
+  });
+
+  it("R3-F12: a conflicting native session keeps spend coverage incomplete", () => {
+    const n1 = ev({ id: "conflict", request: "s1", observed: null, usage: nativeUse("s1", 1, true, 0, 1) });
+    const n2 = ev({ id: "conflict", request: "s1", observed: null, usage: nativeUse("s1", 1, true, 0, 2) });
+    const r = normalizeRunLedger(base({ events: [n1, n2, ev({ id: "s2", request: "s2", observed: null, usage: nativeUse("s2", 1, true, 0, 3) })], budget: { threshold_usd: 5 } }));
+    expect(r.cost.native_estimate.known_subtotal).toBe(3);
+    expect(r.cost.native_estimate.exact_total).toBeNull();
+    expect(r.cost.budget!.remaining_usd).toBeNull();
+    expect(r.cost.budget!.overshoot_usd).toBeNull();
+  });
+
+  it("R3-F13: a null revision cannot hide a cumulative decrease", () => {
+    const r = normalizeRunLedger(base({ events: [100, null, 90].map((input, i) => ev({ id: `ev-n${i}`, usage: use({ acct: "q", rev: i + 1, final: i === 2, input, cache: input === null ? null : 0, write: input === null ? null : 0, output: 10 }) })) }));
+    expect(leafOf(r, "q").covered).toBe(false);
+    expect(loss(r, "non_monotonic_revision")).toBe(1);
+  });
+
+  it("R3-F14: a malformed copy of a span id makes that span unresolved", () => {
+    const run = gf2Spans()[0];
+    const good = { span_id: "a", kind: "active", interval: iv(0, 10), agent_instance_id: null, reason: null };
+    const bad = { span_id: "a", kind: "active", interval: { ...iv(0, 30), duration_ms: -1 }, agent_instance_id: null, reason: null };
+    for (const spans of [[run, good, bad], [run, bad, good]]) {
+      const t = normalizeRunLedger(base({ spans })).time;
+      expect(t.active_union_ms.exact_total).toBeNull();
+      expect(t.losses.find((x) => x.code === "span_conflict")!.count).toBe(1);
+    }
+  });
+});
