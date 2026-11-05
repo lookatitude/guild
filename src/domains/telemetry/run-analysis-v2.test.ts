@@ -12,11 +12,13 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { TraceAnalysisV3, TraceCoverage, TraceUsage } from "./trace-analysis-v3";
-import type { PriceTable } from "./run-ledger-v2";
+import { normalizeRunLedger, type PriceTable } from "./run-ledger-v2";
+import { spawnSync } from "node:child_process";
 import {
   LEGACY_V1_USAGE_SEMANTICS,
   RUN_ANALYSIS_V2_SCHEMA,
   analyzeRunV2,
+  buildRunAnalysisV2,
   analysisCacheKey,
   compareRunsV2,
   legacyV1UsageProjection,
@@ -181,6 +183,10 @@ describe("AT26 · cache compatibility", () => {
     expect(repriced.reason).toBe("version_mismatch");
     expect(repriced.dimensions).toEqual(["pricing"]);
     expect(repriced.analysis.analysis_id).not.toBe(first.analysis.analysis_id);
+    // A rate edit under the same version and source hash is a different price basis too.
+    const rerated = run("run-1", { pricing: { ...P1, version: "p2", entries: [{ ...P1.entries[0]!, output: 80 }] } });
+    expect(rerated.cache).toBe("recomputed");
+    expect(rerated.dimensions).toEqual(["pricing"]);
     // A same-version table with different bytes is a different price basis too.
     const rehashed = run("run-1", { pricing: { ...P1, version: "p2", source_hash: `sha256:${"f".repeat(64)}` } });
     expect(rehashed.cache).toBe("recomputed");
@@ -309,6 +315,61 @@ describe("AT26 · cache compatibility", () => {
     const c = compareRunsV2([{ analysis: a }, { analysis: b }], { as_of: AS_OF });
     expect(c.compatibility).toBe("refused");
     expect(c.refusal_reasons.join(" ")).toContain("usage_semantics");
+    // The session record is not projected; that omission is disclosed, not hidden.
+    expect(b.usage).toEqual([]);
+    expect(b.losses).toContainEqual(expect.objectContaining({ code: "native_session_not_projected", count: 1 }));
+    expect(b.state.observability).not.toBe("complete");
+  });
+
+  it("an over-bound projection is marked partial with the omission counted", () => {
+    const events = Array.from({ length: 1001 }, (_, i) => ev("run-big", `ev-${i}`, "2026-10-26T00:00:10Z", use(`request-${i}`, 10, 0, 5), "task-1", "attempt-1"));
+    const ledger = normalizeRunLedger({ source_id: SOURCE, run_id: "run-big", events, capture: { ...COMPLETE, eligible: 1001, covered: 1001 }, spans: [], pricing: null, budget: null, as_of: AS_OF });
+    expect(ledger.coverage.requests.state).toBe("complete");
+    const a = buildRunAnalysisV2({ source_id: SOURCE, run_id: "run-big", as_of: AS_OF, ledger, input_evidence: [], trace_usable: true, pricing: null });
+    expect(a.usage).toHaveLength(1000);
+    expect(a.state.observability).toBe("partial");
+    expect(a.losses).toContainEqual(expect.objectContaining({ code: "projection_truncated", count: 1 }));
+    expect(validateRunAnalysisV2(a)).toEqual({ ok: true });
+  });
+
+  it("validator enforces the frozen state-axis and window rules", () => {
+    richRun("run-1");
+    const a = run("run-1").analysis;
+    expect(validateRunAnalysisV2({ ...a, state: { ...a.state, lifecycle: "closed", outcome: "succeeded", acceptance: "unknown" } }).ok).toBe(false);
+    expect(validateRunAnalysisV2({ ...a, state: { ...a.state, lifecycle: "closed", outcome: "unknown" } }).ok).toBe(false);
+    expect(validateRunAnalysisV2({ ...a, query: { ...a.query, window: { ...a.query.window, from: AS_OF } } }).ok).toBe(false);
+  });
+
+  it("generated analyses and comparisons pass the frozen A02 semantic verifier", () => {
+    if (!A02_PRESENT) {
+      expect(process.env["T02_REQUIRE_A02"]).not.toBe("1");
+      return;
+    }
+    richRun("run-1");
+    richRun("run-2");
+    put("runs/run-gone/run.yaml", "run_id: run-gone\n");
+    const a = run("run-1").analysis;
+    const b = run("run-2").analysis;
+    const sparse = run("run-gone").analysis;
+    const ok = compareRunsV2([{ analysis: a }, { analysis: b }], { as_of: AS_OF });
+    const refused = compareRunsV2([{ analysis: a }, { legacy: v1Analysis("run-3", 1, 1, 1), source_id: SOURCE }], { as_of: AS_OF });
+    const bad = { ...a, state: { ...a.state, lifecycle: "closed", outcome: "succeeded", acceptance: "unknown" } };
+    const cases = [["run-analysis", a], ["run-analysis", sparse], ["run-comparison", ok], ["run-comparison", refused], ["run-analysis", bad]];
+    // semantic_errors and its helpers only; schema checks need packages the frozen bundle pins separately.
+    const py = [
+      "import sys,json,ast,copy", "from datetime import datetime",
+      `p=${JSON.stringify(path.join(A02_ROOT, "verify_contracts.py"))}`,
+      "t=ast.parse(open(p).read(),p)",
+      "m=ast.Module(body=[n for n in t.body if isinstance(n,ast.FunctionDef) and n.name in {'dt','semantic_errors','input_identity','disclosed','usable'}],type_ignores=[])",
+      "USAGE_COUNTERS=['input_inclusive','output','cache_read_subset','cache_write_subset','total']",
+      "exec(compile(m,p,'exec'))",
+      "print(json.dumps([semantic_errors(n,v) for n,v in json.load(sys.stdin)]))",
+    ].join("\n");
+    const r = spawnSync("python3", ["-I", "-c", py], { input: JSON.stringify(cases), encoding: "utf8" });
+    expect(r.stderr).toBe("");
+    const errs = JSON.parse(r.stdout) as string[][];
+    expect(errs.slice(0, 4)).toEqual([[], [], [], []]);
+    expect(errs[4]).toContain("success requires verified acceptance");
   });
 
   it("A02 frozen examples validate (mandatory when T02_REQUIRE_A02=1)", () => {

@@ -29,7 +29,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { checkContained, isRefused, prepareContainedWrite } from "../kernel";
 import { RUN_LEDGER_VERSIONS, normalizeRunLedger, type PriceTable, type RunLedger } from "./run-ledger-v2";
-import { TRACE_V3_CHECKS, TRACE_ID_RE, isRfc3339, usageRules, type TraceEvidence, type TraceUsage, type TraceShapeCheck } from "./trace-analysis-v3";
+import { TRACE_V3_CHECKS, TRACE_ID_RE, compareTraceInstants, isRfc3339, usageRules, type TraceEvidence, type TraceUsage, type TraceShapeCheck } from "./trace-analysis-v3";
 import { readTrace } from "./trace-capture-v3";
 
 export const RUN_ANALYSIS_V2_SCHEMA = "guild.run_analysis.v2" as const;
@@ -121,7 +121,8 @@ export function analysisVersions(ledger: RunLedger, semantics: readonly string[]
     normalizer: ledger.versions.normalizer,
     formula: [ledger.versions.usage_formula, ledger.versions.cost_formula, ledger.versions.time_formula].join("|"),
     usage_semantics: observedSemantics(semantics),
-    pricing: pricing ? `${pricing.version}@${pricing.source_hash}` : "unpriced",
+    // The table content is hashed, so a rate edit under an unchanged version or source hash still misses.
+    pricing: pricing ? `${pricing.version}@${sha(canonical(pricing))}` : "unpriced",
     aggregation: RUN_ANALYSIS_V2_VERSIONS.aggregation,
     ...override,
   };
@@ -176,9 +177,13 @@ export interface BuildRunAnalysisV2Input {
   pricing: PriceTable | null; versions?: Partial<VersionSet>;
   /** Usage semantics of every billed observation, native sessions included (they are not ledger leaves). */
   observed_semantics?: readonly string[];
-  /** Earliest observed event instant; the window starts at as_of when none. */
-  first_at?: string | null;
+  /** Native session identities seen in the trace; the ledger keeps only their aggregate estimate. */
+  native_sessions?: number;
 }
+
+/** A snapshot read covers all retained history up to as_of: [epoch, as_of). */
+const SNAPSHOT_FROM = "1970-01-01T00:00:00Z";
+const LIMITS = { usage: 1000, unallocated: 1000, losses: 100 } as const;
 
 /** Pure projection of a T02 ledger into `guild.run_analysis.v2`. */
 export function buildRunAnalysisV2(i: BuildRunAnalysisV2Input): RunAnalysisV2 {
@@ -194,10 +199,18 @@ export function buildRunAnalysisV2(i: BuildRunAnalysisV2Input): RunAnalysisV2 {
   const versions = analysisVersions(i.ledger, semantics, i.pricing, i.versions);
   const digest = inputManifestDigest(i.input_evidence);
   const key = analysisCacheKey(versions, digest, { source_id: i.source_id, run_id: i.run_id });
-  const losses: AnalysisLoss[] = [...i.ledger.losses, ...i.ledger.time.losses].map((l) => ({ code: l.code, count: l.count, reason: l.reason }));
-  if (!i.trace_usable) losses.unshift({ code: "trace_unavailable", count: null, reason: "no retained v3 trace; usage, cost and time are unknown" });
-  const observability: StateAxes["observability"] = i.trace_usable ? i.ledger.coverage.requests.state : "unavailable";
-  const from = i.first_at && i.first_at < i.as_of ? i.first_at : i.as_of;
+  const head: AnalysisLoss[] = [];
+  if (!i.trace_usable) head.push({ code: "trace_unavailable", count: null, reason: "no retained v3 trace; usage, cost and time are unknown" });
+  const natives = i.trace_usable ? i.native_sessions ?? 0 : 0;
+  if (natives > 0) head.push({ code: "native_session_not_projected", count: natives, reason: "native session spend is kept only as the ledger native estimate; its session records are not projected" });
+  const unallocated = (i.trace_usable ? i.ledger.allocation.unallocated_request_ids : []).filter((x) => TRACE_ID_RE.test(x));
+  const omitted = Math.max(0, usage.length - LIMITS.usage) + Math.max(0, unallocated.length - LIMITS.unallocated);
+  if (omitted > 0) head.push({ code: "projection_truncated", count: omitted, reason: `usage or unallocated ids exceed the contract bound; ${omitted} omitted` });
+  const tail = [...i.ledger.losses, ...i.ledger.time.losses].map((l) => ({ code: l.code, count: l.count, reason: l.reason }));
+  const room = LIMITS.losses - head.length;
+  const losses = tail.length > room ? [...head, ...tail.slice(0, room - 1), { code: "losses_truncated", count: tail.length - room + 1, reason: "more ledger losses than the contract bound" }] : [...head, ...tail];
+  let observability: StateAxes["observability"] = i.trace_usable ? i.ledger.coverage.requests.state : "unavailable";
+  if (observability === "complete" && (natives > 0 || omitted > 0)) observability = "partial";
   return {
     schema_version: RUN_ANALYSIS_V2_SCHEMA,
     run: { source_id: i.source_id, kind: "run", id: i.run_id, revision: digest },
@@ -206,15 +219,15 @@ export function buildRunAnalysisV2(i: BuildRunAnalysisV2Input): RunAnalysisV2 {
       schema_version: QUERY_SCHEMA, versions,
       snapshot: { input_manifest_digest: digest, source_ids: [i.source_id], source_generations: [{ source_id: i.source_id, generation: digest }], as_of: i.as_of },
       grain: "run", filters: [{ dimension: "run", values: [i.run_id] }],
-      window: { from, to: i.as_of, basis: "as_of_snapshot", timezone: "UTC" },
+      window: { from: SNAPSHOT_FROM, to: i.as_of, basis: "as_of_snapshot", timezone: "UTC" },
       cohort_hash: sha(canonical({ source_id: i.source_id, run_id: i.run_id })), underlying_scalar: null,
     },
-    input_evidence: i.input_evidence.slice(0, 1000),
-    usage: usage.slice(0, 1000),
+    input_evidence: i.input_evidence,
+    usage: usage.slice(0, LIMITS.usage),
     state: { lifecycle: "unknown", outcome: "unknown", acceptance: "unknown", observability },
     metrics: [],
-    unallocated_request_ids: (i.trace_usable ? i.ledger.allocation.unallocated_request_ids : []).filter((x) => TRACE_ID_RE.test(x)).slice(0, 1000),
-    losses: losses.slice(0, 100),
+    unallocated_request_ids: unallocated.slice(0, LIMITS.unallocated),
+    losses,
   };
 }
 
@@ -285,11 +298,18 @@ export function validateRunAnalysisV2(value: unknown): Verdict {
   }
   const sessions = new Set(v.usage.filter((u) => u.granularity === "native_session").map((u) => u.accounting_identity));
   require(!v.usage.some((u) => u.granularity === "leaf_request" && u.parent_accounting_identity !== null && sessions.has(u.parent_accounting_identity)), "normalized ledger cannot overlap session and leaf scopes");
+  queryRules(v.query, require);
+  if (v.state.outcome === "succeeded") require(v.state.acceptance === "verified", "success requires verified acceptance");
+  if (v.state.lifecycle === "closed") require(v.state.outcome !== "pending" && v.state.outcome !== "unknown", "closed cannot have pending/unknown outcome");
   const sources = v.query.snapshot.source_ids;
   require(v.run.kind === "run" && sources.includes(v.run.source_id), "analysis source/run mismatch");
   require(v.input_evidence.every((x) => sources.includes(x.source_id)), "analysis input evidence outside query snapshot sources");
-  require(snapshotGenerationsOwned(v.query), "snapshot generation source outside snapshot sources");
   return verdict(errors);
+}
+
+function queryRules(q: QueryIdentity, require: (ok: boolean, msg: string) => void): void {
+  require(snapshotGenerationsOwned(q), "snapshot source/generation identity mismatch");
+  require(compareTraceInstants(q.window.from, q.window.to) < 0, "window must be nonempty half-open [from,to)");
 }
 
 function snapshotGenerationsOwned(q: QueryIdentity): boolean {
@@ -307,9 +327,9 @@ export function validateRunComparisonV2(value: unknown): Verdict {
   const keys = v.runs.map((x) => `${x.source_id}\u0000${x.id}`);
   require(new Set(keys).size === keys.length, "duplicate compared run");
   require(v.runs.length === v.analysis_refs.length && v.runs.length === v.input_versions.length, "comparison input cardinality mismatch");
+  queryRules(v.query, require);
   const sources = v.query.snapshot.source_ids;
   require([...v.runs, ...v.analysis_refs].every((x) => sources.includes(x.source_id)), "comparison run or analysis ref outside query snapshot sources");
-  require(snapshotGenerationsOwned(v.query), "snapshot generation source outside snapshot sources");
   if (v.compatibility === "compatible") {
     require(v.analysis_refs.every((e) => e.schema_version === RUN_ANALYSIS_V2_SCHEMA) && v.input_versions.every((x) => canonical(x) === canonical(v.query.versions)),
       "incompatible analysis schema/normalizer/semantics/pricing versions cannot be ranked");
@@ -421,9 +441,10 @@ export function analyzeRunV2(root: string, opts: AnalyzeRunV2Options): AnalyzeRu
     source_id: opts.source_id, run_id: opts.run_id, events: trace?.events ?? [], capture: trace?.coverage ?? null,
     spans: [], pricing, budget: null, as_of: opts.as_of,
   });
-  const firstAt = trace?.events.map((e) => e.at).sort()[0] ?? null;
-  const observed = (trace?.events ?? []).filter((e) => e.event_class === "request_completed" && e.usage && e.usage.inclusion !== "parent_inclusive").map((e) => e.usage!.usage_semantics);
-  const fresh = buildRunAnalysisV2({ source_id: opts.source_id, run_id: opts.run_id, as_of: opts.as_of, ledger, input_evidence: evidence, trace_usable: traceUsable, pricing, versions: opts.versions, first_at: firstAt, observed_semantics: observed });
+  const billed = (trace?.events ?? []).filter((e) => e.event_class === "request_completed" && e.usage && e.usage.inclusion !== "parent_inclusive");
+  const observed = billed.map((e) => e.usage!.usage_semantics);
+  const natives = new Set(billed.filter((e) => e.usage!.granularity === "native_session").map((e) => e.usage!.accounting_identity)).size;
+  const fresh = buildRunAnalysisV2({ source_id: opts.source_id, run_id: opts.run_id, as_of: opts.as_of, ledger, input_evidence: evidence, trace_usable: traceUsable, pricing, versions: opts.versions, observed_semantics: observed, native_sessions: natives });
   const cached = readCachedRunAnalysisV2(root, opts.source_id, opts.run_id, { versions: fresh.query.versions, input_manifest_digest: fresh.query.snapshot.input_manifest_digest });
   if (cached.state === "hit") return { analysis: cached.analysis, cache: "hit", reason: null, dimensions: [] };
   writeRunAnalysisV2(root, fresh);
@@ -508,7 +529,7 @@ export function compareRunsV2(inputs: readonly ComparisonInput[], opts: { as_of:
       as_of: opts.as_of,
     },
     grain: "run", filters: [{ dimension: "run", values: [...new Set(runs.map((r) => r.id))] }],
-    window: { from: opts.as_of, to: opts.as_of, basis: "as_of_snapshot", timezone: "UTC" },
+    window: { from: SNAPSHOT_FROM, to: opts.as_of, basis: "as_of_snapshot", timezone: "UTC" },
     cohort_hash: cohort, underlying_scalar: null,
   };
   return {
