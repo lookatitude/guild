@@ -39,7 +39,8 @@ import {
   validateExecutionIdentityShape,
   type R01SchemaName,
 } from "./execution-identity";
-import { RUN_BINDING_V1_FIELDS, loadRunBinding, mintRunBinding, runBindingPath, validateRunBindingRecord } from "./run-binding";
+import { loadRunBinding, mintRunBinding, runBindingPath, validateRunBindingRecord } from "./run-binding";
+import { RUN_BINDING_V1_FIELDS } from "./run-binding-fields";
 import { SESSION_BINDING_V1_FIELDS, bindSession, bindSessionForRun, readSessionBinding, sessionBindingPath } from "../config";
 import { TASK_ASSIGNMENT_V2_FIELDS, validateTaskAssignmentV2 } from "../dispatch";
 import { RESERVED_IDENTITY_FIELDS, claimRunKind, readRunKind } from "../kernel";

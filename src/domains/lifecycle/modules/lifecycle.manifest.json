@@ -70,6 +70,7 @@
       "lib/runstart-preflight",
       "stack-operations",
       "lib/stack-contract-validator",
+      "lib/stack-contract-reader-validator",
       "stack-run-worker",
       "stack-qualify-host"
     ]

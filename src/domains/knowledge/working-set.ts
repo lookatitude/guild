@@ -26,6 +26,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { createGuildStorage, type GuildStorage } from "../state";
+import { readWorktreeHead } from "./source-basis";
 
 export const WORKING_SET_SCHEMA = "guild.working_set.v1" as const;
 
@@ -83,22 +84,6 @@ function newestMtime(dir: string): number {
   return Math.floor(newest);
 }
 
-function readGitHead(root: string): string {
-  try {
-    const headFile = path.join(root, ".git", "HEAD");
-    const head = fs.readFileSync(headFile, "utf8").trim();
-    if (!head.startsWith("ref:")) return head;
-    const ref = head.slice(4).trim();
-    const refFile = path.join(root, ".git", ref);
-    if (fs.existsSync(refFile)) return fs.readFileSync(refFile, "utf8").trim();
-    // Packed refs: a resolved head is nice-to-have, and the ref NAME is still a
-    // stable-enough fingerprint component for "did the checkout move".
-    return ref;
-  } catch {
-    return "";
-  }
-}
-
 export function hashOpenQuestions(ids: readonly string[]): string {
   const sorted = [...ids].filter((s) => typeof s === "string").sort();
   return crypto.createHash("sha256").update(sorted.join("\n"), "utf8").digest("hex").slice(0, 32);
@@ -125,7 +110,7 @@ export function computeFingerprint(opts: FingerprintOptions = {}): WorkingSetFin
   const wiki = wikiDir(storage);
   return {
     wiki_mtime: wiki && fs.existsSync(wiki) ? newestMtime(wiki) : 0,
-    git_head: readGitHead(storage.activeRoot),
+    git_head: readWorktreeHead(storage.activeRoot),
     open_questions_hash: hashOpenQuestions(opts.open_question_ids ?? []),
   };
 }
