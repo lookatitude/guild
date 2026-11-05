@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { StackError, stackHash, stackId, stackContained, createGuildStorage, StackScope } from "../state";
+import { canonicalizeRealPath } from "../kernel";
 import { createRunLifecycle, createRealEnv, assertCanonicalRunId } from "./run-lifecycle";
 import { loadRunBinding } from "./run-binding";
 
@@ -68,7 +69,7 @@ function runtimeRoot(root:string):string {
   if(!path.isAbsolute(root))throw new StackError('invalid_runtime','Absolute managed runtime required');
   fs.mkdirSync(root,{recursive:true,mode:0o700});
   if(fs.lstatSync(root).isSymbolicLink())throw new StackError('unsafe_runtime','Linked managed runtime refused');
-  fs.chmodSync(root,0o700);return fs.realpathSync(root);
+  fs.chmodSync(root,0o700);return canonicalizeRealPath(root);
 }
 function claimPath(root:string,id:string):string { return stackContained(runtimeRoot(root),stackId(id)+'.json',true); }
 function syncDirectory(dir:string):void { const fd=fs.openSync(dir,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);} }
