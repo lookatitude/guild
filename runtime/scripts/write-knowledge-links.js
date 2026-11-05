@@ -11997,10 +11997,9 @@ function computeReport(guildDir, now) {
         else if (live !== st.ref.revision) stale.push({ pinned: d, superseded_by: null, reason: "page_changed" });
         else referenced.set(st.ref.id, st.ref);
       }
-      if (st.status === "superseded" && st.superseded_by) {
-        const succ = ledger.decisions.get(st.superseded_by.id);
-        if (succ?.status === "accepted") referenced.set(succ.ref.id, succ.ref);
-      }
+      const succId = st.status === "superseded" ? st.superseded_by?.id : st.ref.revision !== d.revision ? st.ref.id : void 0;
+      const succ = succId ? ledger.decisions.get(succId) : void 0;
+      if (succ?.status === "accepted" && pageOf(succ) === succ.ref.revision) referenced.set(succ.ref.id, succ.ref);
     }
     let observed = null;
     try {
@@ -12304,7 +12303,9 @@ var AFTER_EDIT_BUDGET;
 var init_publication_boundary = __esm({
   "src/domains/knowledge/publication-boundary.ts"() {
     init_freshness_boundary();
+    init_decision_propagation();
     init_publication();
+    init_source_basis();
     init_source_basis();
     init_state();
     AFTER_EDIT_BUDGET = Object.freeze({ max_files: 0, max_bytes: 0 });

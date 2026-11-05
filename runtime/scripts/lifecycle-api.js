@@ -39119,10 +39119,9 @@ function computeReport(guildDir, now) {
         else if (live !== st.ref.revision) stale.push({ pinned: d, superseded_by: null, reason: "page_changed" });
         else referenced.set(st.ref.id, st.ref);
       }
-      if (st.status === "superseded" && st.superseded_by) {
-        const succ = ledger.decisions.get(st.superseded_by.id);
-        if (succ?.status === "accepted") referenced.set(succ.ref.id, succ.ref);
-      }
+      const succId = st.status === "superseded" ? st.superseded_by?.id : st.ref.revision !== d.revision ? st.ref.id : void 0;
+      const succ = succId ? ledger.decisions.get(succId) : void 0;
+      if (succ?.status === "accepted" && pageOf(succ) === succ.ref.revision) referenced.set(succ.ref.id, succ.ref);
     }
     let observed = null;
     try {
@@ -39248,15 +39247,17 @@ function publishDecisionCandidates(input) {
     const manifestPath = path67.join(guildDir, "knowledge", "candidates", "manifest.json");
     const prevBytes = readInside(guildDir, manifestPath);
     const missing = [];
+    const ledger = readDecisionLedger(guildDir);
     if (prevBytes) {
       const prev = JSON.parse(prevBytes.toString("utf8"));
-      const ledger = readDecisionLedger(guildDir);
+      const since = typeof prev.ledger_seq === "number" ? prev.ledger_seq : Number.MAX_SAFE_INTEGER;
       const present2 = new Set(entries.map((e) => e.path));
       for (const p of prev.candidates ?? []) {
         if (present2.has(p.path)) continue;
-        const promoted = p.decision_id ? ledger.decisions.has(p.decision_id) : false;
+        const listedAt = p.state === "missing" && typeof p.listed_at_seq === "number" ? p.listed_at_seq : since;
+        const promoted = !!p.decision_id && ledger.events.some((e) => e.decision.id === p.decision_id && e.seq > listedAt);
         if (promoted) continue;
-        entries.push({ ...p, state: "missing" });
+        entries.push({ ...p, state: "missing", listed_at_seq: listedAt });
         missing.push(p.path);
       }
     }
@@ -39265,6 +39266,7 @@ function publishDecisionCandidates(input) {
       owner_source_id: owner,
       autopromote: input.autopromote,
       generated_at: input.now ?? (/* @__PURE__ */ new Date()).toISOString(),
+      ledger_seq: ledger.head?.seq ?? 0,
       candidates: entries.sort((a, b) => a.path.localeCompare(b.path))
     };
     writeInside(guildDir, manifestPath, JSON.stringify(manifest, null, 2) + "\n");
@@ -39274,11 +39276,19 @@ function publishDecisionCandidates(input) {
     throw err;
   }
 }
-function federatedCandidateView(children) {
+function federatedCandidateView(children, opts = {}) {
   return children.map((ch) => {
     try {
       const b = readInside(ch.guildDir, path67.join(ch.guildDir, "knowledge", "candidates", "manifest.json"));
-      return { child: ch.name, manifest: b ? JSON.parse(b.toString("utf8")) : null, error: null };
+      const manifest = b ? JSON.parse(b.toString("utf8")) : null;
+      if (manifest && opts.workspaceGuildDir) {
+        const ws = path67.resolve(opts.workspaceGuildDir);
+        for (const c of manifest.candidates) {
+          const ref = c.decision_id ? canonicalPageRef(ws, c.decision_id) : null;
+          if (ref && !c.conflicts.some((x) => x.source_id === ref.source_id && x.revision === ref.revision)) c.conflicts.push(ref);
+        }
+      }
+      return { child: ch.name, manifest, error: null };
     } catch (err) {
       return { child: ch.name, manifest: null, error: err.message };
     }
@@ -39733,6 +39743,7 @@ function stageDecisionCandidate(input, op, storage, scope, decisionId, now, stor
   op.status = "candidate";
   upsertOp(input.run_id, op, storeOpts);
   emitHarvestEvent(input.runDir, input.run_id, op);
+  const manifest = publishDecisionCandidates({ guildDir: scope.definitions(), autopromote: false, now });
   return {
     op,
     promoted: false,
@@ -39740,7 +39751,8 @@ function stageDecisionCandidate(input, op, storage, scope, decisionId, now, stor
     decision_id: decisionId,
     replan_queued: false,
     next_need: "operator",
-    stale_decision_ids: []
+    stale_decision_ids: [],
+    ...manifest.status === "refused" ? { candidate_manifest_error: `${manifest.reason}: ${manifest.detail}` } : {}
   };
 }
 function finishHarvest(input, op, storage, wikiRoot2, decisionId, now, storeOpts) {
@@ -39790,15 +39802,20 @@ function finishHarvest(input, op, storage, wikiRoot2, decisionId, now, storeOpts
   if (accepted.status === "refused") return blockResume(input, op, "decision-ledger", `${accepted.reason}: ${accepted.detail}`);
   const propagation = propagateDecisions({ guildDir, now });
   if (propagation.status === "refused") return blockResume(input, op, "decision-propagation", `${propagation.reason}: ${propagation.detail}`);
-  const supersededSet = new Set(superseded);
+  const affected = /* @__PURE__ */ new Set([
+    accepted.event.decision.id,
+    ...accepted.event.supersedes.map((e) => e.id),
+    ...accepted.event.supersedes_unrecorded,
+    ...superseded
+  ]);
   const dependents = propagation.report.dependents.filter(
-    (d) => d.dependent_kind === "plan" && d.state === "replan_required" && d.stale_decisions.some((s) => supersededSet.has(s.pinned.id))
+    (d) => d.dependent_kind === "plan" && d.state === "replan_required" && d.stale_decisions.some((s) => affected.has(s.pinned.id))
   );
   const pinned = /* @__PURE__ */ new Set([
     ...input.pinned_decision_ids ?? [],
     ...dependents.flatMap((d) => d.stale_decisions.map((s) => s.pinned.id))
   ]);
-  const stale = superseded.filter((id) => pinned.has(id));
+  const stale = [...affected].filter((id) => pinned.has(id)).sort();
   const replan = stale.length > 0;
   if (replan) {
     op.pinned_in_flight = true;
@@ -40749,7 +40766,9 @@ var init_publication_boundary = __esm({
     fs61 = __toESM(require("node:fs"));
     path71 = __toESM(require("node:path"));
     init_freshness_boundary();
+    init_decision_propagation();
     init_publication();
+    init_source_basis();
     init_source_basis();
     init_state();
     AFTER_EDIT_BUDGET = Object.freeze({ max_files: 0, max_bytes: 0 });

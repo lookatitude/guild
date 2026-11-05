@@ -21,7 +21,9 @@ import {
   type BoundaryVerdict,
   type VerificationBudget,
 } from "./freshness-boundary";
-import { readPublication, publicationSidecarPath, readPublicationRecord, type BasisRef, type LayerChannel, type Sha256 } from "./publication";
+import { decisionPublicationRefs, type DecisionPublicationRefs, type EntityRef } from "./decision-propagation";
+import { readPublication, publicationSidecarPath, readPublicationRecord, type BasisRef, type ChannelRecord, type Sha256 } from "./publication";
+import { canonicalJson } from "./source-basis";
 import { sourceWorktreeId, type ChannelState } from "./source-basis";
 import { durableGuildDir } from "../state";
 
@@ -178,7 +180,13 @@ export interface PublicationStatus {
   generation: Sha256;
   source_worktree_id: string;
   /** Effective per-channel state: the record, downgraded by hints/verification. */
-  channels: Array<{ channel: LayerChannel; published_state: ChannelState; state: ChannelState; reason: string | null }>;
+  channels: Array<{ channel: ChannelRecord["channel"]; published_state: ChannelState; state: ChannelState; reason: string | null }>;
+  /**
+   * K04: the owner's decision state now against the one bound into the generation.
+   * `stale`/`unknown` means a decision moved after publication; `live` carries the
+   * replan signals the record cannot.
+   */
+  decisions: { state: "current" | "stale" | "unknown"; reason: string | null; live: Pick<DecisionPublicationRefs, "decision_refs" | "replan_required"> | null };
   verdict: BoundaryVerdict | null;
   pending_hints: string[];
   hints_truncated: boolean;
@@ -237,6 +245,7 @@ export function publicationStatus(input: {
   }
 
   const newHints = hints.lines > (verification?.hint_lines ?? 0);
+  const decisions = liveDecisions(input.indexesDir, cur.manifest.decisions ?? null);
   const channels = cur.record.channels.map((c) => {
     let state: ChannelState = c.state;
     let reason = c.reason;
@@ -253,6 +262,10 @@ export function publicationStatus(input: {
         reason = "edits hinted since the last verification; not yet compared with the source";
       }
     }
+    if (c.channel === "project_memory" && decisions.state !== "current") {
+      state = decisions.state === "stale" ? "stale" : "unknown";
+      reason = decisions.reason;
+    }
     return { channel: c.channel, published_state: c.state, state, reason };
   });
   const drift = verification?.drift ?? [];
@@ -260,7 +273,7 @@ export function publicationStatus(input: {
   const allCurrent = channels.every((c) => c.state === "current_for_basis");
   // Critical admission also needs the generation's bytes to verify against its manifest.
   let bytesVerified = false;
-  if (verdict && admitCritical(verdict) && !newHints && allCurrent) {
+  if (verdict && admitCritical(verdict) && !newHints && allCurrent && decisions.state === "current") {
     try {
       bytesVerified = readPublication(input.indexesDir)?.pointer.generation === gen;
     } catch {
@@ -271,10 +284,33 @@ export function publicationStatus(input: {
     generation: gen,
     source_worktree_id: cur.record.source_worktree_id,
     channels,
+    decisions,
     verdict,
     pending_hints: newHints ? hints.paths : [],
     hints_truncated: hints.truncated,
     refresh: allCurrent || work.length === 0 ? null : planBackgroundRefresh(work),
     admit_critical: bytesVerified,
+  };
+}
+
+function decisionView(r: DecisionPublicationRefs | null): string {
+  return canonicalJson(r ? { decision_refs: r.decision_refs, replan_required: r.replan_required, memory: r.project_memory.state } : null);
+}
+
+/** Compare the decisions bound into a generation with the owner's ledger and pins now. */
+function liveDecisions(indexesDir: string, published: DecisionPublicationRefs | null): PublicationStatus["decisions"] {
+  let live: DecisionPublicationRefs | null;
+  try {
+    live = decisionPublicationRefs(path.dirname(path.resolve(indexesDir)));
+  } catch (err) {
+    return { state: "unknown", reason: `decision state unreadable: ${(err as Error).message}`, live: null };
+  }
+  const pick = live ? { decision_refs: live.decision_refs, replan_required: live.replan_required } : null;
+  if (decisionView(live) === decisionView(published)) return { state: "current", reason: null, live: pick };
+  const ids = (xs: EntityRef[] | undefined) => (xs ?? []).map((e) => e.id).join(", ") || "none";
+  return {
+    state: "stale",
+    reason: `decisions moved since publication; replan_required now: ${ids(live?.replan_required)}`.slice(0, 4096),
+    live: pick,
   };
 }

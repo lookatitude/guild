@@ -538,10 +538,10 @@ function computeReport(guildDir: string, now: string): PropagationReport {
         else if (live !== st.ref.revision) stale.push({ pinned: d, superseded_by: null, reason: "page_changed" });
         else referenced.set(st.ref.id, st.ref);
       }
-      if (st.status === "superseded" && st.superseded_by) {
-        const succ = ledger.decisions.get(st.superseded_by.id);
-        if (succ?.status === "accepted") referenced.set(succ.ref.id, succ.ref);
-      }
+      // A successor is authority only while its own page still verifies.
+      const succId = st.status === "superseded" ? st.superseded_by?.id : st.ref.revision !== d.revision ? st.ref.id : undefined;
+      const succ = succId ? ledger.decisions.get(succId) : undefined;
+      if (succ?.status === "accepted" && pageOf(succ) === succ.ref.revision) referenced.set(succ.ref.id, succ.ref);
     }
     let observed: Sha256 | null = null;
     try {
@@ -641,6 +641,8 @@ export interface CandidateEntry {
   promotion_gate: "guild:wiki-ingest";
   /** Canonical pages elsewhere with the same decision id, read through, never copied. */
   conflicts: EntityRef[];
+  /** For a `missing` entry: the ledger seq when it was last seen listed. */
+  listed_at_seq?: number;
 }
 
 export interface CandidateManifest {
@@ -648,6 +650,8 @@ export interface CandidateManifest {
   owner_source_id: string;
   autopromote: boolean;
   generated_at: string;
+  /** Ledger head when this manifest was built; only a later acceptance explains a vanished candidate. */
+  ledger_seq: number;
   candidates: CandidateEntry[];
 }
 
@@ -721,15 +725,19 @@ export function publishDecisionCandidates(input: { guildDir: string; autopromote
     const manifestPath = path.join(guildDir, "knowledge", "candidates", "manifest.json");
     const prevBytes = readInside(guildDir, manifestPath);
     const missing: string[] = [];
+    const ledger = readDecisionLedger(guildDir);
     if (prevBytes) {
       const prev = JSON.parse(prevBytes.toString("utf8")) as CandidateManifest;
-      const ledger = readDecisionLedger(guildDir);
+      const since = typeof prev.ledger_seq === "number" ? prev.ledger_seq : Number.MAX_SAFE_INTEGER;
       const present = new Set(entries.map((e) => e.path));
       for (const p of prev.candidates ?? []) {
         if (present.has(p.path)) continue;
-        const promoted = p.decision_id ? ledger.decisions.has(p.decision_id) : false;
+        // Explained only by an acceptance of that id recorded after the candidate was listed
+        // (a `missing` entry carries forward the seq of the manifest that first listed it).
+        const listedAt = p.state === "missing" && typeof p.listed_at_seq === "number" ? p.listed_at_seq : since;
+        const promoted = !!p.decision_id && ledger.events.some((e) => e.decision.id === p.decision_id && e.seq > listedAt);
         if (promoted) continue;
-        entries.push({ ...p, state: "missing" });
+        entries.push({ ...p, state: "missing", listed_at_seq: listedAt });
         missing.push(p.path);
       }
     }
@@ -738,6 +746,7 @@ export function publishDecisionCandidates(input: { guildDir: string; autopromote
       owner_source_id: owner,
       autopromote: input.autopromote,
       generated_at: input.now ?? new Date().toISOString(),
+      ledger_seq: ledger.head?.seq ?? 0,
       candidates: entries.sort((a, b) => a.path.localeCompare(b.path)),
     };
     writeInside(guildDir, manifestPath, JSON.stringify(manifest, null, 2) + "\n");
@@ -750,13 +759,26 @@ export function publishDecisionCandidates(input: { guildDir: string; autopromote
 
 /**
  * Workspace read-through over children's candidate manifests. Reads only; the
- * result carries references, never candidate bodies, and nothing is written.
+ * result carries references, never candidate bodies, and nothing is written. With
+ * `workspaceGuildDir`, each candidate also lists the workspace's same-id canonical
+ * page as a conflict, read at query time.
  */
-export function federatedCandidateView(children: ReadonlyArray<{ name: string; guildDir: string }>): Array<{ child: string; manifest: CandidateManifest | null; error: string | null }> {
+export function federatedCandidateView(
+  children: ReadonlyArray<{ name: string; guildDir: string }>,
+  opts: { workspaceGuildDir?: string } = {},
+): Array<{ child: string; manifest: CandidateManifest | null; error: string | null }> {
   return children.map((ch) => {
     try {
       const b = readInside(ch.guildDir, path.join(ch.guildDir, "knowledge", "candidates", "manifest.json"));
-      return { child: ch.name, manifest: b ? (JSON.parse(b.toString("utf8")) as CandidateManifest) : null, error: null };
+      const manifest = b ? (JSON.parse(b.toString("utf8")) as CandidateManifest) : null;
+      if (manifest && opts.workspaceGuildDir) {
+        const ws = path.resolve(opts.workspaceGuildDir);
+        for (const c of manifest.candidates) {
+          const ref = c.decision_id ? canonicalPageRef(ws, c.decision_id) : null;
+          if (ref && !c.conflicts.some((x) => x.source_id === ref.source_id && x.revision === ref.revision)) c.conflicts.push(ref);
+        }
+      }
+      return { child: ch.name, manifest, error: null };
     } catch (err) {
       return { child: ch.name, manifest: null, error: (err as Error).message };
     }

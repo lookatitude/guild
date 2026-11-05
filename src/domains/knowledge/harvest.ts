@@ -69,7 +69,7 @@ import {
 import { refreshWikiIndexPaths } from "./wiki-index";
 import { recordDecisionPromotion, recordDecisionRevert } from "./decision-catalog";
 import { checkContained, isRefused, isWithin } from "../kernel";
-import { propagateDecisions, recordAcceptedDecision, type EntityRef } from "./decision-propagation";
+import { propagateDecisions, publishDecisionCandidates, recordAcceptedDecision, type EntityRef } from "./decision-propagation";
 
 export const DECISION_SCHEMA = "guild.decision.v1" as const;
 
@@ -297,6 +297,8 @@ export interface HarvestResult {
   stale_decision_ids: string[];
   /** K04: pinned plans the accepted supersession made `replan_required` (never rewritten). */
   replan_required?: EntityRef[];
+  /** K04: the candidate staged but the owner's candidate manifest did not update. */
+  candidate_manifest_error?: string;
   /**
    * True when the op refused because a target it was told to rewrite is not in
    * the shape the caller described — a named playbook span whose heading is not
@@ -831,6 +833,9 @@ function stageDecisionCandidate(
   op.status = "candidate";
   upsertOp(input.run_id, op, storeOpts);
   emitHarvestEvent(input.runDir, input.run_id, op);
+  // K04: list it by reference in the owner's candidate manifest, the baseline that
+  // makes a later disappearance visible. Rebuilt from the directory on every call.
+  const manifest = publishDecisionCandidates({ guildDir: scope.definitions(), autopromote: false, now });
   return {
     op,
     promoted: false,
@@ -839,6 +844,7 @@ function stageDecisionCandidate(
     replan_queued: false,
     next_need: "operator",
     stale_decision_ids: [],
+    ...(manifest.status === "refused" ? { candidate_manifest_error: `${manifest.reason}: ${manifest.detail}` } : {}),
   };
 }
 
@@ -929,9 +935,17 @@ function finishHarvest(
   if (accepted.status === "refused") return blockResume(input, op, "decision-ledger", `${accepted.reason}: ${accepted.detail}`);
   const propagation = propagateDecisions({ guildDir, now });
   if (propagation.status === "refused") return blockResume(input, op, "decision-propagation", `${propagation.reason}: ${propagation.detail}`);
-  const supersededSet = new Set(superseded);
+  // Affected ids come from the durable event (page `replaces` included, so a resume
+  // that omits it still finds them) plus this id itself: a revision under the same
+  // id invalidates its pins as much as a supersession does.
+  const affected = new Set([
+    accepted.event.decision.id,
+    ...accepted.event.supersedes.map((e) => e.id),
+    ...accepted.event.supersedes_unrecorded,
+    ...superseded,
+  ]);
   const dependents = propagation.report.dependents.filter(
-    (d) => d.dependent_kind === "plan" && d.state === "replan_required" && d.stale_decisions.some((s) => supersededSet.has(s.pinned.id)),
+    (d) => d.dependent_kind === "plan" && d.state === "replan_required" && d.stale_decisions.some((s) => affected.has(s.pinned.id)),
   );
 
   // ── pin hit → replan, without rewriting the spec (KTD53 / R65) ────────────
@@ -939,7 +953,7 @@ function finishHarvest(
     ...(input.pinned_decision_ids ?? []),
     ...dependents.flatMap((d) => d.stale_decisions.map((s) => s.pinned.id)),
   ]);
-  const stale = superseded.filter((id) => pinned.has(id));
+  const stale = [...affected].filter((id) => pinned.has(id)).sort();
   const replan = stale.length > 0;
   if (replan) {
     op.pinned_in_flight = true;

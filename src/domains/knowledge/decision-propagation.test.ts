@@ -24,6 +24,8 @@ import {
   type EntityRef,
 } from ".";
 import { publishGeneration, readPublicationRecord, type BasisRef } from "./publication";
+import { publicationStatus } from "./publication-boundary";
+import { upsertOp } from "./harvest-journal";
 import { basisDigest } from "./source-basis";
 
 const RUN_ID = "run-k04";
@@ -398,8 +400,12 @@ describe("AT38 promotion boundary", () => {
     const overlap = publishDecisionCandidates({ guildDir: child.guildDir, autopromote: false, conflictRoots: [path.join(child.guildDir, "..")] });
     expect(overlap.status === "refused" && overlap.reason).toBe("scope");
 
-    const first = publishDecisionCandidates({ guildDir: child.guildDir, autopromote: false, conflictRoots: [umbrella.guildDir] });
-    expect(first.status === "ok" && first.manifest.candidates).toHaveLength(1);
+    // The candidates-only harvest itself wrote the baseline manifest.
+    const baseline = JSON.parse(fs.readFileSync(path.join(child.guildDir, "knowledge", "candidates", "manifest.json"), "utf8"));
+    expect(baseline.candidates.map((c: { state: string }) => c.state)).toEqual(["pending_human_ingest"]);
+    // Workspace read-through reports the umbrella conflict at query time.
+    const view = federatedCandidateView([{ name: "child", guildDir: child.guildDir }], { workspaceGuildDir: umbrella.guildDir });
+    expect(view[0]!.manifest!.candidates[0]!.conflicts.map((c) => c.id)).toEqual(["decision:cache-strategy"]);
     fs.rmSync(staged.candidate_path!);
     const second = publishDecisionCandidates({ guildDir: child.guildDir, autopromote: false, conflictRoots: [umbrella.guildDir] });
     if (second.status !== "ok") throw new Error(second.detail);
@@ -416,3 +422,81 @@ describe("AT38 promotion boundary", () => {
     expect(changed(before, tree(umbrella.guildDir)).filter((k) => !k.startsWith("child" + path.sep))).toEqual([path.join("wiki", "decisions", "cache-strategy-from-child.md")]);
   });
 });
+
+describe("K04 R1 regressions", () => {
+  const b0 = { commit: null, tree: sha("t"), dirty_blob_manifest: sha("d"), file_inventory: sha("f"), resolver_policy: sha("r"), scan_policy: sha("s"), source_worktree_id: "lane-a" };
+  const basis: BasisRef = { basis: b0, source_basis_hash: basisDigest(b0) };
+  function publish(r: Root) {
+    return publishGeneration({
+      indexesDir: path.join(r.guildDir, "indexes"),
+      identity: { source_id: "source-a", durable_owner_source_id: "source-a", publication_scope_source_id: "source-a" },
+      layers: { structural_graph: { artifact: "g.json", digest: (a) => sha(a["g.json"] ?? "") } },
+      channels: ["structural_graph"],
+      base: readPublicationRecord(path.join(r.guildDir, "indexes"))?.pointer ?? null,
+      basis,
+      observe: () => basis,
+      artifacts: { "g.json": "{}" },
+      decisions: () => decisionPublicationRefs(r.guildDir),
+    });
+  }
+
+  it("F1: a supersession after publication downgrades the published generation and blocks critical admission", () => {
+    const { r } = at37Fixture();
+    expect(publish(r).status).toBe("published");
+    const ok = publicationStatus({ indexesDir: path.join(r.guildDir, "indexes"), observe: () => basis });
+    expect(ok!.decisions.state).toBe("current");
+    expect(ok!.admit_critical).toBe(true);
+    harvest(r, "retry-policy-v2", { replaces: "decision:retry-policy-v1" });
+    const st = publicationStatus({ indexesDir: path.join(r.guildDir, "indexes"), observe: () => basis })!;
+    expect(st.decisions.state).toBe("stale");
+    expect(st.decisions.live!.replan_required.map((e) => e.id)).toEqual(["plan:lane-a"]);
+    expect(st.channels.find((c) => c.channel === "project_memory")!.state).toBe("stale");
+    expect(st.admit_critical).toBe(false);
+  });
+
+  it("F2: a successor whose page is gone or edited is not published as authority", () => {
+    const { r } = at37Fixture();
+    harvest(r, "retry-policy-v2", { replaces: "decision:retry-policy-v1" });
+    const d2 = path.join(r.guildDir, "wiki", "decisions", "retry-policy-v2.md");
+    fs.appendFileSync(d2, "edit\n");
+    expect(decisionPublicationRefs(r.guildDir)!.decision_refs).toEqual([]);
+    fs.rmSync(d2);
+    expect(decisionPublicationRefs(r.guildDir)!.decision_refs).toEqual([]);
+    expect(decisionPublicationRefs(r.guildDir)!.replan_required.map((e) => e.id)).toEqual(["plan:lane-a"]);
+  });
+
+  it("F3: a same-id revision and a resume without `replaces` both report the replan", () => {
+    const { r } = at37Fixture();
+    const page = path.join(r.guildDir, "wiki", "decisions", "retry-policy-v1.md");
+    const revised = harvest(r, "retry-policy-v1", { body: "Revised: consumers retry with jitter.", expect_before_hash: sha(fs.readFileSync(page)).slice(7) });
+    expect(revised.promoted).toBe(true);
+    expect(revised.replan_queued).toBe(true);
+    expect(revised.replan_required?.map((e) => e.id)).toEqual(["plan:lane-a"]);
+
+    const { r: r2 } = (() => { fs.rmSync(path.join(sandbox, "repo"), { recursive: true, force: true }); fs.rmSync(path.join(sandbox, "external"), { recursive: true, force: true }); return at37Fixture(); })();
+    const first = harvest(r2, "retry-policy-v2", { replaces: "decision:retry-policy-v1" });
+    upsertOp(RUN_ID, { ...first.op, status: "written" }, { storage: r2.storage });
+    const resumed = harvest(r2, "retry-policy-v2", { op_id: first.op.op_id });
+    expect(resumed.op.status).toBe("reported");
+    expect(resumed.replan_queued).toBe(true);
+    expect(resumed.replan_required?.map((e) => e.id)).toEqual(["plan:lane-a"]);
+  });
+
+  it("F4: a vanished proposal for an already-accepted id is reported missing", () => {
+    const r = mkRoot("repo");
+    harvest(r, "d1");
+    const staged = harvest(r, "d1", { autopromote: false, body: "Proposed revision of d1." });
+    expect(staged.candidate_path).toBeDefined();
+    fs.rmSync(staged.candidate_path!);
+    const pub = publishDecisionCandidates({ guildDir: r.guildDir, autopromote: false });
+    expect(pub.status === "ok" && pub.missing).toHaveLength(1);
+    // Still missing on the next publish; an acceptance recorded later explains it.
+    const again = publishDecisionCandidates({ guildDir: r.guildDir, autopromote: false });
+    expect(again.status === "ok" && again.missing).toHaveLength(1);
+    const page = path.join(r.guildDir, "wiki", "decisions", "d1.md");
+    harvest(r, "d1", { body: "Human-ingested d1 revision.", expect_before_hash: sha(fs.readFileSync(page)).slice(7) });
+    const after = publishDecisionCandidates({ guildDir: r.guildDir, autopromote: false });
+    expect(after.status === "ok" && after.missing).toEqual([]);
+  });
+});
+
