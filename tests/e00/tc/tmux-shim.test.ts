@@ -37,11 +37,15 @@ const panePid = (shim: ReturnType<typeof shimRoot>["shim"]) => Number((tmuxOn(sh
 
 /** Server processes whose argv names this exact socket, from the process table. */
 function serversFor(socket: string): Array<{ pid: number; start: string }> {
-  const seen = (listProcesses() ?? []).filter((r) => argvNamesSocket(r.command, socket)).map((r) => ({ pid: r.pid, start: r.start }));
-  // The forking client carries the same argv for a moment after `new-session -d`
-  // (visible on Linux): only processes still alive after a short settle are servers.
-  Bun.sleepSync(250);
-  return alive(seen);
+  const rows = (listProcesses() ?? []).filter((r) => argvNamesSocket(r.command, socket));
+  // The server answering on the socket names its own pid. An exiting client keeps the
+  // same -S argv for a moment after `new-session -d` (visible on Linux), so argv alone
+  // over-counts; it is the fallback only when no server answers on the socket.
+  const tmux = resolveRealTmux();
+  const q = tmux ? spawnSync(tmux, ["-S", socket, "list-sessions", "-F", "#{pid}"], { encoding: "utf8", timeout: 10000 }) : null;
+  const pids = new Set(q?.status === 0 ? q.stdout.split("\n").filter((l) => /^\d+$/.test(l)).map(Number) : []);
+  const servers = pids.size > 0 ? rows.filter((r) => pids.has(r.pid)) : rows;
+  return servers.map((r) => ({ pid: r.pid, start: r.start }));
 }
 
 async function killExact(ids: Array<{ pid: number; start: string }>): Promise<void> {
