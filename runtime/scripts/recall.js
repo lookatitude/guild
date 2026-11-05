@@ -24641,7 +24641,6 @@ var init_knowledge = __esm({
     init_graph_query();
     init_learn_route();
     init_wiki_lint_knowledge();
-    init_decision_propagation();
   }
 });
 
