@@ -178,8 +178,8 @@ function makeFakeTmuxBin(tmpDir: string): string {
     path.join(binDir, "tmux"),
     [
       "#!/bin/sh",
-      // The pre/post-create credential probe: tmux's exact answer for an unset variable.
-      'if [ "$#" -eq 3 ] && [ "$1" = show-environment ] && [ "$2" = -g ] && [ "$3" = GUILD_RUN_BINDING_REF ]; then',
+      // The global and created-session credential probes: tmux's exact answer for an unset variable.
+      'if [ "$1" = show-environment ] && { { [ "$#" -eq 3 ] && [ "$2" = -g ] && [ "$3" = GUILD_RUN_BINDING_REF ]; } || { [ "$#" -eq 4 ] && [ "$2" = -t ] && [ "$4" = GUILD_RUN_BINDING_REF ]; } || { [ "$#" -eq 2 ] && [ "$2" = GUILD_RUN_BINDING_REF ]; }; }; then',
       '  echo "unknown variable: GUILD_RUN_BINDING_REF" >&2; exit 1',
       "fi",
       'case "$1" in',

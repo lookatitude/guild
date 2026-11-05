@@ -67,7 +67,7 @@ function fixture(opts: { mode?: "normal" | "exit"; resolve?: (root: string) => a
     run,
     // Credential env the port must strip before any tmux client, server or pane sees it.
     env: {
-      PATH: `${bin}:${process.env["PATH"] ?? "/usr/bin:/bin"}`, HOME: process.env["HOME"] ?? root, SHELL: opts.shell ?? "/bin/zsh",
+      PATH: `${bin}:${process.env["PATH"] ?? "/usr/bin:/bin"}`, HOME: process.env["HOME"] ?? root, SHELL: opts.shell ?? (fs.existsSync("/bin/zsh") ? "/bin/zsh" : "/bin/sh"),
       ...(opts.locale ?? { LANG: "en_US.UTF-8" }),
       GUILD_RUN_BINDING_REF: "e00-test-binding-secret", OTHER_BINDING_REF: "x",
     },
@@ -142,7 +142,7 @@ describe.skipIf(!tmuxAvailable)("M6 / M4 / M3 · a spawned pane receives the exa
     expect(rec.append_system_prompt_file_present).toBe(true);
     expect(rec.append_system_prompt_file_absolute).toBe(true);
     expect(rec.append_system_prompt_file_sha256).toBe(f.adopted.sha256);
-    expect(rec.append_system_prompt_file_sha256).toBe(f.adopted.ref.content_hash.replace(/^sha256:/, ""));
+    expect(rec.append_system_prompt_file_sha256).toBe(f.adopted.ref.content_hash.slice(f.adopted.ref.content_hash.startsWith("sha256:") ? "sha256:".length : 0));
     const ev = f.launches.get("i1")!;
     expect(ev.definition_injection).toMatchObject({ flag: "--append-system-prompt-file", sha256: f.adopted.sha256 });
     expect(ev.definition_injection.path).toBe(rec.append_system_prompt_file_path);
@@ -189,8 +189,9 @@ describe.skipIf(!tmuxAvailable)("M6 / M4 / M3 · a spawned pane receives the exa
     const f = fixture({ mode: "exit" });
     expect(spawn(f).ok).toBe(true);
     await fixtureRecord(f);
-    await sleep(500);
-    const r = f.port.ready({ instance_id: "i1", run_id: RUN });
+    // The host exits ~1s after start; wait for the recorded pane to be gone.
+    let r = f.port.ready({ instance_id: "i1", run_id: RUN });
+    for (let i = 0; i < 100 && !/not present/.test(String(r.reason)); i++) { await sleep(100); r = f.port.ready({ instance_id: "i1", run_id: RUN }); }
     expect(r.ok).toBe(false);
     expect(String(r.reason)).toMatch(/not present/);
   });
@@ -239,8 +240,9 @@ describe.skipIf(!tmuxAvailable)("M2 · port terminate is identity-bound against 
     const id = f.port.paneIdentity("i1")!;
     // Test-side only, on the test-owned socket: end the recorded server, start an unowned replacement.
     spawnSync(f.shim.realTmux, ["-S", f.shim.socket, "kill-server"]);
-    const repl = spawnSync(f.shim.realTmux, ["-S", f.shim.socket, "-f", "/dev/null", "new-session", "-d", "-P", "-F", "#{pane_id}\t#{pane_pid}", "-s", "repl", "sleep 6021"], { encoding: "utf8" });
-    const [, replPid] = repl.stdout.trim().split("\t");
+    const repl = spawnSync(f.shim.realTmux, ["-S", f.shim.socket, "-f", "/dev/null", "new-session", "-d", "-P", "-F", "#{pane_id} #{pane_pid}", "-s", "repl", "sleep 6021"], { encoding: "utf8" });
+    // Space, not tab: under the C locale tmux rewrites a tab in -F output to "_".
+    const [, replPid] = repl.stdout.trim().split(" ");
     const replStart = processStartOf(Number(replPid));
     try {
       expect(replStart).not.toBeNull();
