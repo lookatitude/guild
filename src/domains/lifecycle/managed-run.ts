@@ -177,8 +177,17 @@ export async function runManagedWorker(input:{runtimeDir:string;sourceRoot:strin
 export function recoverManagedSegmentSeal(runtimeDir:string,sourceRoot:string,identity:ManagedAttemptIdentity,executionId:string):boolean {
   const claim=readManagedAttempt(runtimeDir,identity.attempt_id);
   if(canonical(claim.identity)!==canonical(identity))throw new StackError('invalid_state','Managed source/attempt mismatch');
-  if(!claim.outcome)return false;
-  return finalizeManagedSegmentSeal(sourceRoot,identity,executionId,claim.outcome);
+  let outcome=claim.outcome;
+  if(!outcome){
+    // Crash after outcome.json was published but before the private claim recorded it.
+    const file=stackContained(createGuildStorage(sourceRoot).root.durable,'runs/'+identity.run_id+'/attempts/'+stackId(identity.attempt_id)+'/outcome.json',true);
+    if(!fs.existsSync(file))return false;
+    if(fs.lstatSync(file).isSymbolicLink()||fs.statSync(file).size>1048576)throw new StackError('invalid_state','Managed outcome refused');
+    const value=JSON.parse(fs.readFileSync(file,'utf8'));
+    if(value?.schema_version!=='guild.stack.managed_run_outcome.v1'||value.source_id!==identity.source_id||value.run_id!==identity.run_id||value.attempt_id!==identity.attempt_id||!['exited','cancelled','timed_out','recovery_needed'].includes(value.state)||typeof value.ended_at!=='string'||!Number.isFinite(Date.parse(value.ended_at)))throw new StackError('invalid_state','Managed outcome identity invalid');
+    outcome=value as ManagedRunOutcome;
+  }
+  return finalizeManagedSegmentSeal(sourceRoot,identity,executionId,outcome);
 }
 
 export interface ManagedWorkerPackage { node_binary:string; node_sha256:string; entry:string; entry_sha256:string; }

@@ -199,6 +199,27 @@ describe("AT17 · P05 supervisor on execution segments", () => {
     expect(readExecutionSegmentSeal(root, RUN_V2, "exec-1")?.outcome_state).toBe("exited");
   });
 
+  it("a crash after outcome.json but before the claim update still recovers the seal", async () => {
+    v2Run();
+    const spec = launch({ execution_id: "exec-1" });
+    const identity = claim(RUN_V2, spec);
+    const blocker = path.join(root, ".guild/runs", RUN_V2, "lineage/seals");
+    fs.writeFileSync(blocker, "not a directory");
+    await asyncCode(runManagedWorker({ runtimeDir: runtime, sourceRoot: root, identity, launch: spec, process: fakeProcess(), control, integration: INTEGRATED }));
+    fs.rmSync(blocker);
+    const claimFile = path.join(fs.realpathSync(runtime), "attempt-1.json");
+    const c = JSON.parse(fs.readFileSync(claimFile, "utf8"));
+    fs.writeFileSync(claimFile, JSON.stringify({ ...c, state: "running", outcome: null }));
+    expect(readManagedAttempt(runtime, identity.attempt_id).outcome).toBeNull();
+    expect(recoverManagedSegmentSeal(runtime, root, identity, "exec-1")).toBe(true);
+    expect(readExecutionSegmentSeal(root, RUN_V2, "exec-1")?.outcome_state).toBe("exited");
+    const outcomeFile = path.join(root, ".guild/runs", RUN_V2, "attempts/attempt-1/outcome.json");
+    const o = JSON.parse(fs.readFileSync(outcomeFile, "utf8"));
+    fs.chmodSync(outcomeFile, 0o600);
+    fs.writeFileSync(outcomeFile, JSON.stringify({ ...o, attempt_id: "attempt-foreign" }));
+    expect(errorCode(() => recoverManagedSegmentSeal(runtime, root, identity, "exec-1"))).toBe("invalid_state");
+  });
+
   it("integrated launch refuses a missing, inactive, foreign-host or foreign-source segment", () => {
     v2Run([{ id: "exec-1" }, { id: "exec-r", admission: "reconcile_only" }, { id: "exec-c", host: "codex" }]);
     const t = (over: Record<string, unknown>) => errorCode(() => resolveManagedRunTarget({ root, run_id: RUN_V2, source_id: sourceId, host_id: "local-test", execution_id: "exec-1", ...over } as any, INTEGRATED));

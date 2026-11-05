@@ -57090,8 +57090,16 @@ async function runManagedWorker(input) {
 function recoverManagedSegmentSeal(runtimeDir, sourceRoot, identity, executionId) {
   const claim = readManagedAttempt(runtimeDir, identity.attempt_id);
   if (canonical2(claim.identity) !== canonical2(identity)) throw new StackError("invalid_state", "Managed source/attempt mismatch");
-  if (!claim.outcome) return false;
-  return finalizeManagedSegmentSeal(sourceRoot, identity, executionId, claim.outcome);
+  let outcome = claim.outcome;
+  if (!outcome) {
+    const file = stackContained(createGuildStorage(sourceRoot).root.durable, "runs/" + identity.run_id + "/attempts/" + stackId(identity.attempt_id) + "/outcome.json", true);
+    if (!fs71.existsSync(file)) return false;
+    if (fs71.lstatSync(file).isSymbolicLink() || fs71.statSync(file).size > 1048576) throw new StackError("invalid_state", "Managed outcome refused");
+    const value = JSON.parse(fs71.readFileSync(file, "utf8"));
+    if (value?.schema_version !== "guild.stack.managed_run_outcome.v1" || value.source_id !== identity.source_id || value.run_id !== identity.run_id || value.attempt_id !== identity.attempt_id || !["exited", "cancelled", "timed_out", "recovery_needed"].includes(value.state) || typeof value.ended_at !== "string" || !Number.isFinite(Date.parse(value.ended_at))) throw new StackError("invalid_state", "Managed outcome identity invalid");
+    outcome = value;
+  }
+  return finalizeManagedSegmentSeal(sourceRoot, identity, executionId, outcome);
 }
 function prepareManagedWorker(runtime, input) {
   const claim = readManagedAttempt(runtime, input.identity.attempt_id);
