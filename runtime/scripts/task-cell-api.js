@@ -9029,6 +9029,7 @@ var init_write_manifest = __esm({
 // src/domains/state/stack-scope.ts
 var init_stack_scope = __esm({
   "src/domains/state/stack-scope.ts"() {
+    init_kernel();
     init_frontmatter();
     init_storage_roots();
   }
@@ -10896,17 +10897,17 @@ function parseNativeToml(raw) {
   }
 }
 function claudeConfigRoots(opts) {
-  const join84 = opts.joiner ?? ((...parts) => parts.join("/"));
+  const join85 = opts.joiner ?? ((...parts) => parts.join("/"));
   const roots = [];
   const override = opts.claudeConfigDir?.trim();
   if (override) roots.push(override);
-  roots.push(join84(opts.homedir, ".claude"), join84(opts.homedir, ".config", "claude"));
+  roots.push(join85(opts.homedir, ".claude"), join85(opts.homedir, ".config", "claude"));
   return roots;
 }
 function codexConfigHome(opts) {
-  const join84 = opts.joiner ?? ((...parts) => parts.join("/"));
+  const join85 = opts.joiner ?? ((...parts) => parts.join("/"));
   const override = opts.codexHome?.trim();
-  return override ? override : join84(opts.homedir, ".codex");
+  return override ? override : join85(opts.homedir, ".codex");
 }
 function classifyEntry(alias, entry) {
   let present2 = 0;
@@ -27120,12 +27121,12 @@ function safeArrayLength(value) {
 function isObjectLike(value) {
   return typeof value === "object" && value !== null && !safeIsArray(value);
 }
-function issue(path92, code, message) {
-  return { path: path92, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
+function issue(path93, code, message) {
+  return { path: path93, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
 }
-function pushIssue(issues, path92, code, message) {
+function pushIssue(issues, path93, code, message) {
   if (issues.length >= MAX_ISSUES) return;
-  issues.push(issue(path92, code, message));
+  issues.push(issue(path93, code, message));
 }
 function sortIssues(issues) {
   return [...issues].sort(
@@ -27136,15 +27137,15 @@ function canonicalDocumentJson(value) {
   const errors = [];
   const active = /* @__PURE__ */ new Set();
   let nodes = 0;
-  const walk = (node, path92, depth) => {
+  const walk = (node, path93, depth) => {
     if (errors.length >= MAX_ISSUES) return null;
     if (depth > MAX_CANONICAL_DEPTH) {
-      pushIssue(errors, path92, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
+      pushIssue(errors, path93, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
       return null;
     }
     nodes += 1;
     if (nodes > MAX_CANONICAL_NODES) {
-      pushIssue(errors, path92, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
+      pushIssue(errors, path93, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
       return null;
     }
     if (node === null) return "null";
@@ -27153,7 +27154,7 @@ function canonicalDocumentJson(value) {
     if (kind === "string") {
       const text = node;
       if (text.length > MAX_STRING_LENGTH) {
-        pushIssue(errors, path92, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
+        pushIssue(errors, path93, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
         return null;
       }
       return JSON.stringify(text);
@@ -27161,17 +27162,17 @@ function canonicalDocumentJson(value) {
     if (kind === "number") {
       const num = node;
       if (!Number.isFinite(num)) {
-        pushIssue(errors, path92, "non_finite_number", "numbers must be finite");
+        pushIssue(errors, path93, "non_finite_number", "numbers must be finite");
         return null;
       }
       return Object.is(num, -0) ? "0" : String(num);
     }
     if (kind !== "object") {
-      pushIssue(errors, path92, "unsupported_type", `${kind} has no canonical JSON form`);
+      pushIssue(errors, path93, "unsupported_type", `${kind} has no canonical JSON form`);
       return null;
     }
     if (active.has(node)) {
-      pushIssue(errors, path92, "cycle_detected", "value contains a cycle");
+      pushIssue(errors, path93, "cycle_detected", "value contains a cycle");
       return null;
     }
     active.add(node);
@@ -27179,26 +27180,26 @@ function canonicalDocumentJson(value) {
       if (safeIsArray(node)) {
         const length = safeArrayLength(node);
         if (length.ok === false) {
-          pushIssue(errors, path92, "array_length_unreadable", length.reason);
+          pushIssue(errors, path93, "array_length_unreadable", length.reason);
           return null;
         }
         if (length.length > MAX_ARRAY_ITEMS) {
-          pushIssue(errors, path92, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
+          pushIssue(errors, path93, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
           return null;
         }
         const parts2 = [];
         for (let index = 0; index < length.length; index += 1) {
           const key = String(index);
           if (!safeHasOwn(node, key)) {
-            pushIssue(errors, `${path92}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
+            pushIssue(errors, `${path93}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
             return null;
           }
           const read = safeGet(node, key);
           if (read.ok === false) {
-            pushIssue(errors, `${path92}[${index}]`, "property_read_threw", read.reason);
+            pushIssue(errors, `${path93}[${index}]`, "property_read_threw", read.reason);
             return null;
           }
-          const encoded = walk(read.value, `${path92}[${index}]`, depth + 1);
+          const encoded = walk(read.value, `${path93}[${index}]`, depth + 1);
           if (encoded === null) return null;
           parts2.push(encoded);
         }
@@ -27206,11 +27207,11 @@ function canonicalDocumentJson(value) {
       }
       const keys = safeOwnKeys(node);
       if (keys.ok === false) {
-        pushIssue(errors, path92, "own_keys_threw", keys.reason);
+        pushIssue(errors, path93, "own_keys_threw", keys.reason);
         return null;
       }
       if (keys.keys.length > MAX_OBJECT_KEYS) {
-        pushIssue(errors, path92, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
+        pushIssue(errors, path93, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
         return null;
       }
       const sorted = [...keys.keys].sort();
@@ -27218,14 +27219,14 @@ function canonicalDocumentJson(value) {
       for (const key of sorted) {
         const read = safeGet(node, key);
         if (read.ok === false) {
-          pushIssue(errors, `${path92}.${key}`, "property_read_threw", read.reason);
+          pushIssue(errors, `${path93}.${key}`, "property_read_threw", read.reason);
           return null;
         }
         if (read.value === void 0) {
-          pushIssue(errors, `${path92}.${key}`, "undefined_value", "undefined has no canonical JSON form");
+          pushIssue(errors, `${path93}.${key}`, "undefined_value", "undefined has no canonical JSON form");
           return null;
         }
-        const encoded = walk(read.value, `${path92}.${key}`, depth + 1);
+        const encoded = walk(read.value, `${path93}.${key}`, depth + 1);
         if (encoded === null) return null;
         parts.push(`${JSON.stringify(key)}:${encoded}`);
       }
@@ -27281,38 +27282,38 @@ var init_document_safe = __esm({
 });
 
 // src/domains/lifecycle/document-records.ts
-function readShape(issues, value, path92, allowed) {
+function readShape(issues, value, path93, allowed) {
   if (value === null || typeof value !== "object") {
-    pushIssue(issues, path92, "not_an_object", `${path92} must be an object`);
+    pushIssue(issues, path93, "not_an_object", `${path93} must be an object`);
     return false;
   }
   if (safeIsArray(value)) {
-    pushIssue(issues, path92, "not_an_object", `${path92} must be an object, not an array`);
+    pushIssue(issues, path93, "not_an_object", `${path93} must be an object, not an array`);
     return false;
   }
   const keys = safeOwnKeys(value);
   if (keys.ok === false) {
-    pushIssue(issues, path92, "own_keys_threw", `${path92}: ${keys.reason}`);
+    pushIssue(issues, path93, "own_keys_threw", `${path93}: ${keys.reason}`);
     return false;
   }
   const allowedSet = new Set(allowed);
   let ok = true;
   for (const key of [...keys.keys].sort()) {
     if (!allowedSet.has(key)) {
-      pushIssue(issues, `${path92}.${key}`, "unexpected_key", `${path92}.${key} is not part of the closed schema`);
+      pushIssue(issues, `${path93}.${key}`, "unexpected_key", `${path93}.${key} is not part of the closed schema`);
       ok = false;
     }
   }
   for (const key of allowed) {
     if (!safeHasOwn(value, key)) {
-      pushIssue(issues, `${path92}.${key}`, "missing_field", `${path92}.${key} is required`);
+      pushIssue(issues, `${path93}.${key}`, "missing_field", `${path93}.${key} is required`);
       ok = false;
     }
   }
   return ok;
 }
-function readString(issues, parent, path92, key, options = {}) {
-  const fieldPath = `${path92}.${key}`;
+function readString(issues, parent, path93, key, options = {}) {
+  const fieldPath = `${path93}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -27347,8 +27348,8 @@ function readString(issues, parent, path92, key, options = {}) {
   }
   return value;
 }
-function readArray3(issues, parent, path92, key, options = {}) {
-  const fieldPath = `${path92}.${key}`;
+function readArray3(issues, parent, path93, key, options = {}) {
+  const fieldPath = `${path93}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -27391,10 +27392,10 @@ function readArray3(issues, parent, path92, key, options = {}) {
   }
   return ok ? items : null;
 }
-function readStringArray(issues, parent, path92, key, options = {}) {
-  const items = readArray3(issues, parent, path92, key, options);
+function readStringArray(issues, parent, path93, key, options = {}) {
+  const items = readArray3(issues, parent, path93, key, options);
   if (items === null) return null;
-  const fieldPath = `${path92}.${key}`;
+  const fieldPath = `${path93}.${key}`;
   const out = [];
   let ok = true;
   for (let index = 0; index < items.length; index += 1) {
@@ -27420,10 +27421,10 @@ function readStringArray(issues, parent, path92, key, options = {}) {
   }
   return ok ? out : null;
 }
-function readItemArray(issues, parent, path92, key, options, readItem) {
-  const items = readArray3(issues, parent, path92, key, options);
+function readItemArray(issues, parent, path93, key, options, readItem) {
+  const items = readArray3(issues, parent, path93, key, options);
   if (items === null) return null;
-  const fieldPath = `${path92}.${key}`;
+  const fieldPath = `${path93}.${key}`;
   const out = [];
   const firstIndexById = /* @__PURE__ */ new Map();
   let ok = true;
@@ -27450,13 +27451,13 @@ function readItemArray(issues, parent, path92, key, options, readItem) {
   }
   return ok ? out : null;
 }
-function readProvenance(issues, parent, path92) {
+function readProvenance(issues, parent, path93) {
   const read = safeGet(parent, "provenance");
   if (read.ok === false) {
-    pushIssue(issues, `${path92}.provenance`, "property_read_threw", `${path92}.provenance: property read threw`);
+    pushIssue(issues, `${path93}.provenance`, "property_read_threw", `${path93}.provenance: property read threw`);
     return null;
   }
-  const provenancePath = `${path92}.provenance`;
+  const provenancePath = `${path93}.provenance`;
   if (!readShape(issues, read.value, provenancePath, PROVENANCE_KEYS)) return null;
   const source = read.value;
   const authorId = readString(issues, source, provenancePath, "author_id", {
@@ -27497,10 +27498,10 @@ function readProvenance(issues, parent, path92) {
     source: provenanceSource
   };
 }
-function readPlanBody(issues, body, path92) {
-  if (!readShape(issues, body, path92, ["objectives", "steps"])) return null;
-  const objectives = readStringArray(issues, body, path92, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
-  const steps = readItemArray(issues, body, path92, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
+function readPlanBody(issues, body, path93) {
+  if (!readShape(issues, body, path93, ["objectives", "steps"])) return null;
+  const objectives = readStringArray(issues, body, path93, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
+  const steps = readItemArray(issues, body, path93, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
     if (!readShape(itemIssues, item, itemPath, ["id", "title", "status"])) return null;
     const id = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
     const title = readString(itemIssues, item, itemPath, "title", { maxLength: 500 });
@@ -27511,12 +27512,12 @@ function readPlanBody(issues, body, path92) {
   if (objectives === null || steps === null) return null;
   return { objectives, steps };
 }
-function readSpecBody(issues, body, path92) {
-  if (!readShape(issues, body, path92, ["requirements"])) return null;
+function readSpecBody(issues, body, path93) {
+  if (!readShape(issues, body, path93, ["requirements"])) return null;
   const requirements = readItemArray(
     issues,
     body,
-    path92,
+    path93,
     "requirements",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
@@ -27533,22 +27534,22 @@ function readSpecBody(issues, body, path92) {
   if (requirements === null) return null;
   return { requirements };
 }
-function readHandoffBody(issues, body, path92) {
-  if (!readShape(issues, body, path92, ["task_id", "status", "artifacts", "issues"])) return null;
-  const taskId = readString(issues, body, path92, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
-  const status = readString(issues, body, path92, "status", { enumOf: HANDOFF_STATUSES });
-  const artifacts = readStringArray(issues, body, path92, "artifacts", { max: 256, itemMaxLength: 1e3 });
-  const handoffIssues = readStringArray(issues, body, path92, "issues", { max: 256, itemMaxLength: 1e3 });
+function readHandoffBody(issues, body, path93) {
+  if (!readShape(issues, body, path93, ["task_id", "status", "artifacts", "issues"])) return null;
+  const taskId = readString(issues, body, path93, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
+  const status = readString(issues, body, path93, "status", { enumOf: HANDOFF_STATUSES });
+  const artifacts = readStringArray(issues, body, path93, "artifacts", { max: 256, itemMaxLength: 1e3 });
+  const handoffIssues = readStringArray(issues, body, path93, "issues", { max: 256, itemMaxLength: 1e3 });
   if (taskId === null || status === null || artifacts === null || handoffIssues === null) return null;
   return { task_id: taskId, status, artifacts, issues: handoffIssues };
 }
-function readReviewBody(issues, body, path92) {
-  if (!readShape(issues, body, path92, ["verdict", "findings"])) return null;
-  const verdict = readString(issues, body, path92, "verdict", { enumOf: REVIEW_VERDICTS });
+function readReviewBody(issues, body, path93) {
+  if (!readShape(issues, body, path93, ["verdict", "findings"])) return null;
+  const verdict = readString(issues, body, path93, "verdict", { enumOf: REVIEW_VERDICTS });
   const findings = readItemArray(
     issues,
     body,
-    path92,
+    path93,
     "findings",
     { max: 256 },
     (itemIssues, item, itemPath) => {
@@ -27563,13 +27564,13 @@ function readReviewBody(issues, body, path92) {
   if (verdict === null || findings === null) return null;
   return { verdict, findings };
 }
-function readVerifyBody(issues, body, path92) {
-  if (!readShape(issues, body, path92, ["outcome", "checks"])) return null;
-  const outcome = readString(issues, body, path92, "outcome", { enumOf: VERIFY_OUTCOMES });
+function readVerifyBody(issues, body, path93) {
+  if (!readShape(issues, body, path93, ["outcome", "checks"])) return null;
+  const outcome = readString(issues, body, path93, "outcome", { enumOf: VERIFY_OUTCOMES });
   const checks = readItemArray(
     issues,
     body,
-    path92,
+    path93,
     "checks",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
@@ -28079,10 +28080,10 @@ function requiredRecord(errors, parent, key) {
   }
   return value;
 }
-function requiredString(errors, parent, path92, key) {
+function requiredString(errors, parent, path93, key) {
   const value = parent[key];
   if (typeof value !== "string" || value.length === 0) {
-    pushIssue(errors, `${path92}.${key}`, "missing_field", `${key} must be a non-empty string`);
+    pushIssue(errors, `${path93}.${key}`, "missing_field", `${key} must be a non-empty string`);
     return null;
   }
   return value;
@@ -28095,23 +28096,23 @@ function requiredArray(errors, parent, key) {
   }
   return value;
 }
-function validateStringArray(errors, values, path92) {
+function validateStringArray(errors, values, path93) {
   if (values === null) return;
   values.forEach((value, index) => {
     if (typeof value !== "string" || value.length === 0) {
-      pushIssue(errors, `${path92}[${index}]`, "wrong_type", `${path92} entries must be non-empty strings`);
+      pushIssue(errors, `${path93}[${index}]`, "wrong_type", `${path93} entries must be non-empty strings`);
     }
   });
 }
-function canonicalReceiptInstant(errors, value, path92) {
+function canonicalReceiptInstant(errors, value, path93) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) {
-    pushIssue(errors, path92, "invalid_timestamp", `${path92} must be an ISO-8601 timestamp`);
+    pushIssue(errors, path93, "invalid_timestamp", `${path93} must be an ISO-8601 timestamp`);
     return null;
   }
   const parsed = Date.parse(value);
   const expectedCanonical = value.includes(".") ? value : value.replace(/Z$/, ".000Z");
   if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== expectedCanonical) {
-    pushIssue(errors, path92, "invalid_timestamp", `${path92} must name a real UTC calendar instant`);
+    pushIssue(errors, path93, "invalid_timestamp", `${path93} must name a real UTC calendar instant`);
     return null;
   }
   return expectedCanonical;
@@ -28820,11 +28821,11 @@ function exclusionSentinelPath(runDir3) {
   return (0, import_node_path.join)(runDir3, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir3) {
-  const path92 = stableLockPath(runDir3);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path92), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path92)) return;
+  const path93 = stableLockPath(runDir3);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path93), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path93)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path92, "wx");
+    const fd = (0, import_node_fs.openSync)(path93, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -28922,9 +28923,9 @@ function appendEvent(runDir3, event, opts = {}) {
   const line = JSON.stringify(withV2) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId2 = opts.laneId ?? "global";
-    const path92 = laneFallbackPath(runDir3, laneId2);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path92), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path92, "a");
+    const path93 = laneFallbackPath(runDir3, laneId2);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path93), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path93, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -36856,6 +36857,16 @@ var init_retry_lane = __esm({
   }
 });
 
+// src/domains/lifecycle/run-binding-fields.ts
+var path67, LOGICAL_RUN_MANIFEST_RELPATH, RUN_BINDING_V1_FIELDS;
+var init_run_binding_fields = __esm({
+  "src/domains/lifecycle/run-binding-fields.ts"() {
+    path67 = __toESM(require("path"));
+    LOGICAL_RUN_MANIFEST_RELPATH = path67.join("lineage", "logical-run.json");
+    RUN_BINDING_V1_FIELDS = Object.freeze(["schema_version", "run_id", "binding_ref", "state"]);
+  }
+});
+
 // src/domains/lifecycle/run-binding.ts
 function realBindingFs() {
   return {
@@ -36871,7 +36882,7 @@ function realBindingFs() {
       }
     },
     writeFileExclusive: (p, c) => {
-      fsReal2.mkdirSync(path67.dirname(p), { recursive: true });
+      fsReal2.mkdirSync(path68.dirname(p), { recursive: true });
       try {
         fsReal2.writeFileSync(p, c, { encoding: "utf8", flag: "wx", mode: PRIVATE_BINDING_MODE });
         fsReal2.chmodSync(p, PRIVATE_BINDING_MODE);
@@ -36886,7 +36897,7 @@ function realBindingFs() {
   };
 }
 function runBindingPath(root, runId) {
-  return path67.join(durableGuildDir(root), "runs", runId, "binding.json");
+  return path68.join(durableGuildDir(root), "runs", runId, "binding.json");
 }
 function validateRunBindingRecord(parsed, expectedRunId) {
   if (parsed === null || typeof parsed !== "object") return null;
@@ -36908,7 +36919,7 @@ function readRunBindingRecord(opts) {
   const fs78 = opts.fs ?? realBindingFs();
   const raw = fs78.readFile(runBindingPath(opts.root, opts.run_id));
   if (raw === null) return { status: "absent" };
-  const kindRaw = fs78.readFile(path67.join(path67.dirname(runBindingPath(opts.root, opts.run_id)), RUN_KIND_FILE));
+  const kindRaw = fs78.readFile(path68.join(path68.dirname(runBindingPath(opts.root, opts.run_id)), RUN_KIND_FILE));
   const kind = parseRunKind(kindRaw);
   if (kind !== null && kind !== "v1") return { status: "malformed" };
   let parsed;
@@ -36948,12 +36959,13 @@ function assertWritableBinding(input) {
   if (verdict.ok === false) throw new BindingRejectedError(verdict.reason, input.run_id);
   return verdict.binding;
 }
-var fsReal2, path67, BindingRejectedError, PRIVATE_BINDING_MODE, LOGICAL_RUN_MANIFEST_RELPATH, RUN_BINDING_V1_FIELDS;
+var fsReal2, path68, BindingRejectedError, PRIVATE_BINDING_MODE;
 var init_run_binding = __esm({
   "src/domains/lifecycle/run-binding.ts"() {
     fsReal2 = __toESM(require("fs"));
-    path67 = __toESM(require("path"));
+    path68 = __toESM(require("path"));
     init_kernel();
+    init_run_binding_fields();
     init_stable_lock();
     init_state();
     BindingRejectedError = class extends Error {
@@ -36968,8 +36980,6 @@ var init_run_binding = __esm({
       diagnostic = "binding_rejected";
     };
     PRIVATE_BINDING_MODE = 384;
-    LOGICAL_RUN_MANIFEST_RELPATH = path67.join("lineage", "logical-run.json");
-    RUN_BINDING_V1_FIELDS = Object.freeze(["schema_version", "run_id", "binding_ref", "state"]);
   }
 });
 
@@ -37000,7 +37010,7 @@ var init_run_lifecycle = __esm({
 
 // src/domains/lifecycle/write-run-manifest.ts
 function manifestPathFor(cwd, slug) {
-  return path68.join(durableGuildDir(cwd), "programs", slug, "manifest.json");
+  return path69.join(durableGuildDir(cwd), "programs", slug, "manifest.json");
 }
 function readRunManifest(cwd, slug) {
   try {
@@ -37158,11 +37168,11 @@ function runWriteRunManifestCli(argv = process.argv.slice(2)) {
     process.exit(2);
   }
 }
-var fs59, path68, WAVE_STATUSES, PROGRAM_STATUSES;
+var fs59, path69, WAVE_STATUSES, PROGRAM_STATUSES;
 var init_write_run_manifest = __esm({
   "src/domains/lifecycle/write-run-manifest.ts"() {
     fs59 = __toESM(require("fs"));
-    path68 = __toESM(require("path"));
+    path69 = __toESM(require("path"));
     init_state();
     init_state();
     WAVE_STATUSES = /* @__PURE__ */ new Set(["pending", "active", "completed", "failed"]);
@@ -37377,7 +37387,7 @@ var init_runstart_preflight = __esm({
 
 // src/domains/lifecycle/write-task-run.ts
 function taskRunPath(cwd, runId, taskId) {
-  return path69.join(durableGuildDir(cwd), "runs", runId, "task-runs", `${taskId}.yaml`);
+  return path70.join(durableGuildDir(cwd), "runs", runId, "task-runs", `${taskId}.yaml`);
 }
 function writeTaskRun(cwd, runId, taskId, params) {
   const {
@@ -37451,7 +37461,7 @@ function writeTaskRun(cwd, runId, taskId, params) {
   });
   atomicWrite(outPath, yamlStr);
   try {
-    const _traceRunDir = path69.join(durableGuildDir(cwd), "runs", runId);
+    const _traceRunDir = path70.join(durableGuildDir(cwd), "runs", runId);
     const _traceTs = (/* @__PURE__ */ new Date()).toISOString();
     const _traceBackend = "unknown";
     emitTraceEvent(
@@ -37629,10 +37639,10 @@ function runWriteTaskRunCli(argv = process.argv.slice(2)) {
     process.exit(2);
   }
 }
-var path69;
+var path70;
 var init_write_task_run = __esm({
   "src/domains/lifecycle/write-task-run.ts"() {
-    path69 = __toESM(require("path"));
+    path70 = __toESM(require("path"));
     init_telemetry();
     init_kernel();
     init_state();
@@ -37710,15 +37720,15 @@ var init_learning_checkpoint_5 = __esm({
 });
 
 // src/domains/lifecycle/workflow-graph-load.ts
-var path70, PLUGIN_GRAPH_DIRS;
+var path71, PLUGIN_GRAPH_DIRS;
 var init_workflow_graph_load = __esm({
   "src/domains/lifecycle/workflow-graph-load.ts"() {
-    path70 = __toESM(require("node:path"));
+    path71 = __toESM(require("node:path"));
     init_kernel();
     init_state();
     init_workflow_graph_overlay();
     PLUGIN_GRAPH_DIRS = Object.freeze([
-      path70.join("src", "surfaces", "graphs"),
+      path71.join("src", "surfaces", "graphs"),
       "graphs"
     ]);
   }
@@ -38549,7 +38559,7 @@ var init_result_contracts = __esm({
         source_path: "plugin/scripts/verify-gate-pass.ts",
         // correction #2.
         purpose: "Advisory/adversarial review result (gate-pass binding).",
-        live_caller: { path: "scripts/verify-gate-pass.ts", call: "parseReviewResult" }
+        live_caller: { path: "src/domains/distribution/review-gate-pass.ts", call: "parseReviewResult" }
       },
       {
         wire_schema_version: "guild.phase_result.v1",
@@ -38597,16 +38607,16 @@ var init_result_contracts = __esm({
 });
 
 // src/domains/distribution/build-inventory.ts
-var path71, PLUGIN_ROOT;
+var path72, PLUGIN_ROOT;
 var init_build_inventory = __esm({
   "src/domains/distribution/build-inventory.ts"() {
-    path71 = __toESM(require("node:path"));
+    path72 = __toESM(require("node:path"));
     init_inventory_schema();
     init_state();
     init_parity_contract();
     init_result_contracts();
     init_kernel();
-    PLUGIN_ROOT = findPluginRoot(__dirname) ?? path71.resolve(__dirname, "../../..");
+    PLUGIN_ROOT = findPluginRoot(__dirname) ?? path72.resolve(__dirname, "../../..");
   }
 });
 
@@ -39781,10 +39791,10 @@ function buildBatteryModuleWorkspace(base) {
     2
   )}
 `;
-  const coreDir = path72.resolve(__dirname, "../lifecycle");
+  const coreDir = path73.resolve(__dirname, "../lifecycle");
   const coreWorkflows = {};
   for (const member of NEUTRAL_CORE_MEMBERS) {
-    coreWorkflows[member] = fs60.readFileSync(path72.join(coreDir, member), "utf8");
+    coreWorkflows[member] = fs60.readFileSync(path73.join(coreDir, member), "utf8");
   }
   coreWorkflows["lifecycle-ports.ts"] = [
     'export const LIFECYCLE_PORT_VERSION = "guild.lifecycle.ports.v1" as const;',
@@ -39894,27 +39904,27 @@ function buildBatteryModuleWorkspace(base) {
     ""
   ].join("\n");
   for (const [rel2, content] of Object.entries(files)) {
-    const target = path72.join(base, rel2);
-    fs60.mkdirSync(path72.dirname(target), { recursive: true });
+    const target = path73.join(base, rel2);
+    fs60.mkdirSync(path73.dirname(target), { recursive: true });
     fs60.writeFileSync(target, content);
   }
 }
 function batteryWorkspace() {
   if (batteryWorkspaceSingleton !== null) return batteryWorkspaceSingleton;
-  const base = fs60.mkdtempSync(path72.join(os4.tmpdir(), "a21x-integration-battery-"));
-  const journalRoot = path72.join(base, "journal-root");
-  const migrationJournalRoot = path72.join(base, "migration-journal-root");
+  const base = fs60.mkdtempSync(path73.join(os4.tmpdir(), "a21x-integration-battery-"));
+  const journalRoot = path73.join(base, "journal-root");
+  const migrationJournalRoot = path73.join(base, "migration-journal-root");
   fs60.mkdirSync(journalRoot, { recursive: true });
   fs60.mkdirSync(migrationJournalRoot, { recursive: true });
-  const moduleBase = path72.join(base, "module-workspace");
+  const moduleBase = path73.join(base, "module-workspace");
   buildBatteryModuleWorkspace(moduleBase);
   batteryWorkspaceSingleton = {
     journalRoot,
     migrationJournalRoot,
-    pluginRoot: path72.join(moduleBase, "plugin"),
+    pluginRoot: path73.join(moduleBase, "plugin"),
     consumerRoots: {
-      website: path72.join(moduleBase, "website"),
-      benchmark: path72.join(moduleBase, "benchmark")
+      website: path73.join(moduleBase, "website"),
+      benchmark: path73.join(moduleBase, "benchmark")
     }
   };
   return batteryWorkspaceSingleton;
@@ -40086,12 +40096,12 @@ function refusesWithControl(implementation, request, control) {
   if (!isRecord2(result2.outcome) || result2.outcome.disposition !== "refused") return false;
   return ownField(result2.outcome.facts, "refusal_control") === control;
 }
-var fs60, os4, path72, RELEASE_INTEGRATION_REQUEST_MEMBERS, RELEASE_INTEGRATION_OWNER_BOUNDARIES, CONTROL_NOT_TEXT, CONTROL_CALLER_PACKETS, CONTROL_CALLER_REQUIRED_SET2, CONTROL_CALLER_OUTCOMES, CONTROL_OWNER_FAILED, CONTROL_CLAIM_INCOMPLETE, CONTROL_ASSEMBLY_REFUSED, RELEASE_INTEGRATION_REFUSAL_CONTROLS, RELEASE_INTEGRATION_OWNER_INPUT_MEMBERS, FORBIDDEN_OWNER_INPUT_KEYS, MH02_SNAPSHOT_HASH, MH02_SUPPORTED_CAPABILITY, MH02_ABSENT_CAPABILITY, MH02_DENIED_OPERATION, MH02_ALLOWED_OPERATION, MH02_CONDITION_GATE, MH02_OPEN_GATE, MH02_OBSERVATION, MH02_POLICY, MH02_GATES, MH02_HOST_PROBES, MH02_PROBES, hostAdapterConformanceOwner, batteryWorkspaceSingleton, BATTERY_MODULE_PUBLIC_API, BATTERY_IDENTITY, BATTERY_CLAIMANT, BATTERY_RUN_ID, BATTERY_CLAIM, batteryRecomputedPacketsSingleton, RELEASE_INTEGRATION_CONTROL_BATTERY, RELEASE_INTEGRATION_CONTROLS;
+var fs60, os4, path73, RELEASE_INTEGRATION_REQUEST_MEMBERS, RELEASE_INTEGRATION_OWNER_BOUNDARIES, CONTROL_NOT_TEXT, CONTROL_CALLER_PACKETS, CONTROL_CALLER_REQUIRED_SET2, CONTROL_CALLER_OUTCOMES, CONTROL_OWNER_FAILED, CONTROL_CLAIM_INCOMPLETE, CONTROL_ASSEMBLY_REFUSED, RELEASE_INTEGRATION_REFUSAL_CONTROLS, RELEASE_INTEGRATION_OWNER_INPUT_MEMBERS, FORBIDDEN_OWNER_INPUT_KEYS, MH02_SNAPSHOT_HASH, MH02_SUPPORTED_CAPABILITY, MH02_ABSENT_CAPABILITY, MH02_DENIED_OPERATION, MH02_ALLOWED_OPERATION, MH02_CONDITION_GATE, MH02_OPEN_GATE, MH02_OBSERVATION, MH02_POLICY, MH02_GATES, MH02_HOST_PROBES, MH02_PROBES, hostAdapterConformanceOwner, batteryWorkspaceSingleton, BATTERY_MODULE_PUBLIC_API, BATTERY_IDENTITY, BATTERY_CLAIMANT, BATTERY_RUN_ID, BATTERY_CLAIM, batteryRecomputedPacketsSingleton, RELEASE_INTEGRATION_CONTROL_BATTERY, RELEASE_INTEGRATION_CONTROLS;
 var init_release_conformance_integration = __esm({
   "src/domains/distribution/release-conformance-integration.ts"() {
     fs60 = __toESM(require("node:fs"));
     os4 = __toESM(require("node:os"));
-    path72 = __toESM(require("node:path"));
+    path73 = __toESM(require("node:path"));
     init_lifecycle();
     init_config2();
     init_telemetry();
@@ -40646,7 +40656,7 @@ var init_review_invocation = __esm({
       "served_model"
     ];
     REF_FIELDS = ["request", "candidate", "packet", "result", "adapter_exit"];
-    INVOCATION_ADAPTER_JOIN_FIELDS = [
+    INVOCATION_ADAPTER_JOIN_FIELDS = Object.freeze([
       "exit",
       "reviewer_family",
       "author_family",
@@ -40654,7 +40664,7 @@ var init_review_invocation = __esm({
       "served_model",
       "started_at",
       "finished_at"
-    ];
+    ]);
     HEX64 = /^[0-9a-f]{64}$/;
   }
 });
@@ -40972,7 +40982,7 @@ function gatherKnowledgeText(knowledgeDir2) {
   const parts = [];
   const walk = (dir) => {
     for (const e of fs61.readdirSync(dir, { withFileTypes: true })) {
-      const abs = path73.join(dir, e.name);
+      const abs = path74.join(dir, e.name);
       if (e.isDirectory()) {
         walk(abs);
         continue;
@@ -41041,11 +41051,11 @@ function main(argv) {
   );
   return warn ? 0 : 1;
 }
-var fs61, path73, TOKEN_START, TOKEN_END, KNOWLEDGE_EXTENSIONS, NAMED_ENTITIES2, HTML_SPACE;
+var fs61, path74, TOKEN_START, TOKEN_END, KNOWLEDGE_EXTENSIONS, NAMED_ENTITIES2, HTML_SPACE;
 var init_check_command_coverage = __esm({
   "src/domains/distribution/check-command-coverage.ts"() {
     fs61 = __toESM(require("fs"));
-    path73 = __toESM(require("path"));
+    path74 = __toESM(require("path"));
     TOKEN_START = "(?<![A-Za-z0-9-])";
     TOKEN_END = "(?![A-Za-z0-9-])";
     KNOWLEDGE_EXTENSIONS = [".md", ".html", ".htm"];
@@ -41194,7 +41204,7 @@ function resolveUserFacingSkillPaths(changedFiles, cwd) {
   const skillFiles = changedFiles.filter((f) => f.endsWith("SKILL.md"));
   const result2 = [];
   for (const rel2 of skillFiles) {
-    const abs = path74.resolve(cwd, rel2);
+    const abs = path75.resolve(cwd, rel2);
     if (!fs62.existsSync(abs)) continue;
     try {
       const contents = fs62.readFileSync(abs, "utf8");
@@ -41271,7 +41281,7 @@ function main2(argv = process.argv.slice(2)) {
     );
     process.exit(2);
   }
-  const pluginRepo = args.pluginRepo ?? path74.join(workspaceRoot2, "plugin");
+  const pluginRepo = args.pluginRepo ?? path75.join(workspaceRoot2, "plugin");
   const rootRepo = args.rootRepo ?? workspaceRoot2;
   const effectiveRootRange = args.rootRange ?? args.pluginRange;
   const pluginRepoExists = fs62.existsSync(pluginRepo) && fs62.statSync(pluginRepo).isDirectory();
@@ -41316,11 +41326,11 @@ function main2(argv = process.argv.slice(2)) {
     );
   }
 }
-var fs62, path74, import_child_process2;
+var fs62, path75, import_child_process2;
 var init_check_doc_sync = __esm({
   "src/domains/distribution/check-doc-sync.ts"() {
     fs62 = __toESM(require("fs"));
-    path74 = __toESM(require("path"));
+    path75 = __toESM(require("path"));
     import_child_process2 = require("child_process");
     init_state();
     if (typeof module !== "undefined" && require.main === module && /^check-doc-sync\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
@@ -41331,7 +41341,7 @@ var init_check_doc_sync = __esm({
 
 // src/domains/distribution/wiki-lint-checks.ts
 function readLabelTaxonomy(root) {
-  const p = path75.join(durableGuildDir(root), "project.yaml");
+  const p = path76.join(durableGuildDir(root), "project.yaml");
   if (!fs63.existsSync(p)) return null;
   let parsed;
   try {
@@ -41388,24 +41398,24 @@ function parseArgs8(argv) {
   let root = process.cwd();
   let json2 = false;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--root" && argv[i + 1]) root = path75.resolve(argv[++i]);
+    if (argv[i] === "--root" && argv[i + 1]) root = path76.resolve(argv[++i]);
     else if (argv[i] === "--json") json2 = true;
   }
   return { root, json: json2 };
 }
 function lintWiki(root) {
-  const wiki = path75.join(durableGuildDir(root), "wiki");
+  const wiki = path76.join(durableGuildDir(root), "wiki");
   const findings = [];
   const taxonomy = readLabelTaxonomy(root);
   if (fs63.existsSync(wiki)) {
     const walk = (dir) => fs63.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
-      const p = path75.join(dir, e.name);
+      const p = path76.join(dir, e.name);
       return e.isDirectory() ? walk(p) : e.name.endsWith(".md") ? [p] : [];
     });
     for (const f of walk(wiki)) {
-      const rel2 = path75.relative(root, f);
-      const relInWiki = path75.relative(wiki, f);
-      const base = path75.basename(f).toLowerCase();
+      const rel2 = path76.relative(root, f);
+      const relInWiki = path76.relative(wiki, f);
+      const base = path76.basename(f).toLowerCase();
       if (base.startsWith("lint-")) continue;
       const { fmLines } = splitFrontmatter2(fs63.readFileSync(f, "utf8"));
       const frontmatterLines = fmLines ?? [];
@@ -41433,7 +41443,7 @@ function lintWiki(root) {
       }
     }
   }
-  const kgPath = path75.join(durableGuildDir(root), "indexes", "knowledge-graph.json");
+  const kgPath = path76.join(durableGuildDir(root), "indexes", "knowledge-graph.json");
   if (fs63.existsSync(kgPath)) {
     try {
       const kg = JSON.parse(fs63.readFileSync(kgPath, "utf8"));
@@ -41466,11 +41476,11 @@ function main3(argv = process.argv.slice(2)) {
   }
   process.exit(findings.length ? 2 : 0);
 }
-var fs63, path75, yaml2, DEFAULT_CONCERN_ENUM;
+var fs63, path76, yaml2, DEFAULT_CONCERN_ENUM;
 var init_wiki_lint_checks = __esm({
   "src/domains/distribution/wiki-lint-checks.ts"() {
     fs63 = __toESM(require("fs"));
-    path75 = __toESM(require("path"));
+    path76 = __toESM(require("path"));
     init_state();
     init_knowledge();
     init_kernel();
@@ -41499,7 +41509,7 @@ function sha2566(content) {
   return (0, import_node_crypto4.createHash)("sha256").update(content).digest("hex");
 }
 function physicalRoot(candidate) {
-  if (!path76.isAbsolute(candidate)) throw new Error("release package root is not absolute");
+  if (!path77.isAbsolute(candidate)) throw new Error("release package root is not absolute");
   const stats = fs64.lstatSync(candidate);
   if (!stats.isDirectory() || stats.isSymbolicLink()) {
     throw new Error("release package root is not a physical directory");
@@ -41524,7 +41534,7 @@ function readPhysicalFile(filePath, label) {
   return readPhysicalFileEntry(filePath, label).content;
 }
 function normalizedRelativePath(value) {
-  return value.split(path76.sep).join("/");
+  return value.split(path77.sep).join("/");
 }
 function updateDigestWithFile(digest, relativePath, absolutePath, executableOverride) {
   const physical = readPhysicalFileEntry(absolutePath, `package file ${relativePath}`);
@@ -41548,9 +41558,9 @@ function computeReleasePackageDigest(packageRoot, options = {}) {
   const visit = (directory, relativeDirectory) => {
     const entries = fs64.readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
     for (const entry of entries) {
-      const relativePath = relativeDirectory ? path76.join(relativeDirectory, entry.name) : entry.name;
+      const relativePath = relativeDirectory ? path77.join(relativeDirectory, entry.name) : entry.name;
       if (relativePath === RELEASE_PACKAGE_IDENTITY_FILE || relativePath === RELEASE_PACKAGE_INSTALL_RECEIPT_FILE || options.ignoreHostManagedMetadata === true && isHostManagedPackageMetadata(relativePath)) continue;
-      const absolutePath = path76.join(directory, entry.name);
+      const absolutePath = path77.join(directory, entry.name);
       const stats = fs64.lstatSync(absolutePath);
       if (entry.isSymbolicLink() || stats.isSymbolicLink()) {
         throw new Error(`release package contains a symlink: ${normalizedRelativePath(relativePath)}`);
@@ -41585,8 +41595,8 @@ function computeReleaseIdentityId(releaseVersion, packageDigests, sourceCommit =
 }
 function manifestVersion(root, packageName) {
   const jsonManifestByPackage = {
-    "claude-code": path76.join(".claude-plugin", "plugin.json"),
-    codex: path76.join(".codex-plugin", "plugin.json"),
+    "claude-code": path77.join(".claude-plugin", "plugin.json"),
+    codex: path77.join(".codex-plugin", "plugin.json"),
     pi: "pi-manifest.json",
     antigravity: "plugin.json",
     cursor: "cursor-manifest.json",
@@ -41597,7 +41607,7 @@ function manifestVersion(root, packageName) {
   const manifestPath = jsonManifestByPackage[packageName];
   if (manifestPath !== void 0) {
     const parsed = JSON.parse(
-      readPhysicalFile(path76.join(root, manifestPath), `${packageName} package manifest`).toString("utf8")
+      readPhysicalFile(path77.join(root, manifestPath), `${packageName} package manifest`).toString("utf8")
     );
     const version = parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? parsed["version"] : void 0;
     if (typeof version !== "string" || version.length === 0) {
@@ -41605,7 +41615,7 @@ function manifestVersion(root, packageName) {
     }
     return version;
   }
-  const agents = readPhysicalFile(path76.join(root, "AGENTS.md"), "agents package manifest").toString("utf8");
+  const agents = readPhysicalFile(path77.join(root, "AGENTS.md"), "agents package manifest").toString("utf8");
   const matches = [...agents.matchAll(/<!-- rendered_at: [^\n]* · source_version: ([^\s]+) -->/g)];
   if (matches.length !== 1 || !matches[0][1]) {
     throw new Error("agents package manifest has no unique source version");
@@ -41681,7 +41691,7 @@ function parseIdentity(raw) {
 function readVerifiedReleasePackageIdentity(packageRoot) {
   const root = physicalRoot(packageRoot);
   const rawIdentity = readPhysicalFile(
-    path76.join(root, RELEASE_PACKAGE_IDENTITY_FILE),
+    path77.join(root, RELEASE_PACKAGE_IDENTITY_FILE),
     "release package identity"
   );
   if (rawIdentity.length > 64 * 1024) {
@@ -41695,12 +41705,12 @@ function readVerifiedReleasePackageIdentity(packageRoot) {
   assertManifestMatchesIdentity(root, identity.current_package, identity.release_version);
   return identity;
 }
-var import_node_crypto4, fs64, path76, RELEASE_PACKAGE_IDENTITY_FILE, RELEASE_PACKAGE_IDENTITY_SCHEMA, RELEASE_PACKAGE_INSTALL_RECEIPT_FILE, RELEASE_PACKAGE_NAMES, LOCKED_SCRIPT_RUNTIME_DIGESTS;
+var import_node_crypto4, fs64, path77, RELEASE_PACKAGE_IDENTITY_FILE, RELEASE_PACKAGE_IDENTITY_SCHEMA, RELEASE_PACKAGE_INSTALL_RECEIPT_FILE, RELEASE_PACKAGE_NAMES, LOCKED_SCRIPT_RUNTIME_DIGESTS;
 var init_release_package_identity = __esm({
   "src/domains/distribution/release-package-identity.ts"() {
     import_node_crypto4 = require("node:crypto");
     fs64 = __toESM(require("node:fs"));
-    path76 = __toESM(require("node:path"));
+    path77 = __toESM(require("node:path"));
     RELEASE_PACKAGE_IDENTITY_FILE = ".guild-release-identity.json";
     RELEASE_PACKAGE_IDENTITY_SCHEMA = "guild.release_package_identity.v1";
     RELEASE_PACKAGE_INSTALL_RECEIPT_FILE = "guild-install-receipt.json";
@@ -41776,6 +41786,7611 @@ var init_run_record_validate = __esm({
   }
 });
 
+// src/domains/lifecycle/stack-contracts.generated.json
+var stack_contracts_generated_default;
+var init_stack_contracts_generated = __esm({
+  "src/domains/lifecycle/stack-contracts.generated.json"() {
+    stack_contracts_generated_default = {
+      contract_bundle: {
+        schema_version: "guild.stack.contract_bundle.v1",
+        protocol_major: 1,
+        status: "P01_baseline_not_runtime_availability",
+        canonicalization: "RFC8785",
+        hash_algorithm: "SHA-256",
+        contracts: [
+          {
+            id: "C5 approval-record",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/approval-record.schema.json",
+            file: "schemas/approval-record.schema.json",
+            sha256: "sha256:204b7ee082f01dbd6c706ae983f02275e3eafc18c1c1deea1c01ca8b4a6b8d02"
+          },
+          {
+            id: null,
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json",
+            file: "schemas/arguments.schema.json",
+            sha256: "sha256:a9a5fd2bdb53f9177df170841113f512b690bdc3aca0c78fb40f013fa8087823"
+          },
+          {
+            id: "C7 capability-manifest",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/capability-manifest.schema.json",
+            file: "schemas/capability-manifest.schema.json",
+            sha256: "sha256:8687065280b02512e66b2f36453022079281922aefcdb2a65ff7356e87ad60a2"
+          },
+          {
+            id: null,
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json",
+            file: "schemas/common.schema.json",
+            sha256: "sha256:39c2fbc6188196bbe8d99249dc96c76752853b99e4d79fb4b8714378f720222b"
+          },
+          {
+            id: "C2 entity-evidence",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/entity-evidence.schema.json",
+            file: "schemas/entity-evidence.schema.json",
+            sha256: "sha256:640f79bfcfcab35b0edcba157fd1722a65240013865e82d8914ae3c9f6cb5467"
+          },
+          {
+            id: "C10 evaluation-manifest",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/evaluation-manifest.schema.json",
+            file: "schemas/evaluation-manifest.schema.json",
+            sha256: "sha256:74883a1f2063be67c86bb7b25e947a985ed46ae20e84b9119d36a32e83d1ee96"
+          },
+          {
+            id: "C9 metric-series",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/metric-series.schema.json",
+            file: "schemas/metric-series.schema.json",
+            sha256: "sha256:05e9b9f528f4bca64574297699f66c676aec3197f26d4f2a4c2542987f941d92"
+          },
+          {
+            id: "C4 operation-preview",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/operation-preview.schema.json",
+            file: "schemas/operation-preview.schema.json",
+            sha256: "sha256:459d164426d5a2d6c8e0c3ca3c0d3628c7454336b9b80a7db5fb5ac456fa52d6"
+          },
+          {
+            id: "C6 operation-receipt",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            file: "schemas/operation-receipt.schema.json",
+            sha256: "sha256:0bd007f90dda39ae696b8a8e63708135c87443e080b703ebba080ba725659b32"
+          },
+          {
+            id: "C3 read-projection",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            file: "schemas/read-projection.schema.json",
+            sha256: "sha256:44fd2e0deecbfed99baecea7cb9eeb0feaf6af1b552b178d4e0c87ce48625818"
+          },
+          {
+            id: "C11 report-manifest",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/report-manifest.schema.json",
+            file: "schemas/report-manifest.schema.json",
+            sha256: "sha256:520b0b8eef1e49712edce8532882c71c16554fe4fdab54c8243027eddd409ec0"
+          },
+          {
+            id: "C1 scope-session",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/scope-session.schema.json",
+            file: "schemas/scope-session.schema.json",
+            sha256: "sha256:8ca1174b9cff81e82912cd16022f68e9652921ef13f1a62761423a33854cf76f"
+          },
+          {
+            id: null,
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/transport.schema.json",
+            file: "schemas/transport.schema.json",
+            sha256: "sha256:19fbb7ea09e3b2e989bffa1c3bf5c4e96fcf2ba6e8e555ee9d294ae3fc5143ad"
+          },
+          {
+            id: "C8 workflow-projection",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/workflow-projection.schema.json",
+            file: "schemas/workflow-projection.schema.json",
+            sha256: "sha256:a7adb255cfe7bdefc689b9131467b25e2833a60d6c92e987fd5561e4f03e0409"
+          }
+        ],
+        operation_catalog_sha256: "sha256:dc0153904a8b368602570c38e525dfa84a3c9efb0c896b8697866f47c1738cd9"
+      },
+      schemas: {
+        "approval-record.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/approval-record.schema.json",
+          title: "C5 approval-record",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.approval-record.v1"
+            },
+            approval_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            operation_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            source_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            session_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            preview_hash: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+            },
+            actor: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            decision: {
+              enum: [
+                "approved",
+                "rejected",
+                "returned"
+              ]
+            },
+            rationale: {
+              type: "string",
+              maxLength: 4096
+            },
+            decided_at: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/time"
+            }
+          },
+          required: [
+            "schema_version",
+            "approval_id",
+            "operation_id",
+            "source_id",
+            "session_id",
+            "preview_hash",
+            "actor",
+            "decision",
+            "rationale",
+            "decided_at"
+          ],
+          additionalProperties: false
+        },
+        "arguments.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json",
+          $defs: {
+            inspect: {
+              type: "object",
+              properties: {
+                target: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                },
+                query: {
+                  type: "string",
+                  maxLength: 1024
+                },
+                cursor: {
+                  type: [
+                    "string",
+                    "null"
+                  ],
+                  maxLength: 2048
+                },
+                limit: {
+                  type: "integer",
+                  minimum: 1,
+                  maximum: 200
+                }
+              },
+              required: [],
+              additionalProperties: false
+            },
+            create: {
+              type: "object",
+              properties: {
+                title: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 65536
+                },
+                body: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 65536
+                },
+                acceptance: {
+                  type: "array",
+                  items: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 65536
+                  }
+                },
+                owner: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                }
+              },
+              required: [
+                "title",
+                "body",
+                "acceptance",
+                "owner"
+              ],
+              additionalProperties: false
+            },
+            revise: {
+              type: "object",
+              properties: {
+                target: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                },
+                content: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 65536
+                },
+                format: {
+                  enum: [
+                    "json",
+                    "yaml",
+                    "markdown"
+                  ]
+                }
+              },
+              required: [
+                "target",
+                "content",
+                "format"
+              ],
+              additionalProperties: false
+            },
+            action: {
+              type: "object",
+              properties: {
+                target: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                },
+                rationale: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 65536
+                }
+              },
+              required: [
+                "target",
+                "rationale"
+              ],
+              additionalProperties: false
+            },
+            link: {
+              type: "object",
+              properties: {
+                target: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                },
+                related: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                },
+                rationale: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 65536
+                }
+              },
+              required: [
+                "target",
+                "related",
+                "rationale"
+              ],
+              additionalProperties: false
+            },
+            launch: {
+              type: "object",
+              properties: {
+                brief: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 65536
+                },
+                workflow: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                },
+                initiative: {
+                  oneOf: [
+                    {
+                      type: "null"
+                    },
+                    {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                    }
+                  ]
+                },
+                host_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                model: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 65536
+                },
+                config_hash: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                },
+                max_usd: {
+                  type: "number",
+                  minimum: 0
+                },
+                max_duration_ms: {
+                  type: "integer",
+                  minimum: 1
+                }
+              },
+              required: [
+                "brief",
+                "workflow",
+                "initiative",
+                "host_id",
+                "model",
+                "config_hash",
+                "max_usd",
+                "max_duration_ms"
+              ],
+              additionalProperties: false
+            },
+            config: {
+              type: "object",
+              properties: {
+                target: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                },
+                layer: {
+                  enum: [
+                    "workspace",
+                    "project",
+                    "workspace_local",
+                    "project_local"
+                  ]
+                },
+                key: {
+                  type: "string",
+                  pattern: "^[a-zA-Z][a-zA-Z0-9_.-]{0,127}$"
+                },
+                value: {},
+                reset: {
+                  type: "boolean"
+                }
+              },
+              required: [
+                "target",
+                "layer",
+                "key",
+                "value",
+                "reset"
+              ],
+              additionalProperties: false
+            },
+            evaluation: {
+              type: "object",
+              properties: {
+                case: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                },
+                inputs: {
+                  type: "array",
+                  items: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                  },
+                  minItems: 1
+                },
+                baseline: {
+                  oneOf: [
+                    {
+                      type: "null"
+                    },
+                    {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                    }
+                  ]
+                },
+                candidate: {
+                  oneOf: [
+                    {
+                      type: "null"
+                    },
+                    {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                    }
+                  ]
+                },
+                host_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                model: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 65536
+                },
+                max_usd: {
+                  type: "number",
+                  minimum: 0
+                },
+                max_duration_ms: {
+                  type: "integer",
+                  minimum: 1
+                },
+                repetitions: {
+                  type: "integer",
+                  minimum: 1,
+                  maximum: 1e3
+                }
+              },
+              required: [
+                "case",
+                "inputs",
+                "baseline",
+                "candidate",
+                "host_id",
+                "model",
+                "max_usd",
+                "max_duration_ms",
+                "repetitions"
+              ],
+              additionalProperties: false
+            },
+            import: {
+              type: "object",
+              properties: {
+                manifest: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/evaluation-manifest.schema.json"
+                },
+                artifacts: {
+                  type: "array",
+                  items: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                  },
+                  minItems: 1
+                }
+              },
+              required: [
+                "manifest",
+                "artifacts"
+              ],
+              additionalProperties: false
+            },
+            report: {
+              type: "object",
+              properties: {
+                template_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                template_version: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 65536
+                },
+                input_source_ids: {
+                  type: "array",
+                  items: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                  },
+                  minItems: 1,
+                  uniqueItems: true
+                },
+                inputs: {
+                  type: "array",
+                  items: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                  },
+                  minItems: 1
+                },
+                formats: {
+                  type: "array",
+                  items: {
+                    enum: [
+                      "html",
+                      "json"
+                    ]
+                  },
+                  minItems: 1,
+                  uniqueItems: true
+                },
+                redaction_policy_revision: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                }
+              },
+              required: [
+                "template_id",
+                "template_version",
+                "input_source_ids",
+                "inputs",
+                "formats",
+                "redaction_policy_revision"
+              ],
+              additionalProperties: false
+            },
+            recommendation: {
+              type: "object",
+              properties: {
+                source_analysis_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                source_input_hash: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                },
+                recommendation_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                decision: {
+                  enum: [
+                    "accept",
+                    "reject"
+                  ]
+                }
+              },
+              required: [
+                "source_analysis_id",
+                "source_input_hash",
+                "recommendation_id",
+                "decision"
+              ],
+              additionalProperties: false
+            },
+            analysis: {
+              type: "object",
+              properties: {
+                targets: {
+                  type: "array",
+                  items: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                  },
+                  minItems: 1,
+                  maxItems: 100
+                }
+              },
+              required: [
+                "targets"
+              ],
+              additionalProperties: false
+            },
+            analysis_compare: {
+              type: "object",
+              properties: {
+                targets: {
+                  type: "array",
+                  items: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                  },
+                  minItems: 2,
+                  maxItems: 100
+                }
+              },
+              required: [
+                "targets"
+              ],
+              additionalProperties: false
+            }
+          }
+        },
+        "capability-manifest.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/capability-manifest.schema.json",
+          title: "C7 capability-manifest",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.capability-manifest.v1"
+            },
+            package: {
+              type: "object",
+              properties: {
+                name: {
+                  type: "string",
+                  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                version: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                },
+                inventory_schema: {
+                  const: "guild.inventory.v1"
+                },
+                entry_hash: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                }
+              },
+              required: [
+                "name",
+                "version",
+                "inventory_schema",
+                "entry_hash"
+              ],
+              additionalProperties: false
+            },
+            protocol_major: {
+              const: 1
+            },
+            operations: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  id: {
+                    type: "string",
+                    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  input_schema: {
+                    type: "string",
+                    format: "uri"
+                  },
+                  output_schema: {
+                    type: "string",
+                    format: "uri"
+                  },
+                  producer: {
+                    enum: [
+                      "plugin",
+                      "benchmark",
+                      "reporter"
+                    ]
+                  },
+                  effect: {
+                    enum: [
+                      "read",
+                      "canonical_write",
+                      "derived_write",
+                      "host_execution"
+                    ]
+                  },
+                  approval: {
+                    enum: [
+                      "required",
+                      "policy",
+                      "none"
+                    ]
+                  },
+                  availability: {
+                    enum: [
+                      "available",
+                      "unavailable"
+                    ]
+                  },
+                  reason: {
+                    type: [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  target_kinds: {
+                    type: "array",
+                    items: {
+                      enum: [
+                        "initiative",
+                        "run",
+                        "decision",
+                        "workflow",
+                        "memory",
+                        "knowledge",
+                        "candidate",
+                        "agent",
+                        "skill",
+                        "tool",
+                        "loop",
+                        "team",
+                        "config",
+                        "evaluation",
+                        "report",
+                        "benchmark_case"
+                      ]
+                    },
+                    uniqueItems: true
+                  },
+                  entry_id: {
+                    type: [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                required: [
+                  "id",
+                  "input_schema",
+                  "output_schema",
+                  "producer",
+                  "effect",
+                  "approval",
+                  "availability",
+                  "reason",
+                  "target_kinds",
+                  "entry_id"
+                ],
+                additionalProperties: false
+              },
+              uniqueItems: true
+            },
+            host_requirements: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  host_id: {
+                    type: "string",
+                    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  capability: {
+                    type: "string",
+                    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  evidence: {
+                    enum: [
+                      "verified",
+                      "inferred",
+                      "unavailable"
+                    ]
+                  },
+                  proof: {
+                    type: [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                required: [
+                  "host_id",
+                  "capability",
+                  "evidence",
+                  "proof"
+                ],
+                additionalProperties: false
+              }
+            }
+          },
+          required: [
+            "schema_version",
+            "package",
+            "protocol_major",
+            "operations",
+            "host_requirements"
+          ],
+          additionalProperties: false
+        },
+        "common.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json",
+          $defs: {
+            id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            hash: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            relative_path: {
+              type: "string",
+              maxLength: 1024,
+              pattern: "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[\\\\%\\x00-\\x1f])[^:]+$"
+            },
+            entity: {
+              type: "object",
+              properties: {
+                source_id: {
+                  type: "string",
+                  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                kind: {
+                  enum: [
+                    "initiative",
+                    "run",
+                    "decision",
+                    "workflow",
+                    "memory",
+                    "knowledge",
+                    "candidate",
+                    "agent",
+                    "skill",
+                    "tool",
+                    "loop",
+                    "team",
+                    "config",
+                    "evaluation",
+                    "report",
+                    "benchmark_case"
+                  ]
+                },
+                id: {
+                  type: "string",
+                  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                revision: {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              required: [
+                "source_id",
+                "kind",
+                "id",
+                "revision"
+              ],
+              additionalProperties: false
+            },
+            evidence: {
+              type: "object",
+              properties: {
+                source_id: {
+                  type: "string",
+                  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                path: {
+                  type: "string",
+                  maxLength: 1024,
+                  pattern: "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[\\\\%\\x00-\\x1f])[^:]+$"
+                },
+                sha256: {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                },
+                schema_version: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                },
+                observed_at: {
+                  type: "string",
+                  format: "date-time"
+                },
+                freshness: {
+                  enum: [
+                    "current",
+                    "stale",
+                    "unknown"
+                  ]
+                }
+              },
+              required: [
+                "source_id",
+                "path",
+                "sha256",
+                "schema_version",
+                "observed_at",
+                "freshness"
+              ],
+              additionalProperties: false
+            },
+            time: {
+              type: "string",
+              format: "date-time"
+            },
+            count: {
+              type: "integer",
+              minimum: 0
+            },
+            error: {
+              type: "object",
+              properties: {
+                code: {
+                  type: "string",
+                  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                message: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                },
+                retryable: {
+                  type: "boolean"
+                },
+                details: {
+                  type: "object"
+                }
+              },
+              required: [
+                "code",
+                "message",
+                "retryable"
+              ],
+              additionalProperties: false
+            }
+          }
+        },
+        "entity-evidence.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/entity-evidence.schema.json",
+          title: "C2 entity-evidence",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.entity-evidence.v1"
+            },
+            entity: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+            },
+            evidence: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+              }
+            }
+          },
+          required: [
+            "schema_version",
+            "entity",
+            "evidence"
+          ],
+          additionalProperties: false
+        },
+        "evaluation-manifest.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/evaluation-manifest.schema.json",
+          title: "C10 evaluation-manifest",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.evaluation-manifest.v1"
+            },
+            evaluation: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+            },
+            case_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            case_version: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            scorer_version: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            inputs: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+              },
+              minItems: 1
+            },
+            config_hash: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+            },
+            model: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            host_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            repetitions: {
+              type: "integer",
+              minimum: 1,
+              maximum: 1e3
+            },
+            seed: {
+              type: [
+                "integer",
+                "null"
+              ]
+            },
+            state: {
+              enum: [
+                "succeeded",
+                "failed",
+                "cancelled",
+                "timed_out",
+                "partial"
+              ]
+            },
+            metric_series: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+              }
+            },
+            artifacts: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+              },
+              minItems: 1
+            },
+            receipt: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+            },
+            created_at: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/time"
+            }
+          },
+          required: [
+            "schema_version",
+            "evaluation",
+            "case_id",
+            "case_version",
+            "scorer_version",
+            "inputs",
+            "config_hash",
+            "model",
+            "host_id",
+            "repetitions",
+            "seed",
+            "state",
+            "metric_series",
+            "artifacts",
+            "receipt",
+            "created_at"
+          ],
+          additionalProperties: false
+        },
+        "metric-series.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/metric-series.schema.json",
+          title: "C9 metric-series",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.metric-series.v1"
+            },
+            metric: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            formula_version: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            unit: {
+              enum: [
+                "ms",
+                "usd",
+                "tokens",
+                "count",
+                "ratio",
+                "percent"
+              ]
+            },
+            source_ids: {
+              type: "array",
+              items: {
+                type: "string",
+                pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              minItems: 1,
+              uniqueItems: true
+            },
+            cohort: {
+              type: "object",
+              properties: {
+                from: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/time"
+                },
+                to: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/time"
+                },
+                case_version: {
+                  type: [
+                    "string",
+                    "null"
+                  ]
+                },
+                model: {
+                  type: [
+                    "string",
+                    "null"
+                  ]
+                },
+                config_hash: {
+                  oneOf: [
+                    {
+                      type: "null"
+                    },
+                    {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                    }
+                  ]
+                }
+              },
+              required: [
+                "from",
+                "to",
+                "case_version",
+                "model",
+                "config_hash"
+              ],
+              additionalProperties: false
+            },
+            sample_count: {
+              type: "integer",
+              minimum: 0
+            },
+            covered_samples: {
+              type: "integer",
+              minimum: 0
+            },
+            status: {
+              enum: [
+                "measured",
+                "partial",
+                "unavailable"
+              ]
+            },
+            points: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  key: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 4096
+                  },
+                  value: {
+                    type: [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  status: {
+                    enum: [
+                      "measured",
+                      "partial",
+                      "unavailable"
+                    ]
+                  },
+                  reason: {
+                    type: [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  numerator: {
+                    type: [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  denominator: {
+                    type: [
+                      "number",
+                      "null"
+                    ],
+                    minimum: 0
+                  },
+                  evidence: {
+                    type: "array",
+                    items: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                    }
+                  }
+                },
+                required: [
+                  "key",
+                  "value",
+                  "status",
+                  "reason",
+                  "numerator",
+                  "denominator",
+                  "evidence"
+                ],
+                additionalProperties: false
+              },
+              maxItems: 1e3
+            },
+            token_semantics: {
+              enum: [
+                "provider_declared",
+                "not_applicable",
+                "unknown"
+              ]
+            },
+            cost_basis: {
+              enum: [
+                "measured",
+                "estimated",
+                "unavailable",
+                "not_applicable"
+              ]
+            }
+          },
+          required: [
+            "schema_version",
+            "metric",
+            "formula_version",
+            "unit",
+            "source_ids",
+            "cohort",
+            "sample_count",
+            "covered_samples",
+            "status",
+            "points",
+            "token_semantics",
+            "cost_basis"
+          ],
+          additionalProperties: false
+        },
+        "operation-preview.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/operation-preview.schema.json",
+          title: "C4 operation-preview",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.operation-preview.v1"
+            },
+            operation_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            operation: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            session_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            source_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            targets: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+              }
+            },
+            dependencies: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+              }
+            },
+            arguments: {
+              type: "object"
+            },
+            diff: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  target: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                  },
+                  before_hash: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                  },
+                  after_hash: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                  },
+                  patch: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 4096
+                  }
+                },
+                required: [
+                  "target",
+                  "before_hash",
+                  "after_hash",
+                  "patch"
+                ],
+                additionalProperties: false
+              }
+            },
+            policy: {
+              type: "object",
+              properties: {
+                decision: {
+                  enum: [
+                    "allowed",
+                    "refused"
+                  ]
+                },
+                revision: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                },
+                reason: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                }
+              },
+              required: [
+                "decision",
+                "revision",
+                "reason"
+              ],
+              additionalProperties: false
+            },
+            approval_required: {
+              type: "boolean"
+            },
+            preview_hash: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+            },
+            expires_at: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/time"
+            },
+            rollback: {
+              enum: [
+                "inverse",
+                "handoff",
+                "not_available"
+              ]
+            },
+            budget: {
+              type: "object",
+              properties: {
+                max_usd: {
+                  type: [
+                    "number",
+                    "null"
+                  ],
+                  minimum: 0
+                },
+                max_duration_ms: {
+                  type: "integer",
+                  minimum: 1
+                }
+              },
+              required: [
+                "max_usd",
+                "max_duration_ms"
+              ],
+              additionalProperties: false
+            },
+            scope_revision: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+            },
+            capability_revision: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+            }
+          },
+          required: [
+            "schema_version",
+            "operation_id",
+            "operation",
+            "session_id",
+            "source_id",
+            "targets",
+            "dependencies",
+            "arguments",
+            "diff",
+            "policy",
+            "approval_required",
+            "preview_hash",
+            "expires_at",
+            "rollback",
+            "budget",
+            "scope_revision",
+            "capability_revision"
+          ],
+          additionalProperties: false
+        },
+        "operation-receipt.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+          title: "C6 operation-receipt",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.operation-receipt.v1"
+            },
+            operation_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            operation: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            source_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            idempotency_key: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            preview_hash: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+            },
+            producer: {
+              type: "object",
+              properties: {
+                id: {
+                  type: "string",
+                  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                version: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                }
+              },
+              required: [
+                "id",
+                "version"
+              ],
+              additionalProperties: false
+            },
+            state: {
+              enum: [
+                "applied",
+                "verified",
+                "failed",
+                "cancelled",
+                "timed_out",
+                "recovery_needed",
+                "handoff"
+              ]
+            },
+            before: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+              }
+            },
+            after: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+              }
+            },
+            touched: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+              }
+            },
+            validation: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+              }
+            },
+            error: {
+              oneOf: [
+                {
+                  type: "null"
+                },
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/error"
+                }
+              ]
+            },
+            inverse_ref: {
+              oneOf: [
+                {
+                  type: "null"
+                },
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                }
+              ]
+            },
+            closed_at: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/time"
+            }
+          },
+          required: [
+            "schema_version",
+            "operation_id",
+            "operation",
+            "source_id",
+            "idempotency_key",
+            "preview_hash",
+            "producer",
+            "state",
+            "before",
+            "after",
+            "touched",
+            "validation",
+            "error",
+            "inverse_ref",
+            "closed_at"
+          ],
+          additionalProperties: false
+        },
+        "read-projection.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+          title: "C3 read-projection",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.read-projection.v1"
+            },
+            session_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            generation: {
+              type: "integer",
+              minimum: 0
+            },
+            items: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  ref: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                  },
+                  data: {
+                    type: "object"
+                  }
+                },
+                required: [
+                  "ref",
+                  "data"
+                ],
+                additionalProperties: false
+              },
+              maxItems: 200
+            },
+            next_cursor: {
+              type: [
+                "string",
+                "null"
+              ],
+              maxLength: 2048
+            },
+            total: {
+              type: [
+                "integer",
+                "null"
+              ],
+              minimum: 0
+            },
+            partial: {
+              type: "boolean"
+            },
+            source_errors: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  source_id: {
+                    type: "string",
+                    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  error: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/error"
+                  }
+                },
+                required: [
+                  "source_id",
+                  "error"
+                ],
+                additionalProperties: false
+              }
+            }
+          },
+          required: [
+            "schema_version",
+            "session_id",
+            "generation",
+            "items",
+            "next_cursor",
+            "total",
+            "partial",
+            "source_errors"
+          ],
+          additionalProperties: false
+        },
+        "report-manifest.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/report-manifest.schema.json",
+          title: "C11 report-manifest",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.report-manifest.v1"
+            },
+            report: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+            },
+            owner_source_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            input_source_ids: {
+              type: "array",
+              items: {
+                type: "string",
+                pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              minItems: 1,
+              uniqueItems: true
+            },
+            inputs: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+              },
+              minItems: 1
+            },
+            template_version: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            generator_version: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            metric_formula_versions: {
+              type: "array",
+              items: {
+                type: "string",
+                minLength: 1,
+                maxLength: 4096
+              }
+            },
+            created_at: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/time"
+            },
+            coverage: {
+              enum: [
+                "complete",
+                "partial",
+                "unavailable"
+              ]
+            },
+            omissions: {
+              type: "array",
+              items: {
+                type: "string",
+                minLength: 1,
+                maxLength: 4096
+              }
+            },
+            outputs: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  evidence: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                  },
+                  media_type: {
+                    enum: [
+                      "text/html",
+                      "application/json"
+                    ]
+                  }
+                },
+                required: [
+                  "evidence",
+                  "media_type"
+                ],
+                additionalProperties: false
+              },
+              minItems: 1
+            },
+            receipt: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+            },
+            redaction_policy_revision: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+            },
+            regenerates: {
+              oneOf: [
+                {
+                  type: "null"
+                },
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                }
+              ]
+            }
+          },
+          required: [
+            "schema_version",
+            "report",
+            "owner_source_id",
+            "input_source_ids",
+            "inputs",
+            "template_version",
+            "generator_version",
+            "metric_formula_versions",
+            "created_at",
+            "coverage",
+            "omissions",
+            "outputs",
+            "receipt",
+            "redaction_policy_revision",
+            "regenerates"
+          ],
+          additionalProperties: false
+        },
+        "scope-session.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/scope-session.schema.json",
+          title: "C1 scope-session",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.scope-session.v1"
+            },
+            session_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            mode: {
+              enum: [
+                "workspace",
+                "project"
+              ]
+            },
+            root: {
+              type: "object",
+              properties: {
+                source_id: {
+                  type: "string",
+                  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                root_id: {
+                  type: "string",
+                  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                kind: {
+                  enum: [
+                    "workspace",
+                    "project"
+                  ]
+                },
+                realpath: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                },
+                layout_version: {
+                  type: "integer",
+                  minimum: 1
+                },
+                revision: {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                },
+                health: {
+                  enum: [
+                    "healthy",
+                    "unavailable",
+                    "unsupported"
+                  ]
+                },
+                read_only_reason: {
+                  type: [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              required: [
+                "source_id",
+                "root_id",
+                "kind",
+                "realpath",
+                "layout_version",
+                "revision",
+                "health",
+                "read_only_reason"
+              ],
+              additionalProperties: false
+            },
+            children: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  source_id: {
+                    type: "string",
+                    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  root_id: {
+                    type: "string",
+                    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  kind: {
+                    enum: [
+                      "workspace",
+                      "project"
+                    ]
+                  },
+                  realpath: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 4096
+                  },
+                  layout_version: {
+                    type: "integer",
+                    minimum: 1
+                  },
+                  revision: {
+                    type: "string",
+                    pattern: "^sha256:[a-f0-9]{64}$"
+                  },
+                  health: {
+                    enum: [
+                      "healthy",
+                      "unavailable",
+                      "unsupported"
+                    ]
+                  },
+                  read_only_reason: {
+                    type: [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                required: [
+                  "source_id",
+                  "root_id",
+                  "kind",
+                  "realpath",
+                  "layout_version",
+                  "revision",
+                  "health",
+                  "read_only_reason"
+                ],
+                additionalProperties: false
+              },
+              maxItems: 100
+            },
+            package_version: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            generation: {
+              type: "integer",
+              minimum: 0
+            },
+            expires_at: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/time"
+            }
+          },
+          required: [
+            "schema_version",
+            "session_id",
+            "mode",
+            "root",
+            "children",
+            "package_version",
+            "generation",
+            "expires_at"
+          ],
+          additionalProperties: false
+        },
+        "transport.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/transport.schema.json",
+          $defs: {
+            preview_request: {
+              oneOf: [
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "session.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "session.sources"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.list"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.create"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/create"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.revise"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.link"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/link"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.unlink"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/link"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.pause"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.resume"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.close_check"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.close"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.archive"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.restore"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "decision.list"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "decision.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "decision.propose"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/create"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "decision.approve"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "decision.reject"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "decision.supersede"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/link"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "run.list"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "run.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "run.trace"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "run.artifacts"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "run.start"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/launch"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "run.resume"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "run.cancel"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "run.rerun"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/launch"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "run.analyze"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "workflow.list"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "workflow.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "workflow.validate"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "workflow.overlay_preview"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "workflow.overlay_publish"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "workflow.start"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/launch"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.search"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.read"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.ingest"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.learn"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.candidates"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.revise"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.reject"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.approve"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.promote"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.revert"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.reindex"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.graph"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.neighborhood"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "memory.list"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "memory.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "memory.correct"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "memory.archive"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "memory.restore"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "memory.promote"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "memory.reindex"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.list"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.prepare"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.evaluate"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.shadow"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.approve"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.reject"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.apply"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.verify"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.revert"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.handoff"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "component.list"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "component.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "component.create"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/create"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "component.override"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "component.revise"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "component.validate"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "component.enable"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "component.disable"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "component.usage"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "config.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "config.validate"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "config.preview"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/config"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "config.set"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/config"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "config.reset"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/config"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "analysis.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "analysis.run"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/analysis"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "analysis.compare"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/analysis_compare"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "analysis.recommendation_decide"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/recommendation"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evaluation.cases"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evaluation.case_create"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/create"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evaluation.case_revise"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evaluation.prepare"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/evaluation"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evaluation.run"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/evaluation"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evaluation.cancel"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evaluation.import"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/import"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evaluation.compare"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/evaluation"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evaluation.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "report.templates"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "report.preview"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/report"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "report.generate"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/report"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "report.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "report.regenerate"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/report"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "report.export"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/report"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                }
+              ]
+            },
+            apply_request: {
+              type: "object",
+              properties: {
+                session_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                preview_hash: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                },
+                idempotency_key: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                }
+              },
+              required: [
+                "session_id",
+                "preview_hash",
+                "idempotency_key"
+              ],
+              additionalProperties: false
+            },
+            decision_request: {
+              type: "object",
+              properties: {
+                session_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                preview_hash: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                },
+                decision: {
+                  enum: [
+                    "approved",
+                    "rejected",
+                    "returned"
+                  ]
+                },
+                rationale: {
+                  type: "string",
+                  maxLength: 4096
+                }
+              },
+              required: [
+                "session_id",
+                "preview_hash",
+                "decision",
+                "rationale"
+              ],
+              additionalProperties: false
+            },
+            cancel_request: {
+              type: "object",
+              properties: {
+                session_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                idempotency_key: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                }
+              },
+              required: [
+                "session_id",
+                "idempotency_key"
+              ],
+              additionalProperties: false
+            },
+            operation_status: {
+              type: "object",
+              properties: {
+                schema_version: {
+                  const: "guild.stack.operation_status.v1"
+                },
+                operation_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                source_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                state: {
+                  enum: [
+                    "queued",
+                    "running",
+                    "cancel_requested",
+                    "succeeded",
+                    "failed",
+                    "cancelled",
+                    "timed_out",
+                    "recovery_needed"
+                  ]
+                },
+                receipt: {
+                  oneOf: [
+                    {
+                      type: "null"
+                    },
+                    {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json"
+                    }
+                  ]
+                },
+                generation: {
+                  type: "integer",
+                  minimum: 0
+                }
+              },
+              required: [
+                "schema_version",
+                "operation_id",
+                "source_id",
+                "state",
+                "receipt",
+                "generation"
+              ],
+              additionalProperties: false
+            },
+            error: {
+              type: "object",
+              properties: {
+                error: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/error"
+                }
+              },
+              required: [
+                "error"
+              ],
+              additionalProperties: false
+            }
+          }
+        },
+        "workflow-projection.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/workflow-projection.schema.json",
+          title: "C8 workflow-projection",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.workflow-projection.v1"
+            },
+            definition: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+            },
+            class: {
+              enum: [
+                "product",
+                "research",
+                "debug",
+                "ops",
+                "init"
+              ]
+            },
+            origin: {
+              enum: [
+                "packaged_graph",
+                "project_overlay",
+                "workspace_overlay"
+              ]
+            },
+            entry: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            nodes: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  id: {
+                    type: "string",
+                    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  station: {
+                    type: "string",
+                    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  required: {
+                    type: "boolean"
+                  },
+                  owner: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 4096
+                  },
+                  inputs: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096
+                    }
+                  },
+                  outputs: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096
+                    }
+                  },
+                  terminal_outcome: {
+                    enum: [
+                      "success",
+                      "blocked",
+                      "failed",
+                      "escalate",
+                      null
+                    ]
+                  }
+                },
+                required: [
+                  "id",
+                  "station",
+                  "required",
+                  "owner",
+                  "inputs",
+                  "outputs"
+                ],
+                additionalProperties: false
+              },
+              minItems: 1,
+              maxItems: 200
+            },
+            edges: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  from: {
+                    type: "string",
+                    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  to: {
+                    type: "string",
+                    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  outcome: {
+                    enum: [
+                      "next",
+                      "retry",
+                      "blocked",
+                      "escalate",
+                      "change_class",
+                      "done"
+                    ]
+                  },
+                  to_class: {
+                    type: [
+                      "string",
+                      "null"
+                    ],
+                    enum: [
+                      "product",
+                      "research",
+                      "debug",
+                      "ops",
+                      "init",
+                      null
+                    ]
+                  }
+                },
+                required: [
+                  "from",
+                  "to",
+                  "outcome",
+                  "to_class"
+                ],
+                additionalProperties: false
+              },
+              maxItems: 600
+            },
+            overlay_policy: {
+              const: "reorder_or_skip_optional_only"
+            },
+            execution: {
+              oneOf: [
+                {
+                  type: "null"
+                },
+                {
+                  type: "object",
+                  properties: {
+                    run: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                    },
+                    cursor_node: {
+                      type: "string",
+                      pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                    },
+                    events: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                      }
+                    }
+                  },
+                  required: [
+                    "run",
+                    "cursor_node",
+                    "events"
+                  ],
+                  additionalProperties: false
+                }
+              ]
+            }
+          },
+          required: [
+            "schema_version",
+            "definition",
+            "class",
+            "origin",
+            "entry",
+            "nodes",
+            "edges",
+            "overlay_policy",
+            "execution"
+          ],
+          additionalProperties: false
+        }
+      },
+      catalog: {
+        schema_version: "guild.stack.operation_catalog.v1",
+        protocol_major: 1,
+        status: "contract_baseline_not_runtime_manifest",
+        operations: [
+          {
+            id: "session.inspect",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "benchmark/src/server.ts",
+            owner_package: "P03",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: []
+          },
+          {
+            id: "session.sources",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "benchmark/src/server.ts",
+            owner_package: "P03",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: []
+          },
+          {
+            id: "initiative.list",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.inspect",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.create",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/create",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.revise",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.link",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/link",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.unlink",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/link",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.pause",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.resume",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "host_execution",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.close_check",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.close",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.archive",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.restore",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "decision.list",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/document-decisions.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "decision"
+            ]
+          },
+          {
+            id: "decision.inspect",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/document-decisions.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "decision"
+            ]
+          },
+          {
+            id: "decision.propose",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/create",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/document-decisions.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "decision"
+            ]
+          },
+          {
+            id: "decision.approve",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/document-decisions.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "decision"
+            ]
+          },
+          {
+            id: "decision.reject",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/document-decisions.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "decision"
+            ]
+          },
+          {
+            id: "decision.supersede",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/link",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/document-decisions.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "decision"
+            ]
+          },
+          {
+            id: "run.list",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-router.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "run"
+            ]
+          },
+          {
+            id: "run.inspect",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-router.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "run"
+            ]
+          },
+          {
+            id: "run.trace",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-router.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "run"
+            ]
+          },
+          {
+            id: "run.artifacts",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-router.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "run"
+            ]
+          },
+          {
+            id: "run.start",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/launch",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "host_execution",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-router.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "run"
+            ]
+          },
+          {
+            id: "run.resume",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "host_execution",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-router.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "run"
+            ]
+          },
+          {
+            id: "run.cancel",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-router.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "run"
+            ]
+          },
+          {
+            id: "run.rerun",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/launch",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "host_execution",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-router.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "run"
+            ]
+          },
+          {
+            id: "run.analyze",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-router.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "run"
+            ]
+          },
+          {
+            id: "workflow.list",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-graph-overlay.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "workflow"
+            ]
+          },
+          {
+            id: "workflow.inspect",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-graph-overlay.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "workflow"
+            ]
+          },
+          {
+            id: "workflow.validate",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-graph-overlay.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "workflow"
+            ]
+          },
+          {
+            id: "workflow.overlay_preview",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-graph-overlay.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "workflow"
+            ]
+          },
+          {
+            id: "workflow.overlay_publish",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-graph-overlay.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "workflow"
+            ]
+          },
+          {
+            id: "workflow.start",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/launch",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "host_execution",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-graph-overlay.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "workflow"
+            ]
+          },
+          {
+            id: "knowledge.search",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.read",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.ingest",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.learn",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "host_execution",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.candidates",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.revise",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.reject",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.approve",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.promote",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.revert",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.reindex",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.graph",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.neighborhood",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "memory.list",
+            producer: "plugin",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/knowledge/memory-adapter.ts",
+            owner_package: "P07",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "memory"
+            ]
+          },
+          {
+            id: "memory.inspect",
+            producer: "plugin",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/knowledge/memory-adapter.ts",
+            owner_package: "P07",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "memory"
+            ]
+          },
+          {
+            id: "memory.correct",
+            producer: "plugin",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/memory-adapter.ts",
+            owner_package: "P07",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "memory"
+            ]
+          },
+          {
+            id: "memory.archive",
+            producer: "plugin",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/memory-adapter.ts",
+            owner_package: "P07",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "memory"
+            ]
+          },
+          {
+            id: "memory.restore",
+            producer: "plugin",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/memory-adapter.ts",
+            owner_package: "P07",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "memory"
+            ]
+          },
+          {
+            id: "memory.promote",
+            producer: "plugin",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/memory-adapter.ts",
+            owner_package: "P07",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "memory"
+            ]
+          },
+          {
+            id: "memory.reindex",
+            producer: "plugin",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/memory-adapter.ts",
+            owner_package: "P07",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "memory"
+            ]
+          },
+          {
+            id: "evolution.list",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "evolution.inspect",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "evolution.prepare",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "evolution.evaluate",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "host_execution",
+            approval: "required",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "evolution.shadow",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "host_execution",
+            approval: "required",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "evolution.approve",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "evolution.reject",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "evolution.apply",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "evolution.verify",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "evolution.revert",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "evolution.handoff",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "component.list",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/teams/index.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "agent",
+              "skill",
+              "tool",
+              "workflow",
+              "loop",
+              "team"
+            ]
+          },
+          {
+            id: "component.inspect",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/teams/index.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "agent",
+              "skill",
+              "tool",
+              "workflow",
+              "loop",
+              "team"
+            ]
+          },
+          {
+            id: "component.create",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/create",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/teams/index.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "agent",
+              "skill",
+              "tool",
+              "workflow",
+              "loop",
+              "team"
+            ]
+          },
+          {
+            id: "component.override",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/teams/index.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "agent",
+              "skill",
+              "tool",
+              "workflow",
+              "loop",
+              "team"
+            ]
+          },
+          {
+            id: "component.revise",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/teams/index.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "agent",
+              "skill",
+              "tool",
+              "workflow",
+              "loop",
+              "team"
+            ]
+          },
+          {
+            id: "component.validate",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/teams/index.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "agent",
+              "skill",
+              "tool",
+              "workflow",
+              "loop",
+              "team"
+            ]
+          },
+          {
+            id: "component.enable",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/teams/index.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "agent",
+              "skill",
+              "tool",
+              "workflow",
+              "loop",
+              "team"
+            ]
+          },
+          {
+            id: "component.disable",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/teams/index.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "agent",
+              "skill",
+              "tool",
+              "workflow",
+              "loop",
+              "team"
+            ]
+          },
+          {
+            id: "component.usage",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/teams/index.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "agent",
+              "skill",
+              "tool",
+              "workflow",
+              "loop",
+              "team"
+            ]
+          },
+          {
+            id: "config.inspect",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/config/settings-resolver.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "config"
+            ]
+          },
+          {
+            id: "config.validate",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/config/settings-resolver.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "config"
+            ]
+          },
+          {
+            id: "config.preview",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/config",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/config/settings-resolver.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "config"
+            ]
+          },
+          {
+            id: "config.set",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/config",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/config/settings-resolver.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "config"
+            ]
+          },
+          {
+            id: "config.reset",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/config",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/config/settings-resolver.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "config"
+            ]
+          },
+          {
+            id: "analysis.inspect",
+            producer: "plugin",
+            implementation: "existing_packaged",
+            ui_contract_available: false,
+            existing_entry_id: "run-analysis",
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "benchmark/src/analysis-jobs.ts",
+            owner_package: "P02",
+            reason: "Existing analysis transport requires a C1-C7 adapter; a declared script is not a negotiated management operation.",
+            target_kinds: [
+              "run",
+              "initiative",
+              "evaluation"
+            ]
+          },
+          {
+            id: "analysis.run",
+            producer: "plugin",
+            implementation: "existing_packaged",
+            ui_contract_available: false,
+            existing_entry_id: "run-analysis",
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/analysis",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/analysis-jobs.ts",
+            owner_package: "P02",
+            reason: "Existing analysis transport requires a C1-C7 adapter; a declared script is not a negotiated management operation.",
+            target_kinds: [
+              "run",
+              "initiative",
+              "evaluation"
+            ]
+          },
+          {
+            id: "analysis.compare",
+            producer: "plugin",
+            implementation: "existing_packaged",
+            ui_contract_available: false,
+            existing_entry_id: "run-analysis",
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/analysis_compare",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/analysis-jobs.ts",
+            owner_package: "P02",
+            reason: "Existing analysis transport requires a C1-C7 adapter; a declared script is not a negotiated management operation.",
+            target_kinds: [
+              "run",
+              "initiative",
+              "evaluation"
+            ]
+          },
+          {
+            id: "analysis.recommendation_decide",
+            producer: "plugin",
+            implementation: "existing_packaged",
+            ui_contract_available: false,
+            existing_entry_id: "run-analysis",
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/recommendation",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/analysis-jobs.ts",
+            owner_package: "P02",
+            reason: "Existing analysis transport requires a C1-C7 adapter; a declared script is not a negotiated management operation.",
+            target_kinds: [
+              "run",
+              "initiative",
+              "evaluation"
+            ]
+          },
+          {
+            id: "evaluation.cases",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "benchmark/src/runner.ts",
+            owner_package: "P10",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "evaluation",
+              "benchmark_case",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "evaluation.case_create",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/create",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/runner.ts",
+            owner_package: "P10",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "evaluation",
+              "benchmark_case",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "evaluation.case_revise",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/runner.ts",
+            owner_package: "P10",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "evaluation",
+              "benchmark_case",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "evaluation.prepare",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/evaluation",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/runner.ts",
+            owner_package: "P10",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "evaluation",
+              "benchmark_case",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "evaluation.run",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/evaluation",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/runner.ts",
+            owner_package: "P10",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "evaluation",
+              "benchmark_case",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "evaluation.cancel",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/runner.ts",
+            owner_package: "P10",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "evaluation",
+              "benchmark_case",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "evaluation.import",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/import",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/runner.ts",
+            owner_package: "P10",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "evaluation",
+              "benchmark_case",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "evaluation.compare",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/evaluation",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/runner.ts",
+            owner_package: "P10",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "evaluation",
+              "benchmark_case",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "evaluation.inspect",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "benchmark/src/runner.ts",
+            owner_package: "P10",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "evaluation",
+              "benchmark_case",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "report.templates",
+            producer: "reporter",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "benchmark/src/server.ts",
+            owner_package: "P11",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "report",
+              "evaluation",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "report.preview",
+            producer: "reporter",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/report",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/server.ts",
+            owner_package: "P11",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "report",
+              "evaluation",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "report.generate",
+            producer: "reporter",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/report",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/server.ts",
+            owner_package: "P11",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "report",
+              "evaluation",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "report.inspect",
+            producer: "reporter",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "benchmark/src/server.ts",
+            owner_package: "P11",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "report",
+              "evaluation",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "report.regenerate",
+            producer: "reporter",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/report",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/server.ts",
+            owner_package: "P11",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "report",
+              "evaluation",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "report.export",
+            producer: "reporter",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/report",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/server.ts",
+            owner_package: "P11",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "report",
+              "evaluation",
+              "run",
+              "initiative"
+            ]
+          }
+        ],
+        forbidden_operations: [
+          {
+            id: "workflow.create_class",
+            reason: "Closed five-class graph model; overlays cannot add classes or remove mandatory gates."
+          },
+          {
+            id: "evolution.install_patch",
+            reason: "Plugin machinery is handoff-only."
+          },
+          {
+            id: "operation.shell",
+            reason: "No arbitrary executable, argv, root or shell transport."
+          }
+        ]
+      },
+      transport: {
+        schema_version: "guild.stack.facade_transport.v1",
+        entry: "runtime/scripts/stack-operations.js",
+        protocol: "one bounded JSON request on stdin; one JSON response on stdout; exit 0 success, exit 1 error envelope",
+        args: [
+          "--cwd",
+          "server_bound_absolute_root"
+        ],
+        actions: {
+          bind: {},
+          session: {
+            session_id: "id"
+          },
+          capabilities: {
+            session_id: "id"
+          },
+          list: {
+            session_id: "id",
+            source_id: "id",
+            collection: "run|initiative|knowledge|memory|workflow|component|config",
+            limit: "1..200 optional default50",
+            cursor: "opaque optional"
+          },
+          inspect: {
+            session_id: "id",
+            source_id: "id",
+            collection: "same",
+            entity_id: "id"
+          },
+          preview: {
+            request: "P01 transport.preview_request"
+          },
+          decide: {
+            operation_id: "id",
+            request: "P01 transport.decision_request"
+          },
+          apply: {
+            operation_id: "id",
+            request: "P01 transport.apply_request"
+          },
+          status: {
+            operation_id: "id",
+            session_id: "id"
+          },
+          cancel: {
+            operation_id: "id",
+            request: "P01 transport.cancel_request"
+          }
+        },
+        responses: {
+          bind: "C1",
+          session: "C1",
+          capabilities: "C7",
+          list: "C3",
+          inspect: "C3",
+          preview: "C4",
+          decide: "C5",
+          apply: "operation_status or C6",
+          status: "operation_status",
+          cancel: "operation_status"
+        },
+        errors: "P01 transport.error; no raw exception/path/stack in HTTP response",
+        limits: {
+          request_bytes: 65536,
+          response_bytes: 1048576,
+          timeout_ms: 3e4
+        }
+      }
+    };
+  }
+});
+
 // src/domains/lifecycle/initiative-evidence.ts
 var init_initiative_evidence = __esm({
   "src/domains/lifecycle/initiative-evidence.ts"() {
@@ -41786,14 +49401,18 @@ var init_initiative_evidence = __esm({
 });
 
 // src/domains/lifecycle/stack-p05.ts
+var P05_READS, P05_WRITES;
 var init_stack_p05 = __esm({
   "src/domains/lifecycle/stack-p05.ts"() {
     init_state();
     init_security();
+    init_kernel();
     init_initiative();
     init_initiative_workitems();
     init_run_lifecycle();
     init_initiative_evidence();
+    P05_READS = sealSet(["initiative.list", "initiative.inspect", "initiative.close_check", "decision.list", "decision.inspect", "run.list", "run.inspect", "run.trace", "run.artifacts"], "P05_READS");
+    P05_WRITES = sealSet(["initiative.create", "initiative.revise", "initiative.link", "initiative.unlink", "initiative.pause", "initiative.close", "initiative.archive", "initiative.restore", "decision.propose", "decision.approve", "decision.reject", "decision.supersede"], "P05_WRITES");
   }
 });
 
@@ -41801,6 +49420,7 @@ var init_stack_p05 = __esm({
 var init_managed_run = __esm({
   "src/domains/lifecycle/managed-run.ts"() {
     init_state();
+    init_kernel();
     init_run_lifecycle();
     init_run_binding();
   }
@@ -41811,6 +49431,7 @@ var init_stack_operations = __esm({
   "src/domains/lifecycle/stack-operations.ts"() {
     init_state();
     init_config2();
+    init_kernel();
     init_security();
     init_workflow_graph_overlay();
     init_stack_p05();
@@ -41819,7 +49440,1408 @@ var init_stack_operations = __esm({
   }
 });
 
+// src/domains/lifecycle/stack-p05.schemas.json
+var stack_p05_schemas_default;
+var init_stack_p05_schemas = __esm({
+  "src/domains/lifecycle/stack-p05.schemas.json"() {
+    stack_p05_schemas_default = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/p05/v1/domain.schema.json",
+      $defs: {
+        read_request: {
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.p05.read_request.v1"
+            },
+            action: {
+              const: "read"
+            },
+            session_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+            },
+            source_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+            },
+            operation: {
+              enum: [
+                "initiative.list",
+                "initiative.inspect",
+                "initiative.close_check",
+                "decision.list",
+                "decision.inspect",
+                "run.list",
+                "run.inspect",
+                "run.trace",
+                "run.artifacts"
+              ]
+            },
+            arguments: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+            }
+          },
+          required: [
+            "schema_version",
+            "action",
+            "session_id",
+            "source_id",
+            "operation",
+            "arguments"
+          ],
+          additionalProperties: false
+        },
+        decision_event: {
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.initiative_decision_event.v1"
+            },
+            event_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+            },
+            decision_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+            },
+            initiative_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+            },
+            sequence: {
+              type: "integer",
+              minimum: 1
+            },
+            previous_event_hash: {
+              oneOf: [
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            event: {
+              enum: [
+                "proposed",
+                "approved",
+                "rejected",
+                "superseded"
+              ]
+            },
+            created_at: {
+              type: "string",
+              format: "date-time"
+            },
+            title: {
+              type: "string",
+              minLength: 1,
+              maxLength: 65536
+            },
+            rationale: {
+              type: "string",
+              minLength: 1,
+              maxLength: 65536
+            },
+            alternatives: {
+              type: "array",
+              items: {
+                type: "string",
+                minLength: 1,
+                maxLength: 65536
+              },
+              maxItems: 200
+            },
+            evidence: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+              },
+              maxItems: 200
+            },
+            supersedes: {
+              oneOf: [
+                {
+                  type: "object",
+                  properties: {
+                    decision_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    event_hash: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                    }
+                  },
+                  required: [
+                    "decision_id",
+                    "event_hash"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            replacement: {
+              oneOf: [
+                {
+                  type: "object",
+                  properties: {
+                    decision_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    event_hash: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                    }
+                  },
+                  required: [
+                    "decision_id",
+                    "event_hash"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            operation: {
+              type: "object",
+              properties: {
+                operation_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                approval: {
+                  type: "object",
+                  properties: {
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    path: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/relative_path"
+                    }
+                  },
+                  required: [
+                    "source_id",
+                    "path"
+                  ],
+                  additionalProperties: false
+                },
+                receipt: {
+                  type: "object",
+                  properties: {
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    path: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/relative_path"
+                    }
+                  },
+                  required: [
+                    "source_id",
+                    "path"
+                  ],
+                  additionalProperties: false
+                }
+              },
+              required: [
+                "operation_id",
+                "approval",
+                "receipt"
+              ],
+              additionalProperties: false
+            }
+          },
+          required: [
+            "schema_version",
+            "event_id",
+            "decision_id",
+            "initiative_id",
+            "sequence",
+            "previous_event_hash",
+            "event",
+            "created_at",
+            "title",
+            "rationale",
+            "alternatives",
+            "evidence",
+            "supersedes",
+            "replacement",
+            "operation"
+          ],
+          additionalProperties: false
+        },
+        decision_proposal_body: {
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.initiative_decision_proposal.v1"
+            },
+            initiative: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+            },
+            rationale: {
+              type: "string",
+              minLength: 1,
+              maxLength: 65536
+            },
+            alternatives: {
+              type: "array",
+              items: {
+                type: "string",
+                minLength: 1,
+                maxLength: 65536
+              },
+              maxItems: 200
+            },
+            evidence: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+              },
+              maxItems: 200
+            }
+          },
+          required: [
+            "schema_version",
+            "initiative",
+            "rationale",
+            "alternatives",
+            "evidence"
+          ],
+          additionalProperties: false
+        },
+        initiative_revision_body: {
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.initiative_revision.v1"
+            },
+            manifest: {
+              type: "object"
+            },
+            definition_items: {
+              type: "array",
+              items: {
+                type: "object"
+              },
+              maxItems: 200
+            },
+            work_items: {
+              type: "array",
+              items: {
+                type: "object"
+              },
+              maxItems: 200
+            },
+            close_gate: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/p05/v1/domain.schema.json#/$defs/close_gate_input"
+            }
+          },
+          required: [
+            "schema_version",
+            "manifest",
+            "definition_items",
+            "work_items",
+            "close_gate"
+          ],
+          additionalProperties: false
+        },
+        axes: {
+          type: "object",
+          properties: {
+            definition: {
+              type: "object",
+              properties: {
+                raw: {
+                  type: [
+                    "string",
+                    "null"
+                  ],
+                  maxLength: 4096
+                },
+                value: {
+                  enum: [
+                    "incomplete",
+                    "assumed",
+                    "complete",
+                    null
+                  ]
+                },
+                normalization: {
+                  enum: [
+                    "canonical",
+                    "documented_alias",
+                    "unsupported",
+                    "missing"
+                  ]
+                }
+              },
+              required: [
+                "raw",
+                "value",
+                "normalization"
+              ],
+              additionalProperties: false
+            },
+            execution: {
+              type: "object",
+              properties: {
+                raw: {
+                  type: [
+                    "string",
+                    "null"
+                  ],
+                  maxLength: 4096
+                },
+                value: {
+                  enum: [
+                    "not_started",
+                    "active",
+                    "blocked",
+                    "done",
+                    null
+                  ]
+                },
+                normalization: {
+                  enum: [
+                    "canonical",
+                    "documented_alias",
+                    "unsupported",
+                    "missing"
+                  ]
+                }
+              },
+              required: [
+                "raw",
+                "value",
+                "normalization"
+              ],
+              additionalProperties: false
+            },
+            release: {
+              type: "object",
+              properties: {
+                raw: {
+                  type: [
+                    "string",
+                    "null"
+                  ],
+                  maxLength: 4096
+                },
+                value: {
+                  enum: [
+                    "not_released",
+                    "release_candidate",
+                    "released",
+                    "rollback_required",
+                    null
+                  ]
+                },
+                normalization: {
+                  enum: [
+                    "canonical",
+                    "documented_alias",
+                    "unsupported",
+                    "missing"
+                  ]
+                }
+              },
+              required: [
+                "raw",
+                "value",
+                "normalization"
+              ],
+              additionalProperties: false
+            },
+            documentation: {
+              type: "object",
+              properties: {
+                raw: {
+                  type: [
+                    "string",
+                    "null"
+                  ],
+                  maxLength: 4096
+                },
+                value: {
+                  enum: [
+                    "not_assessed",
+                    "no_update_required",
+                    "update_required",
+                    "updated",
+                    "stale",
+                    null
+                  ]
+                },
+                normalization: {
+                  enum: [
+                    "canonical",
+                    "documented_alias",
+                    "unsupported",
+                    "missing"
+                  ]
+                }
+              },
+              required: [
+                "raw",
+                "value",
+                "normalization"
+              ],
+              additionalProperties: false
+            }
+          },
+          required: [
+            "definition",
+            "execution",
+            "release",
+            "documentation"
+          ],
+          additionalProperties: false
+        },
+        issue: {
+          type: "object",
+          properties: {
+            code: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+            },
+            message: {
+              type: "string",
+              minLength: 1,
+              maxLength: 65536
+            },
+            evidence: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+              },
+              maxItems: 200
+            }
+          },
+          required: [
+            "code",
+            "message",
+            "evidence"
+          ],
+          additionalProperties: false
+        },
+        page: {
+          type: "object",
+          properties: {
+            next_cursor: {
+              type: [
+                "string",
+                "null"
+              ],
+              maxLength: 2048
+            },
+            total: {
+              type: [
+                "integer",
+                "null"
+              ],
+              minimum: 0
+            },
+            partial: {
+              type: "boolean"
+            }
+          },
+          required: [
+            "next_cursor",
+            "total",
+            "partial"
+          ],
+          additionalProperties: false
+        },
+        decision_authority: {
+          oneOf: [
+            {
+              type: "null"
+            },
+            {
+              type: "object",
+              properties: {
+                status: {
+                  enum: [
+                    "verified",
+                    "pending",
+                    "missing",
+                    "invalid"
+                  ]
+                },
+                actor: {
+                  type: [
+                    "string",
+                    "null"
+                  ],
+                  minLength: 1,
+                  maxLength: 65536
+                },
+                approval: {
+                  oneOf: [
+                    {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                    },
+                    {
+                      type: "null"
+                    }
+                  ]
+                },
+                receipt: {
+                  oneOf: [
+                    {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                    },
+                    {
+                      type: "null"
+                    }
+                  ]
+                }
+              },
+              required: [
+                "status",
+                "actor",
+                "approval",
+                "receipt"
+              ],
+              additionalProperties: false,
+              allOf: [
+                {
+                  if: {
+                    properties: {
+                      status: {
+                        const: "verified"
+                      }
+                    }
+                  },
+                  then: {
+                    properties: {
+                      actor: {
+                        type: "string",
+                        minLength: 1
+                      },
+                      approval: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                      },
+                      receipt: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                      }
+                    }
+                  },
+                  else: {
+                    properties: {
+                      actor: {
+                        type: "null"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        close_gate_input: {
+          type: "object",
+          properties: {
+            evidence: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/relative_path"
+              },
+              maxItems: 200,
+              uniqueItems: true
+            }
+          },
+          required: [
+            "evidence"
+          ],
+          additionalProperties: false
+        }
+      }
+    };
+  }
+});
+
+// src/domains/lifecycle/managed-run.schemas.json
+var managed_run_schemas_default;
+var init_managed_run_schemas = __esm({
+  "src/domains/lifecycle/managed-run.schemas.json"() {
+    managed_run_schemas_default = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/p05/v1/managed-run.schema.json",
+      $defs: {
+        identity: {
+          type: "object",
+          properties: {
+            source_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            operation_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            run_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            attempt_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            launch_hash: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            max_duration_ms: {
+              type: "integer",
+              minimum: 1
+            },
+            nonce_hash: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            }
+          },
+          required: [
+            "source_id",
+            "operation_id",
+            "run_id",
+            "attempt_id",
+            "launch_hash",
+            "max_duration_ms",
+            "nonce_hash"
+          ],
+          additionalProperties: false
+        },
+        usage: {
+          type: "object",
+          properties: {
+            state: {
+              enum: [
+                "unknown",
+                "observed_native_estimate"
+              ]
+            },
+            cost_usd: {
+              type: [
+                "number",
+                "null"
+              ],
+              minimum: 0
+            },
+            basis: {
+              type: "string"
+            },
+            native_session_id: {
+              type: [
+                "string",
+                "null"
+              ]
+            },
+            model: {
+              type: [
+                "string",
+                "null"
+              ]
+            },
+            result_subtype: {
+              type: [
+                "string",
+                "null"
+              ]
+            },
+            cumulative_estimate_usd: {
+              type: [
+                "number",
+                "null"
+              ],
+              minimum: 0
+            },
+            usage: {
+              type: "object",
+              additionalProperties: {
+                type: "integer",
+                minimum: 0
+              }
+            },
+            result_sha256: {
+              anyOf: [
+                {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            parser: {
+              type: "string"
+            },
+            reason: {
+              type: "string"
+            }
+          },
+          required: [
+            "state",
+            "cost_usd",
+            "basis"
+          ],
+          additionalProperties: false
+        },
+        outcome: {
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.managed_run_outcome.v1"
+            },
+            source_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            run_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            attempt_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            state: {
+              enum: [
+                "exited",
+                "cancelled",
+                "timed_out",
+                "recovery_needed"
+              ]
+            },
+            exit_code: {
+              type: [
+                "integer",
+                "null"
+              ]
+            },
+            signal: {
+              type: [
+                "string",
+                "null"
+              ]
+            },
+            admitted_at: {
+              type: "string"
+            },
+            ended_at: {
+              type: "string"
+            },
+            deadline_at: {
+              type: "string"
+            },
+            classification: {
+              enum: [
+                "local_process_test",
+                "qualification_probe",
+                "qualified_host"
+              ]
+            },
+            output: {
+              type: "object",
+              properties: {
+                bytes: {
+                  type: "integer",
+                  minimum: 0
+                },
+                hashed_bytes: {
+                  type: "integer",
+                  minimum: 0,
+                  maximum: 1048576
+                },
+                retained_bytes: {
+                  const: 0
+                },
+                prefix_sha256: {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              required: [
+                "bytes",
+                "hashed_bytes",
+                "retained_bytes",
+                "prefix_sha256"
+              ],
+              additionalProperties: false
+            },
+            usage: {
+              type: "object",
+              properties: {
+                state: {
+                  enum: [
+                    "unknown",
+                    "observed_native_estimate"
+                  ]
+                },
+                cost_usd: {
+                  type: [
+                    "number",
+                    "null"
+                  ],
+                  minimum: 0
+                },
+                basis: {
+                  type: "string"
+                },
+                native_session_id: {
+                  type: [
+                    "string",
+                    "null"
+                  ]
+                },
+                model: {
+                  type: [
+                    "string",
+                    "null"
+                  ]
+                },
+                result_subtype: {
+                  type: [
+                    "string",
+                    "null"
+                  ]
+                },
+                cumulative_estimate_usd: {
+                  type: [
+                    "number",
+                    "null"
+                  ],
+                  minimum: 0
+                },
+                usage: {
+                  type: "object",
+                  additionalProperties: {
+                    type: "integer",
+                    minimum: 0
+                  }
+                },
+                result_sha256: {
+                  anyOf: [
+                    {
+                      type: "string",
+                      pattern: "^sha256:[a-f0-9]{64}$"
+                    },
+                    {
+                      type: "null"
+                    }
+                  ]
+                },
+                parser: {
+                  type: "string"
+                },
+                reason: {
+                  type: "string"
+                }
+              },
+              required: [
+                "state",
+                "cost_usd",
+                "basis"
+              ],
+              additionalProperties: false
+            }
+          },
+          required: [
+            "schema_version",
+            "source_id",
+            "run_id",
+            "attempt_id",
+            "state",
+            "exit_code",
+            "signal",
+            "admitted_at",
+            "ended_at",
+            "deadline_at",
+            "classification",
+            "output",
+            "usage"
+          ],
+          additionalProperties: false
+        },
+        intent: {
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.managed_run_intent.v1"
+            },
+            source_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            operation_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            run_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            attempt_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            launch_hash: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            max_duration_ms: {
+              type: "integer",
+              minimum: 1
+            },
+            nonce_hash: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            deadline_derivation: {
+              const: "admitted_at + max_duration_ms"
+            },
+            classification: {
+              enum: [
+                "local_process_test",
+                "qualification_probe",
+                "qualified_host"
+              ]
+            },
+            host_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            model: {
+              type: "string"
+            },
+            binary_sha256: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            budget: {
+              type: "object",
+              properties: {
+                mode: {
+                  enum: [
+                    "no_model_test",
+                    "strict",
+                    "native_estimated_spend_threshold"
+                  ]
+                },
+                max_usd: {
+                  type: "number",
+                  minimum: 0
+                },
+                cost_basis: {
+                  type: "string"
+                },
+                in_flight_overshoot_possible: {
+                  type: "boolean"
+                },
+                strict_actual_billing_ceiling: {
+                  type: "boolean"
+                }
+              },
+              required: [
+                "mode",
+                "max_usd",
+                "cost_basis",
+                "in_flight_overshoot_possible",
+                "strict_actual_billing_ceiling"
+              ],
+              additionalProperties: false
+            },
+            native_session_id: {
+              type: [
+                "string",
+                "null"
+              ]
+            },
+            policy_sha256: {
+              anyOf: [
+                {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            }
+          },
+          required: [
+            "schema_version",
+            "source_id",
+            "operation_id",
+            "run_id",
+            "attempt_id",
+            "launch_hash",
+            "max_duration_ms",
+            "nonce_hash",
+            "deadline_derivation",
+            "classification",
+            "host_id",
+            "model",
+            "binary_sha256",
+            "budget",
+            "native_session_id",
+            "policy_sha256"
+          ],
+          additionalProperties: false
+        },
+        private_claim: {
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.managed_private_claim.v1"
+            },
+            identity: {
+              $ref: "#/$defs/identity"
+            },
+            worker_nonce: {
+              type: "string",
+              pattern: "^[a-f0-9]{64}$"
+            },
+            admitted_at: {
+              type: [
+                "string",
+                "null"
+              ]
+            },
+            deadline_at: {
+              type: [
+                "string",
+                "null"
+              ]
+            },
+            state: {
+              enum: [
+                "claimed",
+                "running",
+                "recovery_needed",
+                "exited",
+                "cancelled",
+                "timed_out"
+              ]
+            },
+            worker: {
+              type: [
+                "object",
+                "null"
+              ]
+            },
+            host: {
+              type: [
+                "object",
+                "null"
+              ]
+            },
+            outcome: {
+              anyOf: [
+                {
+                  $ref: "#/$defs/outcome"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            }
+          },
+          required: [
+            "schema_version",
+            "identity",
+            "worker_nonce",
+            "admitted_at",
+            "deadline_at",
+            "state",
+            "worker",
+            "host",
+            "outcome"
+          ],
+          additionalProperties: false
+        },
+        private_acceptance: {
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.managed_private_acceptance.v1"
+            },
+            identity: {
+              $ref: "#/$defs/identity"
+            },
+            accepted_at: {
+              type: "string",
+              format: "date-time"
+            },
+            worker_pid: {
+              type: "integer",
+              minimum: 1
+            },
+            worker_start_identity: {
+              type: [
+                "string",
+                "null"
+              ]
+            },
+            worker: {
+              type: "object",
+              properties: {
+                node_binary: {
+                  type: "string"
+                },
+                node_sha256: {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                },
+                entry: {
+                  type: "string"
+                },
+                entry_sha256: {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              required: [
+                "node_binary",
+                "node_sha256",
+                "entry",
+                "entry_sha256"
+              ],
+              additionalProperties: false
+            }
+          },
+          required: [
+            "schema_version",
+            "identity",
+            "accepted_at",
+            "worker_pid",
+            "worker_start_identity",
+            "worker"
+          ],
+          additionalProperties: false
+        },
+        launch: {
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.managed_launch.v1"
+            },
+            source_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            run_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            operation_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            operation: {
+              enum: [
+                "run.start",
+                "run.rerun"
+              ]
+            },
+            attempt_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            classification: {
+              enum: [
+                "local_process_test",
+                "qualification_probe",
+                "qualified_host"
+              ]
+            },
+            profile: {
+              type: [
+                "string",
+                "null"
+              ]
+            },
+            host_binary_sha256: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            policy_sha256: {
+              anyOf: [
+                {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            budget_mode: {
+              enum: [
+                "strict",
+                "native_estimated_spend_threshold"
+              ]
+            },
+            cost_basis: {
+              enum: [
+                "unknown",
+                "api_equivalent_native_estimate"
+              ]
+            },
+            preview_hash: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            arguments: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/launch"
+            },
+            native_session_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            parent_run: {
+              anyOf: [
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            parent_attempt_id: {
+              anyOf: [
+                {
+                  type: "string",
+                  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            launch_hash: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            worker: {
+              type: "object",
+              properties: {
+                node_sha256: {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                },
+                entry_sha256: {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              required: [
+                "node_sha256",
+                "entry_sha256"
+              ],
+              additionalProperties: false
+            },
+            budget_semantics: {
+              type: "string"
+            }
+          },
+          required: [
+            "schema_version",
+            "source_id",
+            "run_id",
+            "operation_id",
+            "operation",
+            "attempt_id",
+            "classification",
+            "profile",
+            "host_binary_sha256",
+            "policy_sha256",
+            "budget_mode",
+            "cost_basis",
+            "preview_hash",
+            "arguments",
+            "native_session_id",
+            "parent_run",
+            "parent_attempt_id",
+            "launch_hash",
+            "worker",
+            "budget_semantics"
+          ],
+          additionalProperties: false
+        },
+        observed_proof: {
+          type: "object",
+          properties: {
+            operation: {
+              enum: [
+                "run.start",
+                "run.rerun"
+              ]
+            },
+            operation_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            run_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            attempt_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            preview_hash: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            launch_sha256: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            outcome_sha256: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            intent_sha256: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            approval_sha256: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            receipt_sha256: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            admission_sha256: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            }
+          },
+          required: [
+            "operation",
+            "operation_id",
+            "run_id",
+            "attempt_id",
+            "preview_hash",
+            "launch_sha256",
+            "outcome_sha256",
+            "intent_sha256",
+            "approval_sha256",
+            "receipt_sha256",
+            "admission_sha256"
+          ],
+          additionalProperties: false
+        }
+      }
+    };
+  }
+});
+
 // src/domains/lifecycle/index.ts
+var stackContractBundle, stackP05Schemas, stackManagedSchemas;
 var init_lifecycle = __esm({
   "src/domains/lifecycle/index.ts"() {
     init_neutral_runtime_contracts();
@@ -41872,8 +50894,15 @@ var init_lifecycle = __esm({
     init_run_state();
     init_trace_v2();
     init_stack_operations();
+    init_stack_contracts_generated();
+    init_stack_p05_schemas();
+    init_managed_run_schemas();
+    init_kernel();
     init_initiative_evidence();
     init_managed_run();
+    stackContractBundle = deepFreeze(stack_contracts_generated_default);
+    stackP05Schemas = deepFreeze(stack_p05_schemas_default);
+    stackManagedSchemas = deepFreeze(managed_run_schemas_default);
   }
 });
 
@@ -41945,25 +50974,25 @@ function taskCellPaths(ids, opts = {}) {
     throw new Error(`attempt must be an integer >= 1, got ${JSON.stringify(ids.attempt)}`);
   }
   const guildDir = opts.guildDir ?? ".guild";
-  const run_dir = path77.join(guildDir, "runs", ids.run_id);
-  const cell_dir = path77.join(run_dir, "task-cells", ids.logical_task_id);
-  const attempt_dir = path77.join(cell_dir, "attempts", String(ids.attempt));
-  const instance_dir = path77.join(attempt_dir, "instances", ids.instance_id);
+  const run_dir = path78.join(guildDir, "runs", ids.run_id);
+  const cell_dir = path78.join(run_dir, "task-cells", ids.logical_task_id);
+  const attempt_dir = path78.join(cell_dir, "attempts", String(ids.attempt));
+  const instance_dir = path78.join(attempt_dir, "instances", ids.instance_id);
   const paths = {
     run_dir,
     cell_dir,
     attempt_dir,
     instance_dir,
-    instance_path: path77.join(instance_dir, "instance.json"),
-    attempt_path: path77.join(attempt_dir, "attempt.json"),
-    assignment_path: path77.join(instance_dir, "assignment.json"),
-    handoff_path: path77.join(instance_dir, "handoff.json"),
-    receipt_path: path77.join(instance_dir, "handoff-receipt.md"),
-    heartbeat_path: path77.join(instance_dir, "heartbeat.json"),
-    cancel_channel: path77.join(instance_dir, "cancel"),
-    validation_path: path77.join(instance_dir, "handoff-validation.json"),
-    acceptance_path: path77.join(instance_dir, "handoff-acceptance.json"),
-    terminal_path: path77.join(instance_dir, "terminal.json")
+    instance_path: path78.join(instance_dir, "instance.json"),
+    attempt_path: path78.join(attempt_dir, "attempt.json"),
+    assignment_path: path78.join(instance_dir, "assignment.json"),
+    handoff_path: path78.join(instance_dir, "handoff.json"),
+    receipt_path: path78.join(instance_dir, "handoff-receipt.md"),
+    heartbeat_path: path78.join(instance_dir, "heartbeat.json"),
+    cancel_channel: path78.join(instance_dir, "cancel"),
+    validation_path: path78.join(instance_dir, "handoff-validation.json"),
+    acceptance_path: path78.join(instance_dir, "handoff-acceptance.json"),
+    terminal_path: path78.join(instance_dir, "terminal.json")
   };
   for (const [key, value] of Object.entries(paths)) {
     if (key === "run_dir") continue;
@@ -41972,8 +51001,8 @@ function taskCellPaths(ids, opts = {}) {
   return paths;
 }
 function assertWithinRunTree(runDir3, p, label = "path") {
-  const rel2 = path77.relative(path77.resolve(runDir3), path77.resolve(p));
-  if (rel2 === "" || rel2.startsWith("..") || path77.isAbsolute(rel2)) {
+  const rel2 = path78.relative(path78.resolve(runDir3), path78.resolve(p));
+  if (rel2 === "" || rel2.startsWith("..") || path78.isAbsolute(rel2)) {
     throw new Error(`${label} escapes the run tree ${runDir3}: ${p}`);
   }
 }
@@ -42199,10 +51228,10 @@ function dependencyGate(dependencies, acceptances) {
   const blocked_on = dependencies.map((d) => d.logical_task_id).filter((id) => !released.has(id));
   return { ready: blocked_on.length === 0, blocked_on };
 }
-var path77, TASK_CELL_STATES, TERMINAL_STATES, TERMINAL_SET, LEGAL_TRANSITIONS, IllegalTransitionError, AGENT_INSTANCE_SCHEMA, TASK_ATTEMPT_SCHEMA, TASK_ASSIGNMENT_V2_SCHEMA, SAFE_SEGMENT3, isStr3, isStrArr3, TASK_ASSIGNMENT_V2_FIELDS, HANDOFF_VALIDATION_SCHEMA, ACCEPTANCE_AUTHORITIES, HANDOFF_ACCEPTANCE_SCHEMA;
+var path78, TASK_CELL_STATES, TERMINAL_STATES, TERMINAL_SET, LEGAL_TRANSITIONS, IllegalTransitionError, AGENT_INSTANCE_SCHEMA, TASK_ATTEMPT_SCHEMA, TASK_ASSIGNMENT_V2_SCHEMA, SAFE_SEGMENT3, isStr3, isStrArr3, TASK_ASSIGNMENT_V2_FIELDS, HANDOFF_VALIDATION_SCHEMA, ACCEPTANCE_AUTHORITIES, HANDOFF_ACCEPTANCE_SCHEMA;
 var init_task_cell_backend = __esm({
   "src/domains/dispatch/task-cell-backend.ts"() {
-    path77 = __toESM(require("path"));
+    path78 = __toESM(require("path"));
     init_kernel();
     TASK_CELL_STATES = Object.freeze([
       "declared",
@@ -42351,13 +51380,13 @@ function decodeYamlCompatible(raw) {
   }
 }
 function busDir(runDir3) {
-  return path78.join(runDir3, "bus");
+  return path79.join(runDir3, "bus");
 }
 function busLogPath(runDir3) {
-  return path78.join(busDir(runDir3), "log.jsonl");
+  return path79.join(busDir(runDir3), "log.jsonl");
 }
 function casMetaPath(runDir3, sha2568) {
-  return path78.join(busDir(runDir3), "cas", sha2568.slice(0, 2), `${sha2568}.meta.yaml`);
+  return path79.join(busDir(runDir3), "cas", sha2568.slice(0, 2), `${sha2568}.meta.yaml`);
 }
 function sha2567(content) {
   return (0, import_crypto.createHash)("sha256").update(content).digest("hex");
@@ -42432,7 +51461,7 @@ function sleepMs(ms) {
   }
 }
 function withLock(runDir3, fn) {
-  const lock = path78.join(busDir(runDir3), ".lock");
+  const lock = path79.join(busDir(runDir3), ".lock");
   fs65.mkdirSync(busDir(runDir3), { recursive: true });
   const deadline = Date.now() + 5e3;
   let fd = null;
@@ -42471,7 +51500,7 @@ function casPut(runDir3, content, meta) {
     created_at: meta.now(),
     ref_count: 1
   };
-  fs65.mkdirSync(path78.dirname(out), { recursive: true });
+  fs65.mkdirSync(path79.dirname(out), { recursive: true });
   const tmp = `${out}.tmp-${process.pid}-${sha2567(out + record.created_at).slice(0, 8)}`;
   fs65.writeFileSync(tmp, encodeYamlCompatible(record));
   try {
@@ -42556,7 +51585,7 @@ function publish(runDir3, input) {
 }
 function readIdentityFacts(runDir3, identity) {
   if (identity.kind === "attempt") {
-    const file = path78.join(
+    const file = path79.join(
       runDir3,
       "task-cells",
       identity.logical_task_id,
@@ -42575,7 +51604,7 @@ function readIdentityFacts(runDir3, identity) {
   }
   try {
     const parsed = JSON.parse(
-      fs65.readFileSync(path78.join(runDir3, "binding.json"), "utf8")
+      fs65.readFileSync(path79.join(runDir3, "binding.json"), "utf8")
     );
     return { run_binding_ref: typeof parsed.binding_ref === "string" ? parsed.binding_ref : null };
   } catch {
@@ -42604,11 +51633,11 @@ function readBusLog(runDir3) {
   }
   return out;
 }
-var fs65, path78, import_crypto, BUS_EVENT_SCHEMA, CAS_META_SCHEMA, TOPIC_TYPES, BUS_EVENT_KINDS, BusLockTimeout, lastBusRefusal;
+var fs65, path79, import_crypto, BUS_EVENT_SCHEMA, CAS_META_SCHEMA, TOPIC_TYPES, BUS_EVENT_KINDS, BusLockTimeout, lastBusRefusal;
 var init_artifact_bus = __esm({
   "src/domains/dispatch/artifact-bus.ts"() {
     fs65 = __toESM(require("fs"));
-    path78 = __toESM(require("path"));
+    path79 = __toESM(require("path"));
     import_crypto = require("crypto");
     init_kernel();
     BUS_EVENT_SCHEMA = "guild.bus_event.v1";
@@ -42629,7 +51658,7 @@ var init_artifact_bus = __esm({
     ]);
     BusLockTimeout = class extends Error {
       constructor(runDir3) {
-        super(`artifact-bus: could not acquire ${path78.join(busDir(runDir3), ".lock")} within timeout`);
+        super(`artifact-bus: could not acquire ${path79.join(busDir(runDir3), ".lock")} within timeout`);
         this.name = "BusLockTimeout";
       }
     };
@@ -42639,20 +51668,20 @@ var init_artifact_bus = __esm({
 
 // src/domains/dispatch/task-cell-cleanup-check.ts
 function lifecycleEventPresent(cwd, ids, eventName) {
-  const telemetryDir2 = path79.join(durableGuildDir(cwd), "runs", ids.run_id, "task-cell-telemetry");
-  if (!fs66.existsSync(path79.join(telemetryDir2, "events.jsonl"))) return false;
+  const telemetryDir2 = path80.join(durableGuildDir(cwd), "runs", ids.run_id, "task-cell-telemetry");
+  if (!fs66.existsSync(path80.join(telemetryDir2, "events.jsonl"))) return false;
   try {
     const event = readTaskCellLifecycleEvents({ cwd, runId: ids.run_id }).find((e) => e.instance_id === ids.instance_id && e.event_name === eventName);
-    return !!event && fs66.existsSync(path79.join(telemetryDir2, "event-ids", event.event_id));
+    return !!event && fs66.existsSync(path80.join(telemetryDir2, "event-ids", event.event_id));
   } catch {
     return false;
   }
 }
-var fs66, path79;
+var fs66, path80;
 var init_task_cell_cleanup_check = __esm({
   "src/domains/dispatch/task-cell-cleanup-check.ts"() {
     fs66 = __toESM(require("fs"));
-    path79 = __toESM(require("path"));
+    path80 = __toESM(require("path"));
     init_artifact_bus();
     init_state();
     init_telemetry();
@@ -42661,17 +51690,17 @@ var init_task_cell_cleanup_check = __esm({
 
 // src/domains/dispatch/task-cell-artifact-join.ts
 function runDir2(cwd, runId) {
-  return path80.join(durableGuildDir(cwd), "runs", runId);
+  return path81.join(durableGuildDir(cwd), "runs", runId);
 }
 function topic(kind, ids) {
   const prefix = kind === "context" ? "context" : kind === "handoff" ? "handoff" : kind === "validation" || kind === "acceptance" ? "approval" : kind === "heartbeat" ? "heartbeat" : "status";
   return `${prefix}/task-cell/${ids.logical_task_id}/${ids.attempt}/${ids.instance_id}/${kind}`;
 }
 function publishTaskCellFile(input) {
-  const abs = path80.resolve(input.cwd, input.relativePath);
-  const root = path80.resolve(input.cwd);
-  const rel2 = path80.relative(root, abs);
-  if (rel2 === "" || rel2.startsWith("..") || path80.isAbsolute(rel2)) return null;
+  const abs = path81.resolve(input.cwd, input.relativePath);
+  const root = path81.resolve(input.cwd);
+  const rel2 = path81.relative(root, abs);
+  if (rel2 === "" || rel2.startsWith("..") || path81.isAbsolute(rel2)) return null;
   if (typeof input.bindingRef !== "string" || input.bindingRef.length === 0) return null;
   if (!verifyRunBinding({ root: input.cwd, run_id: input.ids.run_id, binding_ref: input.bindingRef }).ok) return null;
   let content;
@@ -42699,8 +51728,8 @@ function publishTaskCellFile(input) {
   return { kind: input.kind, path: input.relativePath, sha256: event.sha256, seq: event.seq };
 }
 function isInsideDir(dir, rel2) {
-  const r = path80.relative(path80.normalize(dir), path80.normalize(rel2));
-  return r !== "" && !r.startsWith("..") && !path80.isAbsolute(r);
+  const r = path81.relative(path81.normalize(dir), path81.normalize(rel2));
+  return r !== "" && !r.startsWith("..") && !path81.isAbsolute(r);
 }
 function canonicalJoinPath(cwd, ids, kind) {
   const paths = taskCellPaths(ids);
@@ -42708,7 +51737,7 @@ function canonicalJoinPath(cwd, ids, kind) {
     case "assignment":
       return paths.assignment_path;
     case "ack":
-      return path80.join(paths.instance_dir, "assignment-ack.json");
+      return path81.join(paths.instance_dir, "assignment-ack.json");
     case "handoff":
       return paths.handoff_path;
     case "validation":
@@ -42726,11 +51755,11 @@ function canonicalJoinPath(cwd, ids, kind) {
     case "context":
     case "team_plan":
     case "team_result": {
-      const assignment = validateTaskAssignmentV2(parseJson(path80.resolve(cwd, paths.assignment_path)));
+      const assignment = validateTaskAssignmentV2(parseJson(path81.resolve(cwd, paths.assignment_path)));
       if (!assignment) return null;
       if (kind === "context") return expectedContextPath(assignment);
       const dir = kind === "team_plan" ? "team-plan" : "team-result";
-      return path80.join(".guild", "runs", ids.run_id, dir, `${assignment.phase_id}.json`);
+      return path81.join(".guild", "runs", ids.run_id, dir, `${assignment.phase_id}.json`);
     }
   }
 }
@@ -42742,9 +51771,9 @@ function verifyPrereleaseBusJoins(cwd, ids, kinds) {
     if (rel2 === null) return { kind, path: null, sha256: null, bus_seq: null, cas_ok: false, reason: "prerelease_bus_join_path_unresolved" };
     let bytes;
     try {
-      const stat = fs67.lstatSync(path80.resolve(cwd, rel2));
+      const stat = fs67.lstatSync(path81.resolve(cwd, rel2));
       if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("not regular");
-      bytes = fs67.readFileSync(path80.resolve(cwd, rel2));
+      bytes = fs67.readFileSync(path81.resolve(cwd, rel2));
     } catch {
       return { kind, path: rel2, sha256: null, bus_seq: null, cas_ok: false, reason: "prerelease_bus_join_missing" };
     }
@@ -42773,14 +51802,14 @@ function parseJson(file) {
 }
 function expectedContextPath(assignment) {
   const rel2 = assignment.context_bundle_id;
-  const prefix = path80.join(".guild", "context", assignment.run_id) + path80.sep;
+  const prefix = path81.join(".guild", "context", assignment.run_id) + path81.sep;
   return rel2.startsWith(prefix) ? rel2 : null;
 }
-var fs67, path80, TASK_CELL_TERMINAL_SCHEMA;
+var fs67, path81, TASK_CELL_TERMINAL_SCHEMA;
 var init_task_cell_artifact_join = __esm({
   "src/domains/dispatch/task-cell-artifact-join.ts"() {
     fs67 = __toESM(require("fs"));
-    path80 = __toESM(require("path"));
+    path81 = __toESM(require("path"));
     init_artifact_bus();
     init_task_cell_contract();
     init_task_cell_cleanup_check();
@@ -42808,10 +51837,10 @@ function runDirOf(input) {
   ).run_dir;
 }
 function absoluteRunDir(input) {
-  return path81.resolve(input.cwd, runDirOf(input));
+  return path82.resolve(input.cwd, runDirOf(input));
 }
 function attemptFile(input) {
-  return path81.resolve(
+  return path82.resolve(
     input.cwd,
     taskCellPaths(
       {
@@ -42832,7 +51861,7 @@ function isInstanceReservation(raw) {
   }
 }
 function forEachAttemptFile(input, visit) {
-  const cellsDir = path81.resolve(input.cwd, runDirOf(input), "task-cells");
+  const cellsDir = path82.resolve(input.cwd, runDirOf(input), "task-cells");
   let cells;
   try {
     cells = fs68.readdirSync(cellsDir);
@@ -42840,7 +51869,7 @@ function forEachAttemptFile(input, visit) {
     return;
   }
   for (const cell of cells) {
-    const attemptsDir = path81.join(cellsDir, cell, "attempts");
+    const attemptsDir = path82.join(cellsDir, cell, "attempts");
     let attempts;
     try {
       attempts = fs68.readdirSync(attemptsDir);
@@ -42849,7 +51878,7 @@ function forEachAttemptFile(input, visit) {
     }
     for (const attempt of attempts) {
       try {
-        visit(fs68.readFileSync(path81.join(attemptsDir, attempt, "attempt.json"), "utf8"));
+        visit(fs68.readFileSync(path82.join(attemptsDir, attempt, "attempt.json"), "utf8"));
       } catch {
       }
     }
@@ -42889,18 +51918,18 @@ function reserveInstance(input) {
         const parsed = JSON.parse(raw);
         if (parsed.owner !== owner) return;
         fs68.rmSync(file, { force: true });
-        const marker = `${path81.sep}task-cells${path81.sep}`;
+        const marker = `${path82.sep}task-cells${path82.sep}`;
         const at = file.lastIndexOf(marker);
         const stop = at >= 0 ? file.slice(0, at + marker.length - 1) : null;
-        let dir = path81.dirname(file);
-        while (stop !== null && dir.startsWith(stop + path81.sep) && dir !== stop) {
+        let dir = path82.dirname(file);
+        while (stop !== null && dir.startsWith(stop + path82.sep) && dir !== stop) {
           try {
             if (fs68.readdirSync(dir).length > 0) break;
             fs68.rmdirSync(dir);
           } catch {
             break;
           }
-          dir = path81.dirname(dir);
+          dir = path82.dirname(dir);
         }
       } catch {
       }
@@ -42926,7 +51955,7 @@ function reserveInstance(input) {
       claimed_at: (input.now ?? (() => (/* @__PURE__ */ new Date()).toISOString()))(),
       owner
     };
-    fs68.mkdirSync(path81.dirname(file), { recursive: true });
+    fs68.mkdirSync(path82.dirname(file), { recursive: true });
     try {
       fs68.writeFileSync(file, `${JSON.stringify(placeholder, null, 2)}
 `, {
@@ -42955,12 +51984,12 @@ function reserveInstance(input) {
     };
   });
 }
-var fs68, crypto20, path81, DEFAULT_MAX_INSTANCES, INSTANCE_CAP_FAILURE, INSTANCE_RESERVATION_SCHEMA, INSTANCE_CAP_CONTRACT;
+var fs68, crypto20, path82, DEFAULT_MAX_INSTANCES, INSTANCE_CAP_FAILURE, INSTANCE_RESERVATION_SCHEMA, INSTANCE_CAP_CONTRACT;
 var init_instance_cap = __esm({
   "src/domains/dispatch/instance-cap.ts"() {
     fs68 = __toESM(require("fs"));
     crypto20 = __toESM(require("node:crypto"));
-    path81 = __toESM(require("path"));
+    path82 = __toESM(require("path"));
     init_kernel();
     init_lifecycle();
     init_task_cell_contract();
@@ -43015,7 +52044,7 @@ function writeTaskAssignmentV2(cwd, assignment, binding) {
   }
   assertDispatchBinding(cwd, valid.run_id, binding);
   const out = writePathUnderCwd(cwd, valid.assignment_path);
-  const publicPath = path82.resolve(cwd, valid.assignment_path);
+  const publicPath = path83.resolve(cwd, valid.assignment_path);
   const refused = () => new Error(
     `assignment overwrite refused at ${valid.assignment_path} \u2014 assignments are immutable per (task_run_id, attempt, instance_id) (D6)`
   );
@@ -43047,7 +52076,7 @@ function publishExclusive(out, bytes, refused) {
       if (e.code === "EEXIST") throw refused();
       throw e;
     }
-    syncDirectory(path82.dirname(out));
+    syncDirectory(path83.dirname(out));
   } finally {
     try {
       fs69.unlinkSync(temp);
@@ -43070,7 +52099,7 @@ function writeTaskAttemptV1(cwd, attempt, binding) {
     instance_id: valid.instance_id
   });
   const out = writePathUnderCwd(cwd, paths.attempt_path);
-  const publicPath = path82.resolve(cwd, paths.attempt_path);
+  const publicPath = path83.resolve(cwd, paths.attempt_path);
   const serialized = JSON.stringify(valid, null, 2) + "\n";
   if (fs69.existsSync(out)) {
     const existing = fs69.readFileSync(out, "utf8");
@@ -43099,7 +52128,7 @@ function writeAgentInstanceV1(cwd, instance, binding) {
     instance_id: valid.instance_id
   });
   const out = writePathUnderCwd(cwd, paths.instance_path);
-  const publicPath = path82.resolve(cwd, paths.instance_path);
+  const publicPath = path83.resolve(cwd, paths.instance_path);
   const serialized = JSON.stringify(valid, null, 2) + "\n";
   if (fs69.existsSync(out)) {
     if (fs69.readFileSync(out, "utf8") === serialized) return publicPath;
@@ -43120,7 +52149,7 @@ function readTaskAssignmentV2(cwd, assignmentPath) {
 }
 function assignmentAckPath(ids) {
   const paths = taskCellPaths(ids);
-  return path82.join(paths.instance_dir, "assignment-ack.json");
+  return path83.join(paths.instance_dir, "assignment-ack.json");
 }
 function acknowledgeAssignment(cwd, assignment, now, binding) {
   const valid = validateTaskAssignmentV2(assignment);
@@ -43147,7 +52176,7 @@ function acknowledgeAssignment(cwd, assignment, now, binding) {
     instance_id: valid.instance_id
   });
   const out = writePathUnderCwd(cwd, rel2);
-  const publicPath = path82.resolve(cwd, rel2);
+  const publicPath = path83.resolve(cwd, rel2);
   const serialized = JSON.stringify(ack, null, 2) + "\n";
   if (fs69.existsSync(out)) {
     if (fs69.readFileSync(out, "utf8") === serialized) return publicPath;
@@ -43207,12 +52236,12 @@ function readAssignmentAck(cwd, ids) {
     return null;
   }
 }
-var import_crypto2, fs69, path82, ASSIGNMENT_ACK_SCHEMA;
+var import_crypto2, fs69, path83, ASSIGNMENT_ACK_SCHEMA;
 var init_task_assignment_v2 = __esm({
   "src/domains/dispatch/task-assignment-v2.ts"() {
     import_crypto2 = require("crypto");
     fs69 = __toESM(require("fs"));
-    path82 = __toESM(require("path"));
+    path83 = __toESM(require("path"));
     init_kernel();
     init_lifecycle();
     init_task_cell_contract();
@@ -43267,7 +52296,7 @@ function submittedReceiptBytes(input) {
   const { cwd, assignment, submitted } = input;
   if (typeof submitted.receipt_path !== "string" || typeof submitted.receipt_id !== "string" || !Array.isArray(submitted.claimed_changed_files) || !submitted.claimed_changed_files.every((value) => typeof value === "string") || !Array.isArray(submitted.acceptance_tests_passed) || !submitted.acceptance_tests_passed.every((value) => typeof value === "string")) return null;
   const expected = receiptPathsForAssignment(assignment);
-  if (submitted.receipt_path !== expected.lane && submitted.receipt_path !== expected.retained || path83.posix.normalize(submitted.receipt_path) !== submitted.receipt_path) return null;
+  if (submitted.receipt_path !== expected.lane && submitted.receipt_path !== expected.retained || path84.posix.normalize(submitted.receipt_path) !== submitted.receipt_path) return null;
   return physicallyContainedFileBytes(cwd, submitted.receipt_path);
 }
 function validateSubmittedHandoffReceipt(input) {
@@ -43355,9 +52384,9 @@ function retainSubmittedHandoffReceipt(input) {
   const rawBytes = submittedReceiptBytes(input);
   if (rawBytes === null) return null;
   const retainedPath = receiptPathsForAssignment(input.assignment).retained;
-  const retainedAbsolute = path83.resolve(input.cwd, retainedPath);
+  const retainedAbsolute = path84.resolve(input.cwd, retainedPath);
   try {
-    fs70.mkdirSync(path83.dirname(retainedAbsolute), { recursive: true });
+    fs70.mkdirSync(path84.dirname(retainedAbsolute), { recursive: true });
     fs70.writeFileSync(retainedAbsolute, rawBytes, { flag: "wx" });
   } catch (error) {
     const code = error && typeof error === "object" && "code" in error ? String(error.code) : null;
@@ -43373,7 +52402,7 @@ function retainSubmittedHandoffReceipt(input) {
   return validateSubmittedHandoffReceipt({ ...input, submitted: retained }) ? retained : null;
 }
 function absUnderCwd(cwd, relPath) {
-  return path83.resolve(cwd, relPath);
+  return path84.resolve(cwd, relPath);
 }
 function requireWritableBinding(cwd, runId, binding) {
   return assertWritableBinding({ root: cwd, run_id: runId, binding_ref: binding?.binding_ref }).binding_ref;
@@ -43458,7 +52487,7 @@ function writeValidationRecord(cwd, validation, binding) {
       `validation record overwrite refused at ${paths.validation_path} \u2014 a deterministic-floor result is written once per (task_run_id, attempt, instance_id)`
     );
   }
-  fs70.mkdirSync(path83.dirname(out), { recursive: true });
+  fs70.mkdirSync(path84.dirname(out), { recursive: true });
   fs70.writeFileSync(out, serialized, "utf8");
   const ids = {
     run_id: validation.run_id,
@@ -43543,7 +52572,7 @@ function writeAcceptanceRecord(cwd, acceptance, binding) {
       `acceptance record overwrite refused at ${paths.acceptance_path} \u2014 the authority decision is written once per (task_run_id, attempt, instance_id) (D5)`
     );
   }
-  fs70.mkdirSync(path83.dirname(out), { recursive: true });
+  fs70.mkdirSync(path84.dirname(out), { recursive: true });
   fs70.writeFileSync(out, serialized, "utf8");
   publishLifecycleFile({
     cwd,
@@ -43584,7 +52613,7 @@ function readAttemptForInstance(cwd, ids) {
   }
 }
 function findRunAcceptances(cwd, runId) {
-  const cellsRoot = path83.join(durableGuildDir(cwd), "runs", runId, "task-cells");
+  const cellsRoot = path84.join(durableGuildDir(cwd), "runs", runId, "task-cells");
   const out = [];
   let logicalTaskDirs;
   try {
@@ -43593,7 +52622,7 @@ function findRunAcceptances(cwd, runId) {
     return out;
   }
   for (const logical_task_id of logicalTaskDirs) {
-    const attemptsRoot = path83.join(cellsRoot, logical_task_id, "attempts");
+    const attemptsRoot = path84.join(cellsRoot, logical_task_id, "attempts");
     let attemptDirs;
     try {
       attemptDirs = fs70.readdirSync(attemptsRoot);
@@ -43603,7 +52632,7 @@ function findRunAcceptances(cwd, runId) {
     for (const attemptStr of attemptDirs) {
       const attempt = Number.parseInt(attemptStr, 10);
       if (!Number.isInteger(attempt) || attempt < 1) continue;
-      const instancesRoot = path83.join(attemptsRoot, attemptStr, "instances");
+      const instancesRoot = path84.join(attemptsRoot, attemptStr, "instances");
       let instanceDirs;
       try {
         instanceDirs = fs70.readdirSync(instancesRoot);
@@ -43744,7 +52773,7 @@ function writeSealed(absPath, relLabel, record) {
   if (!valid) {
     throw new Error(`refusing to write a malformed guild.task_attempt.v1 at ${relLabel} (D4)`);
   }
-  fs70.mkdirSync(path83.dirname(absPath), { recursive: true });
+  fs70.mkdirSync(path84.dirname(absPath), { recursive: true });
   fs70.writeFileSync(absPath, JSON.stringify(valid, null, 2) + "\n", "utf8");
   return valid;
 }
@@ -43867,7 +52896,7 @@ function publishPersistedLifecycleRecord(cwd, ids, kind, binding, now) {
     throw new Error(`no persisted regular ${kind} record at ${relativePath} to publish`);
   }
   const digest = sha2567(bytes);
-  const runDirAbs = path83.join(durableGuildDir(cwd), "runs", ids.run_id);
+  const runDirAbs = path84.join(durableGuildDir(cwd), "runs", ids.run_id);
   const prior = readBusLog(runDirAbs).filter(
     (e) => e.event === "artifact.published" && e.path === relativePath && e.sha256 === digest
   );
@@ -43904,11 +52933,11 @@ function publishPersistedLifecycleRecord(cwd, ids, kind, binding, now) {
     cas_preexisting: casBefore !== null
   };
 }
-var fs70, path83, import_node_crypto5;
+var fs70, path84, import_node_crypto5;
 var init_task_cell_acceptance = __esm({
   "src/domains/dispatch/task-cell-acceptance.ts"() {
     fs70 = __toESM(require("fs"));
-    path83 = __toESM(require("path"));
+    path84 = __toESM(require("path"));
     import_node_crypto5 = require("node:crypto");
     init_lifecycle();
     init_kernel();
@@ -43972,7 +53001,7 @@ function progressLedgerPath(input) {
     },
     { guildDir: input.guildDir }
   );
-  return path84.join(paths.cell_dir, "progress-ledger.json");
+  return path85.join(paths.cell_dir, "progress-ledger.json");
 }
 function validateProgressLedgerV1(obj) {
   if (obj === null || typeof obj !== "object") return null;
@@ -44016,14 +53045,14 @@ function initProgressLedger(input) {
     logical_task_id: input.logical_task_id,
     guildDir: input.guildDir
   });
-  const abs = path84.resolve(input.cwd, rel2);
-  fs71.mkdirSync(path84.dirname(abs), { recursive: true });
+  const abs = path85.resolve(input.cwd, rel2);
+  fs71.mkdirSync(path85.dirname(abs), { recursive: true });
   fs71.writeFileSync(abs, `${JSON.stringify(ledger, null, 2)}
 `, "utf8");
   return { ok: true, ledger, path: rel2 };
 }
 function readProgressLedger(input) {
-  const abs = path84.resolve(input.cwd, progressLedgerPath(input));
+  const abs = path85.resolve(input.cwd, progressLedgerPath(input));
   try {
     return validateProgressLedgerV1(JSON.parse(fs71.readFileSync(abs, "utf8")));
   } catch {
@@ -44044,8 +53073,8 @@ function recordOracleOutcome(input) {
   item.state = input.state;
   ledger.updated_at = (input.now ?? (() => (/* @__PURE__ */ new Date()).toISOString()))();
   if (input.last_failure !== void 0) ledger.last_failure = input.last_failure;
-  const abs = path84.resolve(input.cwd, progressLedgerPath(input));
-  fs71.mkdirSync(path84.dirname(abs), { recursive: true });
+  const abs = path85.resolve(input.cwd, progressLedgerPath(input));
+  fs71.mkdirSync(path85.dirname(abs), { recursive: true });
   fs71.writeFileSync(abs, `${JSON.stringify(ledger, null, 2)}
 `, "utf8");
   return { ok: true, ledger };
@@ -44127,8 +53156,8 @@ function exactKeys(o, keys) {
 }
 function isSafeRelativePath(p) {
   if (typeof p !== "string" || p.length === 0 || p.includes("\0") || p.includes("\\")) return false;
-  if (path84.posix.isAbsolute(p)) return false;
-  const normalized = path84.posix.normalize(p);
+  if (path85.posix.isAbsolute(p)) return false;
+  const normalized = path85.posix.normalize(p);
   if (normalized !== p || normalized === "." || normalized === ".." || normalized.startsWith("../")) return false;
   return true;
 }
@@ -44210,11 +53239,11 @@ function readDoneWhen(assignment) {
   }
   return validateDoneWhen(assignment["done_when"]);
 }
-var fs71, path84, PROGRESS_LEDGER_SCHEMA, DONE_WHEN_ORACLE_KINDS, LEDGER_ITEM_STATES, CELL_LAST_FAILURES, PROGRESS_LEDGER_CONTRACT, EXECUTABLE_COMMAND_TIMEOUT_MAX_MS, EXECUTABLE_ORACLE_KINDS, SHA256_HEX3;
+var fs71, path85, PROGRESS_LEDGER_SCHEMA, DONE_WHEN_ORACLE_KINDS, LEDGER_ITEM_STATES, CELL_LAST_FAILURES, PROGRESS_LEDGER_CONTRACT, EXECUTABLE_COMMAND_TIMEOUT_MAX_MS, EXECUTABLE_ORACLE_KINDS, SHA256_HEX3;
 var init_progress_ledger = __esm({
   "src/domains/dispatch/progress-ledger.ts"() {
     fs71 = __toESM(require("fs"));
-    path84 = __toESM(require("path"));
+    path85 = __toESM(require("path"));
     init_kernel();
     init_lifecycle();
     init_task_cell_contract();
@@ -44302,7 +53331,7 @@ function authorizeProjectedToolCall(input) {
   let assignment = null;
   try {
     assignment = validateTaskAssignmentV2(
-      JSON.parse(fs72.readFileSync(path85.resolve(input.cwd, paths.assignment_path), "utf8"))
+      JSON.parse(fs72.readFileSync(path86.resolve(input.cwd, paths.assignment_path), "utf8"))
     );
   } catch {
     assignment = null;
@@ -44320,11 +53349,11 @@ function authorizeProjectedToolCall(input) {
     isolated: input.isolated ?? true
   });
 }
-var fs72, path85, ISOLATION_CONTRACT;
+var fs72, path86, ISOLATION_CONTRACT;
 var init_isolation_guard = __esm({
   "src/domains/dispatch/isolation-guard.ts"() {
     fs72 = __toESM(require("fs"));
-    path85 = __toESM(require("path"));
+    path86 = __toESM(require("path"));
     init_kernel();
     init_task_cell_contract();
     init_kernel();
@@ -44388,7 +53417,7 @@ function advisorBudgetPath(input) {
     { run_id: input.run_id, logical_task_id: input.logical_task_id, attempt: 1, instance_id: "ledger" },
     { guildDir: input.guildDir }
   );
-  return path86.join(paths.cell_dir, "advisor-budget.json");
+  return path87.join(paths.cell_dir, "advisor-budget.json");
 }
 function resolveAdvisorRounds(policy) {
   const raw = policy?.["advisorRounds"];
@@ -44398,7 +53427,7 @@ function resolveAdvisorRounds(policy) {
 function readAdvisorBudget(input) {
   try {
     const parsed = JSON.parse(
-      fs73.readFileSync(path86.resolve(input.cwd, advisorBudgetPath(input)), "utf8")
+      fs73.readFileSync(path87.resolve(input.cwd, advisorBudgetPath(input)), "utf8")
     );
     return parsed?.schema_version === ADVISOR_BUDGET_SCHEMA ? parsed : null;
   } catch {
@@ -44406,11 +53435,11 @@ function readAdvisorBudget(input) {
   }
 }
 function write(cwd, budget, guildDir) {
-  const abs = path86.resolve(
+  const abs = path87.resolve(
     cwd,
     advisorBudgetPath({ run_id: budget.run_id, logical_task_id: budget.logical_task_id, guildDir })
   );
-  fs73.mkdirSync(path86.dirname(abs), { recursive: true });
+  fs73.mkdirSync(path87.dirname(abs), { recursive: true });
   fs73.writeFileSync(abs, `${JSON.stringify(budget, null, 2)}
 `, "utf8");
 }
@@ -44469,11 +53498,11 @@ function consumeConsult(input) {
     remaining: budget.rounds_allowed - budget.rounds_used
   };
 }
-var fs73, path86, ADVISOR_BUDGET_SCHEMA, DEFAULT_ADVISOR_ROUNDS, CONSULT_KINDS, ADVISOR_BUDGET_CONTRACT;
+var fs73, path87, ADVISOR_BUDGET_SCHEMA, DEFAULT_ADVISOR_ROUNDS, CONSULT_KINDS, ADVISOR_BUDGET_CONTRACT;
 var init_advisor_budget = __esm({
   "src/domains/dispatch/advisor-budget.ts"() {
     fs73 = __toESM(require("fs"));
-    path86 = __toESM(require("path"));
+    path87 = __toESM(require("path"));
     init_kernel();
     init_task_cell_contract();
     ADVISOR_BUDGET_SCHEMA = "guild.advisor_budget.v1";
@@ -44582,11 +53611,11 @@ function readJson3(file) {
     return null;
   }
 }
-var fs74, path87, SpawnOutcomeUnknownError, IN_SESSION_PORT, GoalSliceRefusedError, FilesystemTaskCellRuntime;
+var fs74, path88, SpawnOutcomeUnknownError, IN_SESSION_PORT, GoalSliceRefusedError, FilesystemTaskCellRuntime;
 var init_task_cell_runtime = __esm({
   "src/domains/dispatch/task-cell-runtime.ts"() {
     fs74 = __toESM(require("fs"));
-    path87 = __toESM(require("path"));
+    path88 = __toESM(require("path"));
     init_artifact_bus();
     init_teams();
     init_telemetry();
@@ -44664,7 +53693,7 @@ var init_task_cell_runtime = __esm({
       dependencyAcceptances;
       constructor(opts) {
         if (!Number.isInteger(opts.parallelism) || opts.parallelism < 1) throw new Error("parallelism must be >= 1");
-        this.cwd = path87.resolve(opts.cwd);
+        this.cwd = path88.resolve(opts.cwd);
         this.substrate = opts.substrate;
         this.parallelism = opts.parallelism;
         this.binding = opts.binding;
@@ -44816,7 +53845,7 @@ var init_task_cell_runtime = __esm({
         const paths = taskCellPaths({ run_id: cell.run_id, logical_task_id: cell.logical_task_id, attempt: lineage.attempt, instance_id: instanceId });
         this.publish(instance, "attempt", paths.attempt_path, createdAt, true);
         this.publish(instance, "instance", paths.instance_path, createdAt, true);
-        if (fs74.existsSync(path87.resolve(this.cwd, req.context_bundle_id))) {
+        if (fs74.existsSync(path88.resolve(this.cwd, req.context_bundle_id))) {
           this.publish(instance, "context", req.context_bundle_id, createdAt, true);
         }
         const handle = Object.freeze({
@@ -44831,7 +53860,7 @@ var init_task_cell_runtime = __esm({
           substrate: this.substrate,
           state: "instantiated"
         });
-        const contextPath = path87.resolve(this.cwd, req.context_bundle_id);
+        const contextPath = path88.resolve(this.cwd, req.context_bundle_id);
         const contextBytes = (() => {
           try {
             const stat = fs74.statSync(contextPath);
@@ -44944,7 +53973,7 @@ var init_task_cell_runtime = __esm({
         if (!gate.ready) return { ...this.failure(live, "dependencies_blocked", `blocked on ${gate.blocked_on.join(", ")}`), blocked_on: gate.blocked_on };
         const assignmentPath = writeTaskAssignmentV2(this.cwd, assignment, this.binding);
         this.publish(this.instanceRecord(instance), "assignment", assignment.assignment_path, assignment.written_at, true);
-        if (fs74.existsSync(path87.resolve(this.cwd, assignment.context_bundle_id))) {
+        if (fs74.existsSync(path88.resolve(this.cwd, assignment.context_bundle_id))) {
           this.publish(this.instanceRecord(instance), "context", assignment.context_bundle_id, assignment.written_at, true);
         }
         if (this.leadOnly.has(instance.instance_id)) {
@@ -44973,11 +54002,11 @@ var init_task_cell_runtime = __esm({
         const live = this.live.get(ref.instance_id);
         if (!live || live.handle.run_id !== ref.run_id) return null;
         const paths = taskCellPaths(this.ids(live.handle));
-        const instance = validateAgentInstanceV1(readJson3(path87.resolve(this.cwd, paths.instance_path)));
-        const attempt = validateTaskAttemptV1(readJson3(path87.resolve(this.cwd, paths.attempt_path)));
+        const instance = validateAgentInstanceV1(readJson3(path88.resolve(this.cwd, paths.instance_path)));
+        const attempt = validateTaskAttemptV1(readJson3(path88.resolve(this.cwd, paths.attempt_path)));
         if (!instance || !attempt) return null;
         const assignment = readTaskAssignmentV2(this.cwd, paths.assignment_path);
-        const heartbeat = readJson3(path87.resolve(this.cwd, paths.heartbeat_path));
+        const heartbeat = readJson3(path88.resolve(this.cwd, paths.heartbeat_path));
         return { handle: this.snapshot(live), instance, attempt, assignment, last_heartbeat_at: typeof heartbeat?.at === "string" ? heartbeat.at : null };
       }
       async heartbeat(ref, at) {
@@ -44986,7 +54015,7 @@ var init_task_cell_runtime = __esm({
           return { ok: false, instance: this.unknownHandle(ref), last_heartbeat_at: null };
         }
         const paths = taskCellPaths(this.ids(live.handle));
-        fs74.writeFileSync(path87.resolve(this.cwd, paths.heartbeat_path), JSON.stringify({ schema_version: "guild.task_cell_heartbeat.v1", instance_id: ref.instance_id, at }, null, 2) + "\n");
+        fs74.writeFileSync(path88.resolve(this.cwd, paths.heartbeat_path), JSON.stringify({ schema_version: "guild.task_cell_heartbeat.v1", instance_id: ref.instance_id, at }, null, 2) + "\n");
         this.publish(this.instanceRecord(live.handle), "heartbeat", paths.heartbeat_path, at, true);
         return { ok: true, instance: this.snapshot(live), last_heartbeat_at: at };
       }
@@ -44994,7 +54023,7 @@ var init_task_cell_runtime = __esm({
         const live = this.mustLive(instance);
         if (live.state !== "running") return this.failure(live, "illegal_state", `expected running, got ${live.state}`);
         const paths = taskCellPaths(this.ids(instance));
-        const submitted = readJson3(path87.resolve(this.cwd, paths.handoff_path));
+        const submitted = readJson3(path88.resolve(this.cwd, paths.handoff_path));
         const assignment = readTaskAssignmentV2(this.cwd, paths.assignment_path);
         if (!submitted || !assignment) return this.failure(live, "timed_out", "handoff not submitted");
         this.transition(live, "handoff_submitted");
@@ -45011,7 +54040,7 @@ var init_task_cell_runtime = __esm({
         };
         if (retained) {
           fs74.writeFileSync(
-            path87.resolve(this.cwd, paths.handoff_path),
+            path88.resolve(this.cwd, paths.handoff_path),
             `${JSON.stringify(submittedForValidation, null, 2)}
 `,
             "utf8"
@@ -45205,7 +54234,7 @@ var init_task_cell_runtime = __esm({
         return { ok: true, instance: this.snapshot(live), fact_at: factAt, runtime_transition_at: at, publications };
       }
       selfIntendedAcceptance(ids, validation) {
-        const raw = readJson3(path87.resolve(this.cwd, taskCellPaths(ids).acceptance_path));
+        const raw = readJson3(path88.resolve(this.cwd, taskCellPaths(ids).acceptance_path));
         if (!raw || raw.schema_version !== "guild.handoff_acceptance.v1") return null;
         return {
           acceptance_policy_version: raw.acceptance_policy_version,
@@ -45225,7 +54254,7 @@ var init_task_cell_runtime = __esm({
         const live = this.mustLive(instance);
         if (["terminated", "failed", "cancelled", "timed_out", "rejected"].includes(live.state)) return this.failure(live, "illegal_state", `${live.state} is terminal`);
         const paths = taskCellPaths(this.ids(instance));
-        const acceptance = readJson3(path87.resolve(this.cwd, paths.acceptance_path));
+        const acceptance = readJson3(path88.resolve(this.cwd, paths.acceptance_path));
         if (!req.force && (!acceptance || typeof acceptance.termination_authorized_at !== "string")) {
           return this.failure(live, "not_authorized", "no durable termination authorization");
         }
@@ -45274,7 +54303,7 @@ var init_task_cell_runtime = __esm({
         return { ok: true, reaped: true, instance: this.snapshot(live), reap_attempts: sealed.reap_attempts, outcome: this.outcome(sealed) };
       }
       async readRecords(runId) {
-        const root = path87.join(durableGuildDir(this.cwd), "runs", runId, "task-cells");
+        const root = path88.join(durableGuildDir(this.cwd), "runs", runId, "task-cells");
         const files = [];
         const walk = (dir) => {
           let entries;
@@ -45284,7 +54313,7 @@ var init_task_cell_runtime = __esm({
             return;
           }
           for (const entry of entries) {
-            const abs = path87.join(dir, entry.name);
+            const abs = path88.join(dir, entry.name);
             if (entry.isDirectory()) walk(abs);
             else if (entry.isFile()) files.push(abs);
           }
@@ -45373,13 +54402,13 @@ var init_task_cell_runtime = __esm({
         const slice = sliceMintedRosterForGoal({ projectRoot: this.cwd, goal });
         if (slice.ok && slice.roster.some((m) => m.name === role)) return;
         const reason = slice.ok ? `role '${role}' is not in goal ${goal.id}'s slice (${slice.roster.map((m) => m.name).join(", ")}) (R73)` : slice.reason;
-        const cellDir = path87.resolve(
+        const cellDir = path88.resolve(
           this.cwd,
           taskCellPaths({ run_id: cell.run_id, logical_task_id: cell.logical_task_id, attempt: 1, instance_id: "goal-slice" }).cell_dir
         );
         fs74.mkdirSync(cellDir, { recursive: true });
         fs74.appendFileSync(
-          path87.join(cellDir, "goal-slice-refusals.jsonl"),
+          path88.join(cellDir, "goal-slice-refusals.jsonl"),
           `${JSON.stringify({
             schema_version: "guild.goal_slice_refusal.v1",
             run_id: cell.run_id,
@@ -45455,17 +54484,17 @@ var init_task_cell_runtime = __esm({
       }
       instanceRecord(i) {
         const paths = taskCellPaths(this.ids(i));
-        const record = validateAgentInstanceV1(readJson3(path87.resolve(this.cwd, paths.instance_path)));
+        const record = validateAgentInstanceV1(readJson3(path88.resolve(this.cwd, paths.instance_path)));
         if (!record) throw new Error(`missing instance record: ${i.instance_id}`);
         return record;
       }
       attemptRecord(i) {
         const paths = taskCellPaths(this.ids(i));
-        return validateTaskAttemptV1(readJson3(path87.resolve(this.cwd, paths.attempt_path)));
+        return validateTaskAttemptV1(readJson3(path88.resolve(this.cwd, paths.attempt_path)));
       }
       validationRecord(i) {
         const paths = taskCellPaths(this.ids(i));
-        const value = readJson3(path87.resolve(this.cwd, paths.validation_path));
+        const value = readJson3(path88.resolve(this.cwd, paths.validation_path));
         return value && value.schema_version === "guild.handoff_validation.v1" ? value : null;
       }
       outcome(a) {
@@ -45621,11 +54650,11 @@ function regularBytes(abs) {
   }
 }
 function fileRef(cwd, rel2) {
-  const bytes = regularBytes(path88.resolve(cwd, rel2));
+  const bytes = regularBytes(path89.resolve(cwd, rel2));
   return bytes === null ? null : { path: rel2, sha256: sha2567(bytes) };
 }
 function writeExclusive(abs, contents, mode = 384) {
-  fs75.mkdirSync(path88.dirname(abs), { recursive: true });
+  fs75.mkdirSync(path89.dirname(abs), { recursive: true });
   try {
     fs75.writeFileSync(abs, contents, { encoding: "utf8", flag: "wx", mode });
     return true;
@@ -45654,13 +54683,13 @@ function containedBytes(cwd, rel2) {
   }
 }
 function configuredSecretsPolicy(cwd) {
-  const abs = path88.join(durableGuildDir(cwd), "settings.json");
+  const abs = path89.join(durableGuildDir(cwd), "settings.json");
   try {
     fs75.lstatSync(abs);
   } catch (error) {
     return error.code === "ENOENT" ? securityDefaults().secrets_policy : null;
   }
-  const bytes = containedBytes(cwd, path88.relative(cwd, abs));
+  const bytes = containedBytes(cwd, path89.relative(cwd, abs));
   if (bytes === null) return null;
   let parsed;
   try {
@@ -45686,7 +54715,7 @@ function configuredSecretsPolicy(cwd) {
   return parseSecurityConfig(parsed).secrets_policy;
 }
 function publishHandle(abs, record) {
-  const tmp = path88.join(path88.dirname(abs), `.${path88.basename(abs)}.tmp-${process.pid}-${Date.now()}-${++handleTmpSeq}`);
+  const tmp = path89.join(path89.dirname(abs), `.${path89.basename(abs)}.tmp-${process.pid}-${Date.now()}-${++handleTmpSeq}`);
   try {
     fs75.writeFileSync(tmp, json(record), { encoding: "utf8", mode: 384, flag: "wx" });
     fs75.renameSync(tmp, abs);
@@ -45713,7 +54742,7 @@ function isSafeSegment(value) {
   return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$/.test(value);
 }
 function runRel(runId, ...segments) {
-  return path88.join(".guild", "runs", runId, ...segments);
+  return path89.join(".guild", "runs", runId, ...segments);
 }
 function leadOf(a) {
   const r = a;
@@ -45786,16 +54815,16 @@ function observeOwnerProcess(pid) {
   return start ? { state: "present", start } : { state: "unavailable" };
 }
 function readClaim(cwd, runId) {
-  const value = readJsonFile2(path88.resolve(cwd, claimRel(runId)));
+  const value = readJsonFile2(path89.resolve(cwd, claimRel(runId)));
   if (!value || value.schema_version !== TASK_CELL_CONTROLLER_SCHEMA || value.run_id !== runId) return null;
   return value;
 }
 function classifyControllerOwner(cwd, runId, nowIso) {
-  const claimAbs = path88.resolve(cwd, claimRel(runId));
+  const claimAbs = path89.resolve(cwd, claimRel(runId));
   if (!fs75.existsSync(claimAbs)) return { liveness: "absent", evidence_quality: "none", heartbeat: null };
   const claim = readClaim(cwd, runId);
   if (!claim) return { liveness: "unknown", evidence_quality: "none", heartbeat: null };
-  const hb = readJsonFile2(path88.resolve(cwd, heartbeatRel(runId)));
+  const hb = readJsonFile2(path89.resolve(cwd, heartbeatRel(runId)));
   const heartbeat = {
     state: typeof hb?.state === "string" ? hb.state : null,
     heartbeat_at: typeof hb?.heartbeat_at === "string" ? hb.heartbeat_at : null
@@ -45819,7 +54848,7 @@ function classifyControllerOwner(cwd, runId, nowIso) {
 }
 function lossRecorded(cwd, runId, claim) {
   if (!claim) return false;
-  return fs75.existsSync(path88.resolve(cwd, controllerRel(runId, `loss-${claim.controller_instance_id}.json`)));
+  return fs75.existsSync(path89.resolve(cwd, controllerRel(runId, `loss-${claim.controller_instance_id}.json`)));
 }
 function validateOraclePlan(value) {
   if (!value || typeof value !== "object") return null;
@@ -45837,8 +54866,8 @@ function validateOraclePlan(value) {
 }
 function readApprovedOraclePlan(cwd, runId, phase) {
   if (!isSafeSegment(phase)) return refuse5("oracle_plan_unapproved", "invalid phase");
-  const planBytes = regularBytes(path88.resolve(cwd, oraclePlanRel(runId, phase)));
-  const decisionBytes = regularBytes(path88.resolve(cwd, oracleDecisionRel(runId, phase)));
+  const planBytes = regularBytes(path89.resolve(cwd, oraclePlanRel(runId, phase)));
+  const decisionBytes = regularBytes(path89.resolve(cwd, oracleDecisionRel(runId, phase)));
   if (planBytes === null) return refuse5("oracle_plan_unapproved", "oracle plan missing");
   if (decisionBytes === null) return refuse5("oracle_plan_unapproved", "oracle plan decision missing");
   let plan;
@@ -45866,9 +54895,9 @@ function verifyTeamAuthority(input) {
   if (!proposal || typeof proposal !== "object") return no("approved proposal input absent");
   const refFile = (ref, label) => {
     if (!ref || typeof ref.path !== "string" || typeof ref.sha256 !== "string") return `${label} ref malformed`;
-    const abs = path88.resolve(input.cwd, ref.path);
-    const rel2 = path88.relative(input.cwd, abs);
-    if (rel2.startsWith("..") || path88.isAbsolute(rel2)) return `${label} ref escapes the root`;
+    const abs = path89.resolve(input.cwd, ref.path);
+    const rel2 = path89.relative(input.cwd, abs);
+    if (rel2.startsWith("..") || path89.isAbsolute(rel2)) return `${label} ref escapes the root`;
     const bytes = regularBytes(abs);
     if (bytes === null) return `${label} ref is not a regular file`;
     if (sha2567(bytes) !== ref.sha256) return `${label} ref hash mismatch`;
@@ -45887,7 +54916,7 @@ function verifyTeamAuthority(input) {
   if (decision.run_id !== input.runId || decision.phase !== input.phase) return no("team decision is for another run or phase");
   const planBytes = refFile(input.plan.approved_plan_ref, "approved_plan");
   if (typeof planBytes === "string") return no(planBytes);
-  const sameRef2 = (r) => !!r && path88.normalize(r.path) === path88.normalize(input.plan.approved_plan_ref.path) && r.sha256 === input.plan.approved_plan_ref.sha256;
+  const sameRef2 = (r) => !!r && path89.normalize(r.path) === path89.normalize(input.plan.approved_plan_ref.path) && r.sha256 === input.plan.approved_plan_ref.sha256;
   if (!sameRef2(proposal.spec_ref) && !sameRef2(proposal.plan_ref)) return no("approved_plan_ref is not bound by the approved proposal");
   let approved;
   try {
@@ -45926,7 +54955,7 @@ function verifyTeamAuthority(input) {
 }
 function approveOraclePlan(input) {
   if (!isSafeSegment(input.phase)) return refuse5("oracle_plan_invalid", "invalid phase");
-  const planBytes = regularBytes(path88.resolve(input.cwd, oraclePlanRel(input.runId, input.phase)));
+  const planBytes = regularBytes(path89.resolve(input.cwd, oraclePlanRel(input.runId, input.phase)));
   if (planBytes === null) return refuse5("oracle_plan_missing");
   let plan;
   try {
@@ -45946,16 +54975,16 @@ function approveOraclePlan(input) {
     operator_uid: currentUid(),
     at: (input.now ?? (() => (/* @__PURE__ */ new Date()).toISOString()))()
   };
-  const outcome = writeExclusiveIdempotent(path88.resolve(input.cwd, rel2), json(decision));
+  const outcome = writeExclusiveIdempotent(path89.resolve(input.cwd, rel2), json(decision));
   if (outcome === "conflict") {
-    const existing = readJsonFile2(path88.resolve(input.cwd, rel2));
+    const existing = readJsonFile2(path89.resolve(input.cwd, rel2));
     if (existing?.oracle_plan_sha256 === digest) return { ok: true, path: rel2, oracle_plan_sha256: digest };
     return refuse5("oracle_plan_decision_conflict");
   }
   return { ok: true, path: rel2, oracle_plan_sha256: digest };
 }
 function locateAssignment(assignmentPath) {
-  if (typeof assignmentPath !== "string" || !path88.isAbsolute(assignmentPath)) return refuse5("assignment_path_not_absolute");
+  if (typeof assignmentPath !== "string" || !path89.isAbsolute(assignmentPath)) return refuse5("assignment_path_not_absolute");
   const bytes = regularBytes(assignmentPath);
   if (bytes === null) return refuse5("assignment_unreadable");
   let assignment;
@@ -45966,10 +54995,10 @@ function locateAssignment(assignmentPath) {
   }
   if (!assignment) return refuse5("assignment_malformed");
   const canonical = taskCellPaths(idsOf(assignment)).assignment_path;
-  const normalized = path88.normalize(assignmentPath);
-  if (!normalized.endsWith(path88.sep + canonical)) return refuse5("assignment_path_not_canonical");
+  const normalized = path89.normalize(assignmentPath);
+  if (!normalized.endsWith(path89.sep + canonical)) return refuse5("assignment_path_not_canonical");
   const root = normalized.slice(0, normalized.length - canonical.length - 1);
-  if (root.length === 0 || !path88.isAbsolute(root)) return refuse5("assignment_path_not_canonical");
+  if (root.length === 0 || !path89.isAbsolute(root)) return refuse5("assignment_path_not_canonical");
   return { root, assignment, bytes };
 }
 function writeAckClaim(input) {
@@ -45983,7 +55012,7 @@ function writeAckClaim(input) {
     assignment_sha256: sha2567(bytes),
     claimed_at: (input.now ?? (() => (/* @__PURE__ */ new Date()).toISOString()))()
   };
-  const abs = path88.join(root, outboxRel(assignment.run_id, assignment.instance_id, "ack-claim.json"));
+  const abs = path89.join(root, outboxRel(assignment.run_id, assignment.instance_id, "ack-claim.json"));
   let created;
   try {
     created = writeExclusiveContained(root, outboxRel(assignment.run_id, assignment.instance_id, "ack-claim.json"), json(claim));
@@ -45997,8 +55026,8 @@ function writeAckClaim(input) {
 }
 function readValidAckClaim(cwd, assignment) {
   const rel2 = outboxRel(assignment.run_id, assignment.instance_id, "ack-claim.json");
-  const bytes = regularBytes(path88.resolve(cwd, rel2));
-  const assignmentBytes = regularBytes(path88.resolve(cwd, assignment.assignment_path));
+  const bytes = regularBytes(path89.resolve(cwd, rel2));
+  const assignmentBytes = regularBytes(path89.resolve(cwd, assignment.assignment_path));
   if (bytes === null || assignmentBytes === null) return null;
   let claim;
   try {
@@ -46013,14 +55042,14 @@ function replayedNoticeShas(cwd, runId, exceptInstance) {
   const out = /* @__PURE__ */ new Set();
   for (const { ids } of walkInstances(cwd, runId)) {
     if (ids.instance_id === exceptInstance) continue;
-    const origin = readJsonFile2(path88.resolve(cwd, originRel(ids)));
+    const origin = readJsonFile2(path89.resolve(cwd, originRel(ids)));
     for (const c of origin?.reported_claims ?? []) out.add(c.sha256);
   }
   return out;
 }
 function classifyNotice(cwd, assignment, packageIdentity) {
   const rel2 = outboxRel(assignment.run_id, assignment.instance_id, "task-completed-notice.json");
-  const bytes = regularBytes(path88.resolve(cwd, rel2));
+  const bytes = regularBytes(path89.resolve(cwd, rel2));
   if (bytes === null) return [];
   const digest = sha2567(bytes);
   let notice = null;
@@ -46069,9 +55098,9 @@ function submitObservedHandoff(input) {
     reported_claims: classifyNotice(input.cwd, input.assignment, input.packageIdentity)
   };
   const rel2 = originRel(idsOf(input.assignment));
-  const outcome = writeExclusiveIdempotent(path88.resolve(input.cwd, rel2), json(origin));
+  const outcome = writeExclusiveIdempotent(path89.resolve(input.cwd, rel2), json(origin));
   if (outcome === "conflict") {
-    const existing = readJsonFile2(path88.resolve(input.cwd, rel2));
+    const existing = readJsonFile2(path89.resolve(input.cwd, rel2));
     if (!existing || existing.receipt_sha256 !== origin.receipt_sha256 || existing.controller_instance_id !== origin.controller_instance_id) {
       return refuse5("handoff_origin_conflict");
     }
@@ -46080,7 +55109,7 @@ function submitObservedHandoff(input) {
   return { ok: true, origin, origin_ref: fileRef(input.cwd, rel2) };
 }
 function walkInstances(cwd, runId) {
-  const cellsRoot = path88.join(durableGuildDir(cwd), "runs", runId, "task-cells");
+  const cellsRoot = path89.join(durableGuildDir(cwd), "runs", runId, "task-cells");
   const out = [];
   const list = (dir) => {
     try {
@@ -46090,11 +55119,11 @@ function walkInstances(cwd, runId) {
     }
   };
   for (const logical of list(cellsRoot)) {
-    for (const attemptDir of list(path88.join(cellsRoot, logical, "attempts"))) {
+    for (const attemptDir of list(path89.join(cellsRoot, logical, "attempts"))) {
       const attempt = Number.parseInt(attemptDir, 10);
       if (!Number.isInteger(attempt) || attempt < 1 || String(attempt) !== attemptDir) continue;
       const attemptRel = runRel(runId, "task-cells", logical, "attempts", attemptDir, "attempt.json");
-      for (const instance of list(path88.join(cellsRoot, logical, "attempts", attemptDir, "instances"))) {
+      for (const instance of list(path89.join(cellsRoot, logical, "attempts", attemptDir, "instances"))) {
         out.push({ ids: { run_id: runId, logical_task_id: logical, attempt, instance_id: instance }, attemptRel });
       }
     }
@@ -46122,11 +55151,11 @@ function recordAuthorityDecision(input) {
     return refuse5("lead_binding_mismatch");
   }
   const ids = idsOf(assignment);
-  const validation = readJsonFile2(path88.resolve(input.cwd, taskCellPaths(ids).validation_path));
+  const validation = readJsonFile2(path89.resolve(input.cwd, taskCellPaths(ids).validation_path));
   if (!validation || validation.schema_version !== "guild.handoff_validation.v1" || validation.assignment_id !== assignmentId(assignment)) {
     return refuse5("validation_absent");
   }
-  if (regularBytes(path88.resolve(input.cwd, taskCellPaths(ids).receipt_path)) === null) return refuse5("retained_receipt_absent");
+  if (regularBytes(path89.resolve(input.cwd, taskCellPaths(ids).receipt_path)) === null) return refuse5("retained_receipt_absent");
   const record = {
     schema_version: TASK_CELL_DECISION_SCHEMA,
     run_id: input.runId,
@@ -46143,12 +55172,12 @@ function recordAuthorityDecision(input) {
     reason: input.reason ?? null
   };
   const rel2 = decisionRel(input.runId, input.instanceId);
-  if (!writeExclusive(path88.resolve(input.cwd, rel2), json(record))) return refuse5("decision_already_recorded");
+  if (!writeExclusive(path89.resolve(input.cwd, rel2), json(record))) return refuse5("decision_already_recorded");
   return { ok: true, path: rel2, decision: record };
 }
 function readTeamLeadDecision(cwd, assignment, claim, validation, operatorUid) {
   const rel2 = decisionRel(assignment.run_id, assignment.instance_id);
-  const abs = path88.resolve(cwd, rel2);
+  const abs = path89.resolve(cwd, rel2);
   if (!fs75.existsSync(abs)) return refuse5("awaiting_team_lead");
   if (!ownedByUid(abs, operatorUid)) return refuse5("team_lead_decision_untrusted_file");
   const bytes = regularBytes(abs);
@@ -46183,13 +55212,13 @@ function verifyBrokerReview(input) {
   }
   const dirContained = checkContained(input.cwd, request.evidence_dir, { policy: "physical" });
   if (isRefused(dirContained)) return refused("review_evidence_dir_uncontained");
-  const dirAbs = path88.resolve(input.cwd, request.evidence_dir);
+  const dirAbs = path89.resolve(input.cwd, request.evidence_dir);
   const dirStat = fs75.lstatSync(dirAbs, { throwIfNoEntry: false });
   if (dirStat !== void 0 && (dirStat.isSymbolicLink() || !dirStat.isDirectory())) return refused("review_evidence_dir_uncontained");
-  const rel2 = (name) => path88.relative(input.cwd, path88.join(dirAbs, name));
+  const rel2 = (name) => path89.relative(input.cwd, path89.join(dirAbs, name));
   const names = ["candidate.json", "packet.txt", "adapter-exit.json", "result.json", "invocation.json"];
   for (const name of names) {
-    const abs = path88.join(dirAbs, name);
+    const abs = path89.join(dirAbs, name);
     let exists = false;
     try {
       fs75.lstatSync(abs);
@@ -46230,7 +55259,7 @@ function verifyBrokerReview(input) {
   if (joinRefusal !== null) return refused(joinRefusal);
   if (invocation.packet_id !== request.packet_id || invocation.request_id !== request.request_id || invocation.reviewer_participant_id !== request.reviewer_participant_id || invocation.participation_kind !== request.participation_kind || invocation.role_ref !== request.role_ref) return refused("invocation_request_mismatch");
   const joins = [
-    ["request", requestBytes, path88.relative(input.cwd, requestAbs)],
+    ["request", requestBytes, path89.relative(input.cwd, requestAbs)],
     ["candidate", bytes["candidate.json"], rel2("candidate.json")],
     ["packet", bytes["packet.txt"], rel2("packet.txt")],
     ["result", bytes["result.json"], rel2("result.json")],
@@ -46238,7 +55267,7 @@ function verifyBrokerReview(input) {
   ];
   for (const [field, b, relPath] of joins) {
     const ref = invocation[field];
-    if (ref.sha256 !== sha2567(b) || path88.normalize(ref.path) !== path88.normalize(relPath)) return refused(`invocation_hash_mismatch:${String(field)}`);
+    if (ref.sha256 !== sha2567(b) || path89.normalize(ref.path) !== path89.normalize(relPath)) return refused(`invocation_hash_mismatch:${String(field)}`);
   }
   if ((input.knownInvocationIds ?? []).includes(invocation.invocation_id)) return refused("invocation_id_reused");
   const adapterMismatch = invocationAdapterMismatch(invocation, adapterExit);
@@ -46246,8 +55275,8 @@ function verifyBrokerReview(input) {
   if (invocation.exit !== 0 || adapterExit["exit"] !== 0) return refused("broker_exit_nonzero");
   if (!(Date.parse(invocation.started_at) < Date.parse(invocation.finished_at))) return refused("invocation_times_invalid");
   try {
-    const resultMtime = fs75.lstatSync(path88.join(dirAbs, "result.json")).mtimeMs;
-    const invocationMtime = fs75.lstatSync(path88.join(dirAbs, "invocation.json")).mtimeMs;
+    const resultMtime = fs75.lstatSync(path89.join(dirAbs, "result.json")).mtimeMs;
+    const invocationMtime = fs75.lstatSync(path89.join(dirAbs, "invocation.json")).mtimeMs;
     if (resultMtime > invocationMtime) return refused("result_after_invocation");
   } catch {
     return refused("review_evidence_unreadable");
@@ -46270,7 +55299,7 @@ function verifyBrokerReview(input) {
     participation_kind: slot.participation_kind,
     role_ref: slot.role_ref,
     packet_id: request.packet_id,
-    request: { path: path88.relative(input.cwd, requestAbs), sha256: sha2567(requestBytes) },
+    request: { path: path89.relative(input.cwd, requestAbs), sha256: sha2567(requestBytes) },
     candidate: { path: rel2("candidate.json"), sha256: sha2567(bytes["candidate.json"]) },
     packet: { path: rel2("packet.txt"), sha256: sha2567(bytes["packet.txt"]) },
     invocation: { path: rel2("invocation.json"), sha256: sha2567(bytes["invocation.json"]), invocation_id: invocation.invocation_id },
@@ -46291,7 +55320,7 @@ function verifyBrokerReview(input) {
 function deriveReviewerCellAuthority(input) {
   return verifyBrokerReview({
     cwd: input.cwd,
-    requestAbs: path88.isAbsolute(input.requestPath) ? input.requestPath : path88.resolve(input.cwd, input.requestPath),
+    requestAbs: path89.isAbsolute(input.requestPath) ? input.requestPath : path89.resolve(input.cwd, input.requestPath),
     proposal: input.proposal,
     reviewedHostFamily: input.reviewedHostFamily,
     operatorUid: input.operatorUid,
@@ -46303,7 +55332,7 @@ function deriveReviewerCellAuthority(input) {
       if (pinned?.path !== r.retained_receipt?.path || pinned?.sha256 !== r.retained_receipt?.sha256) {
         return "candidate_receipt_not_pinned";
       }
-      const receiptNow = regularBytes(path88.resolve(input.cwd, r.retained_receipt.path));
+      const receiptNow = regularBytes(path89.resolve(input.cwd, r.retained_receipt.path));
       if (receiptNow === null || sha2567(receiptNow) !== r.retained_receipt.sha256) return "retained_receipt_changed";
       return null;
     }
@@ -46325,10 +55354,10 @@ function otherRunInvocationIds(root, runId, exceptPacket) {
   return otherInvocationIds(root, runId, exceptPacket);
 }
 function readRootFile(root, rel2, operatorUid) {
-  if (typeof rel2 !== "string" || rel2.length === 0 || path88.isAbsolute(rel2)) return null;
-  const abs = path88.resolve(root, rel2);
-  const relNorm = path88.relative(root, abs);
-  if (relNorm.startsWith("..") || path88.isAbsolute(relNorm)) return null;
+  if (typeof rel2 !== "string" || rel2.length === 0 || path89.isAbsolute(rel2)) return null;
+  const abs = path89.resolve(root, rel2);
+  const relNorm = path89.relative(root, abs);
+  if (relNorm.startsWith("..") || path89.isAbsolute(relNorm)) return null;
   if (!ownedByUid(abs, operatorUid)) return null;
   const bytes = containedBytes(root, relNorm);
   return bytes === null ? null : { bytes, ref: { path: relNorm, sha256: sha2567(bytes) } };
@@ -46338,7 +55367,7 @@ function verifySourceBasisReview(input) {
   if (input.expectedCommit === null) return { ok: false, reason: "source_commit_absent", detail: "package source_commit is null" };
   if (!COMMIT_HEX.test(input.expectedCommit)) return no("package source_commit is not a 40-hex commit");
   const b = input.basis;
-  if (!b || typeof b.root !== "string" || !path88.isAbsolute(b.root)) return no("basis root must be absolute");
+  if (!b || typeof b.root !== "string" || !path89.isAbsolute(b.root)) return no("basis root must be absolute");
   let root;
   try {
     root = fs75.realpathSync(b.root);
@@ -46369,7 +55398,7 @@ function verifySourceBasisReview(input) {
   if (!request) return no("basis request is not a guild.source_basis_review_request.v1");
   const authority = verifyBrokerReview({
     cwd: root,
-    requestAbs: path88.resolve(root, requestFile.ref.path),
+    requestAbs: path89.resolve(root, requestFile.ref.path),
     proposal,
     reviewedHostFamily: request.reviewed.host_family,
     operatorUid: input.operatorUid,
@@ -46402,7 +55431,7 @@ function verifySourceBasisReview(input) {
 function reverifyReviewedBasis(pins, currentCommit, operatorUid) {
   if (!pins || typeof pins.root !== "string") return false;
   for (const ref of [pins.proposal, pins.decision, pins.request, pins.candidate, pins.packet, pins.adapter_exit, pins.invocation, pins.result]) {
-    const bytes = ref && regularBytes(path88.resolve(pins.root, ref.path));
+    const bytes = ref && regularBytes(path89.resolve(pins.root, ref.path));
     if (!bytes || sha2567(bytes) !== ref.sha256) return false;
   }
   const again = verifySourceBasisReview({
@@ -46413,7 +55442,7 @@ function reverifyReviewedBasis(pins, currentCommit, operatorUid) {
   return again.ok && again.pins.commit === pins.commit && JSON.stringify(again.pins) === JSON.stringify(pins);
 }
 function otherInvocationIds(cwd, runId, exceptPacket) {
-  const reviewRoot = path88.resolve(cwd, runRel(runId, "review"));
+  const reviewRoot = path89.resolve(cwd, runRel(runId, "review"));
   let dirs;
   try {
     dirs = fs75.readdirSync(reviewRoot);
@@ -46423,13 +55452,13 @@ function otherInvocationIds(cwd, runId, exceptPacket) {
   const out = [];
   for (const d of dirs) {
     if (d === exceptPacket) continue;
-    const inv = readJsonFile2(path88.join(reviewRoot, d, "invocation.json"));
+    const inv = readJsonFile2(path89.join(reviewRoot, d, "invocation.json"));
     if (typeof inv?.invocation_id === "string") out.push(inv.invocation_id);
   }
   return out;
 }
 function readPre(cwd, ids) {
-  const abs = path88.resolve(cwd, evidenceRel(ids.run_id, ids.instance_id, "pre.json"));
+  const abs = path89.resolve(cwd, evidenceRel(ids.run_id, ids.instance_id, "pre.json"));
   const bytes = regularBytes(abs);
   if (bytes === null) return null;
   try {
@@ -46451,7 +55480,7 @@ function verifyReleaseConsumerContext(c, root, ids) {
   if (!Array.isArray(c.instance_ids) || !c.instance_ids.every(str2)) return null;
   if (c.root_id !== root.root_id || c.source_id !== root.source_id) return null;
   if (c.run_id !== ids.run_id || !c.instance_ids.includes(ids.instance_id)) return null;
-  if (!path88.isAbsolute(c.package_root)) return null;
+  if (!path89.isAbsolute(c.package_root)) return null;
   let current;
   try {
     current = readPackageIdentity(c.package_root);
@@ -46470,8 +55499,8 @@ function verifyReleaseConsumerContext(c, root, ids) {
   };
 }
 function lifecycleEventsComplete(cwd, ids) {
-  const telemetryDir2 = path88.join(durableGuildDir(cwd), "runs", ids.run_id, "task-cell-telemetry");
-  if (!fs75.existsSync(path88.join(telemetryDir2, "events.jsonl"))) return false;
+  const telemetryDir2 = path89.join(durableGuildDir(cwd), "runs", ids.run_id, "task-cell-telemetry");
+  if (!fs75.existsSync(path89.join(telemetryDir2, "events.jsonl"))) return false;
   let events;
   try {
     events = readTaskCellLifecycleEvents({ cwd, runId: ids.run_id });
@@ -46480,7 +55509,7 @@ function lifecycleEventsComplete(cwd, ids) {
   }
   for (const name of ["handoff_validated", "handoff_accepted"]) {
     const event = events.find((e) => e.instance_id === ids.instance_id && e.event_name === name);
-    if (!event || !fs75.existsSync(path88.join(telemetryDir2, "event-ids", event.event_id))) return false;
+    if (!event || !fs75.existsSync(path89.join(telemetryDir2, "event-ids", event.event_id))) return false;
   }
   return true;
 }
@@ -46493,7 +55522,7 @@ function isQualifiedDownstreamRelease(cwd, runAcceptance, consumer) {
   if (acceptance.downstream_release_at === null) return verdict("not_released");
   const uid = currentUid();
   const preRead = readPre(cwd, ids);
-  const finalAbs = path88.resolve(cwd, evidenceRel(ids.run_id, ids.instance_id, "final.json"));
+  const finalAbs = path89.resolve(cwd, evidenceRel(ids.run_id, ids.instance_id, "final.json"));
   const finalBytes = regularBytes(finalAbs);
   if (!preRead || finalBytes === null) return verdict("finalization_incomplete");
   if (!ownedByUid(preRead.abs, uid) || !ownedByUid(finalAbs, uid)) return verdict("evidence_untrusted_file");
@@ -46505,11 +55534,11 @@ function isQualifiedDownstreamRelease(cwd, runAcceptance, consumer) {
   } catch {
     return verdict("finalization_incomplete", producer);
   }
-  const acceptanceBytes = regularBytes(path88.resolve(cwd, taskCellPaths(ids).acceptance_path));
+  const acceptanceBytes = regularBytes(path89.resolve(cwd, taskCellPaths(ids).acceptance_path));
   if (final.schema_version !== ACCEPTANCE_EVIDENCE_FINAL_SCHEMA || final.pre_sha256 !== sha2567(preRead.bytes) || acceptanceBytes === null || final.acceptance_sha256 !== sha2567(acceptanceBytes)) return verdict("evidence_binding_mismatch", producer);
   if (pre.identity.run_id !== ids.run_id || pre.identity.instance_id !== ids.instance_id || pre.identity.logical_task_id !== ids.logical_task_id || pre.identity.attempt !== ids.attempt) return verdict("evidence_binding_mismatch", producer);
   for (const pin of pre.pins) {
-    const bytes = regularBytes(path88.resolve(cwd, pin.path));
+    const bytes = regularBytes(path89.resolve(cwd, pin.path));
     if (bytes === null || sha2567(bytes) !== pin.sha256) return verdict("bound_hash_mismatch", producer);
   }
   let root;
@@ -46563,9 +55592,9 @@ function isQualifiedDownstreamRelease(cwd, runAcceptance, consumer) {
   if (final.reconciliation_manifest_complete !== true || !Array.isArray(final.reconciliation_manifest)) {
     return verdict("reconciliation_manifest_incomplete", producer);
   }
-  const events = readBusLog(path88.join(durableGuildDir(cwd), "runs", ids.run_id));
+  const events = readBusLog(path89.join(durableGuildDir(cwd), "runs", ids.run_id));
   for (const entry of final.reconciliation_manifest) {
-    const bytes = regularBytes(path88.resolve(cwd, entry.path));
+    const bytes = regularBytes(path89.resolve(cwd, entry.path));
     if (bytes === null || sha2567(bytes) !== entry.sha256) return verdict("reconciliation_sidecar_missing", producer);
     let side;
     try {
@@ -46581,26 +55610,26 @@ function isQualifiedDownstreamRelease(cwd, runAcceptance, consumer) {
       return verdict("reconciliation_sidecar_missing", producer);
     }
   }
-  const sidecarDir = path88.resolve(cwd, controllerRel(ids.run_id, "reconciliations", ids.instance_id));
+  const sidecarDir = path89.resolve(cwd, controllerRel(ids.run_id, "reconciliations", ids.instance_id));
   let sidecars = [];
   try {
     sidecars = fs75.readdirSync(sidecarDir);
   } catch {
     sidecars = [];
   }
-  const listed = new Set(final.reconciliation_manifest.map((m) => path88.normalize(m.path)));
+  const listed = new Set(final.reconciliation_manifest.map((m) => path89.normalize(m.path)));
   for (const name of sidecars) {
-    if (!listed.has(path88.normalize(reconciliationRel(ids.run_id, ids.instance_id, path88.basename(name, ".json"))))) {
+    if (!listed.has(path89.normalize(reconciliationRel(ids.run_id, ids.instance_id, path89.basename(name, ".json"))))) {
       return verdict("reconciliation_manifest_incomplete", producer);
     }
   }
   const kinds = ["assignment", "ack", "handoff", "validation", "acceptance", "team_plan"];
   const assignment = readTaskAssignmentV2(cwd, taskCellPaths(ids).assignment_path);
   if (!assignment) return verdict("prerelease_bus_join_missing", producer);
-  if (fs75.existsSync(path88.resolve(cwd, assignment.context_bundle_id))) kinds.push("context");
+  if (fs75.existsSync(path89.resolve(cwd, assignment.context_bundle_id))) kinds.push("context");
   if (verifyPrereleaseBusJoins(cwd, ids, kinds).some((j) => j.reason !== null)) return verdict("prerelease_bus_join_missing", producer);
   const plan = readTeamPlan(cwd, ids.run_id, assignment.phase_id);
-  const planBytes = regularBytes(path88.resolve(cwd, runRel(ids.run_id, "team-plan", `${assignment.phase_id}.json`)));
+  const planBytes = regularBytes(path89.resolve(cwd, runRel(ids.run_id, "team-plan", `${assignment.phase_id}.json`)));
   if (!plan || planBytes === null) return verdict("prerelease_bus_join_missing", producer);
   return verdict(null, producer);
 }
@@ -46619,7 +55648,7 @@ function readControllerStatus(input) {
       return null;
     }
   })();
-  const claimPresent = fs75.existsSync(path88.resolve(input.cwd, claimRel(input.runId)));
+  const claimPresent = fs75.existsSync(path89.resolve(input.cwd, claimRel(input.runId)));
   const claim = readClaim(input.cwd, input.runId);
   const owner = classifyControllerOwner(input.cwd, input.runId, now);
   const consumerContext = input.consumerContext ?? { mode: "same_run" };
@@ -46630,7 +55659,7 @@ function readControllerStatus(input) {
   let anyIncomplete = false;
   for (const { ids } of walkInstances(input.cwd, input.runId)) {
     const attempt = readAttemptForInstance(input.cwd, ids);
-    const acc = readJsonFile2(path88.resolve(input.cwd, taskCellPaths(ids).acceptance_path));
+    const acc = readJsonFile2(path89.resolve(input.cwd, taskCellPaths(ids).acceptance_path));
     const accepted = acc?.schema_version === "guild.handoff_acceptance.v1" ? acc : null;
     let qualified = false;
     let telemetry = "unknown";
@@ -46642,8 +55671,8 @@ function readControllerStatus(input) {
       if (v.reason === "qualified_other_context") anyOtherContext = true;
       if (v.reason === "finalization_incomplete") anyIncomplete = true;
     }
-    const cleanup = readJsonFile2(path88.resolve(input.cwd, cleanupRel(ids.run_id, ids.instance_id, "cleanup.json")));
-    const handle = readJsonFile2(path88.resolve(input.cwd, handleRel(ids.run_id, ids.instance_id)));
+    const cleanup = readJsonFile2(path89.resolve(input.cwd, cleanupRel(ids.run_id, ids.instance_id, "cleanup.json")));
+    const handle = readJsonFile2(path89.resolve(input.cwd, handleRel(ids.run_id, ids.instance_id)));
     instances.push({
       instance_id: ids.instance_id,
       logical_task_id: ids.logical_task_id,
@@ -46702,7 +55731,7 @@ function readControllerStatus(input) {
       root_id: root?.root_id ?? null,
       source_id: root?.source_id ?? null,
       root_fingerprint: root?.root_fingerprint ?? null,
-      guild_root_path: root?.guild_root_path ?? path88.resolve(input.cwd),
+      guild_root_path: root?.guild_root_path ?? path89.resolve(input.cwd),
       run_id: input.runId,
       management_session_id: input.managementSessionId ?? null,
       controller_instance_id: claim?.controller_instance_id ?? null,
@@ -46770,7 +55799,7 @@ function recordControllerLoss(input) {
   const teardown = input.teardown ?? null;
   const observations = [];
   for (const { ids, attemptRel } of walkInstances(input.cwd, input.runId)) {
-    const attemptAbs = path88.resolve(input.cwd, attemptRel);
+    const attemptAbs = path89.resolve(input.cwd, attemptRel);
     const rawText = regularBytes(attemptAbs)?.toString("utf8") ?? null;
     if (rawText !== null && isInstanceReservation(rawText)) {
       observations.push({ ...ids, outcome: "placeholder_unwritten" });
@@ -46782,10 +55811,10 @@ function recordControllerLoss(input) {
       observations.push({ ...ids, outcome: publishLossIfUnpublished(input.cwd, ids, binding, now) });
       continue;
     }
-    const finalExists = fs75.existsSync(path88.resolve(input.cwd, evidenceRel(ids.run_id, ids.instance_id, "final.json")));
-    const acceptanceExists = fs75.existsSync(path88.resolve(input.cwd, taskCellPaths(ids).acceptance_path));
+    const finalExists = fs75.existsSync(path89.resolve(input.cwd, evidenceRel(ids.run_id, ids.instance_id, "final.json")));
+    const acceptanceExists = fs75.existsSync(path89.resolve(input.cwd, taskCellPaths(ids).acceptance_path));
     const finalizationIncomplete = acceptanceExists && !finalExists;
-    const handle = readJsonFile2(path88.resolve(input.cwd, handleRel(ids.run_id, ids.instance_id)));
+    const handle = readJsonFile2(path89.resolve(input.cwd, handleRel(ids.run_id, ids.instance_id)));
     const orphan = (outcome, teardownResult = null, unavailable = null) => {
       let status = outcome;
       try {
@@ -46863,7 +55892,7 @@ function recordControllerLoss(input) {
     } else if (result2.confirmed) orphan("teardown_unconfirmed_process_alive", result2);
     else orphan("teardown_unconfirmed", result2);
   }
-  const lossDir = path88.resolve(input.cwd, controllerRel(input.runId, "loss", claim.controller_instance_id));
+  const lossDir = path89.resolve(input.cwd, controllerRel(input.runId, "loss", claim.controller_instance_id));
   fs75.mkdirSync(lossDir, { recursive: true, mode: 448 });
   let seq = 1;
   const observation = {
@@ -46873,9 +55902,9 @@ function recordControllerLoss(input) {
     observed_at: now(),
     attempts: observations
   };
-  while (!writeExclusive(path88.join(lossDir, `observation-${String(seq).padStart(4, "0")}.json`), json({ ...observation, seq }))) seq++;
+  while (!writeExclusive(path89.join(lossDir, `observation-${String(seq).padStart(4, "0")}.json`), json({ ...observation, seq }))) seq++;
   writeExclusive(
-    path88.resolve(input.cwd, controllerRel(input.runId, `loss-${claim.controller_instance_id}.json`)),
+    path89.resolve(input.cwd, controllerRel(input.runId, `loss-${claim.controller_instance_id}.json`)),
     json({ schema_version: CONTROLLER_LOSS_MARKER_SCHEMA, run_id: input.runId, controller_instance_id: claim.controller_instance_id, recorded_at: observation.observed_at })
   );
   return { ok: true, run_id: input.runId, controller_instance_id: claim.controller_instance_id, seq, attempts: observations };
@@ -46933,10 +55962,10 @@ function createTaskCellController(opts) {
   const selection = opts.principal ? opts.principal.worker_trust_policy === opts.workerTrustPolicy ? { ok: true, provider: opts.principal } : selectPrincipalProvider(opts.workerTrustPolicy) : selectPrincipalProvider(opts.workerTrustPolicy);
   if (!selection.ok) return refuse5(selection.reason);
   const principal = selection.provider;
-  const cwd = path88.resolve(opts.cwd);
+  const cwd = path89.resolve(opts.cwd);
   const plan = readApprovedOraclePlan(cwd, opts.runId, opts.phase);
   if (!("plan" in plan)) return plan;
-  const existing = path88.resolve(cwd, claimRel(opts.runId));
+  const existing = path89.resolve(cwd, claimRel(opts.runId));
   if (fs75.existsSync(existing)) return refuseExistingClaim(cwd, opts.runId, now());
   if (!opts.worker) return refuse5("worker_transport_unavailable");
   if (!opts.rungPlan) return refuse5("rung_plan_required");
@@ -46989,14 +56018,14 @@ function createTaskCellController(opts) {
     started_at: now(),
     reviewed_basis: reviewedBasis
   };
-  fs75.mkdirSync(path88.resolve(cwd, controllerRel(opts.runId)), { recursive: true, mode: 448 });
+  fs75.mkdirSync(path89.resolve(cwd, controllerRel(opts.runId)), { recursive: true, mode: 448 });
   if (!writeExclusive(existing, json(claim))) return refuseExistingClaim(cwd, opts.runId, now());
   try {
     const controller = new TaskCellController({ cwd, claim, binding, plan, principal, membership: team.membership, opts: { ...opts, now } });
     controller.startHeartbeat();
     return { ok: true, controller };
   } catch (error) {
-    fs75.writeFileSync(path88.resolve(cwd, heartbeatRel(opts.runId)), json({ state: "failed_closed", heartbeat_at: now() }), { mode: 384 });
+    fs75.writeFileSync(path89.resolve(cwd, heartbeatRel(opts.runId)), json({ state: "failed_closed", heartbeat_at: now() }), { mode: 384 });
     return refuse5(error instanceof ControllerRefusal ? error.reason : "controller_construction_failed", error.message);
   }
 }
@@ -47011,12 +56040,12 @@ function startTaskCellController(opts) {
   const { principal: _ignored, ...rest } = opts;
   return createTaskCellController(rest);
 }
-var import_child_process3, fs75, path88, TASK_CELL_CONTROLLER_SCHEMA, TASK_CELL_CONTROLLER_STATUS_VIEW, TASK_ORACLE_PLAN_SCHEMA, ORACLE_PLAN_DECISION_SCHEMA, ASSIGNMENT_ACK_CLAIM_SCHEMA, HANDOFF_ORIGIN_SCHEMA, TASK_CELL_DECISION_SCHEMA, TASK_CELL_REVIEW_REQUEST_SCHEMA, SOURCE_BASIS_REVIEW_REQUEST_SCHEMA, ACCEPTANCE_EVIDENCE_SCHEMA, ACCEPTANCE_EVIDENCE_FINAL_SCHEMA, TASK_CELL_CLEANUP_SCHEMA, TASK_CELL_RECONCILIATION_SCHEMA, CONTROLLER_LOSS_OBSERVATION_SCHEMA, CONTROLLER_LOSS_MARKER_SCHEMA, CONTROLLER_HANDLE_SCHEMA, ORACLE_EVIDENCE_SCHEMA, CONTROLLER_HEARTBEAT_MS, CONTROLLER_UNRESPONSIVE_MS, REQUIRED_INDEPENDENCE, ControllerRefusal, refuse5, json, handleTmpSeq, controllerRel, claimRel, heartbeatRel, handleRel, decisionRel, reviewRequestRel, evidenceRel, reconciliationRel, cleanupRel, oraclePlanRel, oracleDecisionRel, oracleEvidenceRel, outboxRel, originRel, normalizeStart, derivedDecidedBy, COMMIT_HEX, sameContext, observationUnavailable, CleanupThrewError, errorMessage, realSleep, TaskCellController;
+var import_child_process3, fs75, path89, TASK_CELL_CONTROLLER_SCHEMA, TASK_CELL_CONTROLLER_STATUS_VIEW, TASK_ORACLE_PLAN_SCHEMA, ORACLE_PLAN_DECISION_SCHEMA, ASSIGNMENT_ACK_CLAIM_SCHEMA, HANDOFF_ORIGIN_SCHEMA, TASK_CELL_DECISION_SCHEMA, TASK_CELL_REVIEW_REQUEST_SCHEMA, SOURCE_BASIS_REVIEW_REQUEST_SCHEMA, ACCEPTANCE_EVIDENCE_SCHEMA, ACCEPTANCE_EVIDENCE_FINAL_SCHEMA, TASK_CELL_CLEANUP_SCHEMA, TASK_CELL_RECONCILIATION_SCHEMA, CONTROLLER_LOSS_OBSERVATION_SCHEMA, CONTROLLER_LOSS_MARKER_SCHEMA, CONTROLLER_HANDLE_SCHEMA, ORACLE_EVIDENCE_SCHEMA, CONTROLLER_HEARTBEAT_MS, CONTROLLER_UNRESPONSIVE_MS, REQUIRED_INDEPENDENCE, ControllerRefusal, refuse5, json, handleTmpSeq, controllerRel, claimRel, heartbeatRel, handleRel, decisionRel, reviewRequestRel, evidenceRel, reconciliationRel, cleanupRel, oraclePlanRel, oracleDecisionRel, oracleEvidenceRel, outboxRel, originRel, normalizeStart, derivedDecidedBy, COMMIT_HEX, sameContext, observationUnavailable, CleanupThrewError, errorMessage, realSleep, TaskCellController;
 var init_task_cell_controller = __esm({
   "src/domains/dispatch/task-cell-controller.ts"() {
     import_child_process3 = require("child_process");
     fs75 = __toESM(require("fs"));
-    path88 = __toESM(require("path"));
+    path89 = __toESM(require("path"));
     init_artifact_bus();
     init_task_assignment_v2();
     init_task_cell_contract();
@@ -47080,7 +56109,7 @@ var init_task_cell_controller = __esm({
     oracleDecisionRel = (runId, phase) => runRel(runId, "oracle-plan", `${phase}.decision.json`);
     oracleEvidenceRel = (runId, assignment, oracleId) => runRel(runId, "oracle-evidence", assignment, `${oracleId}.json`);
     outboxRel = (runId, instanceId, name) => runRel(runId, "outbox", instanceId, name);
-    originRel = (ids) => path88.join(taskCellPaths(ids).instance_dir, "handoff-origin.json");
+    originRel = (ids) => path89.join(taskCellPaths(ids).instance_dir, "handoff-origin.json");
     normalizeStart = (s) => typeof s === "string" ? s.trim().replace(/\s+/g, " ") : null;
     derivedDecidedBy = (leadBindingId) => `lead_binding:${leadBindingId}`;
     COMMIT_HEX = /^[0-9a-f]{40}$/;
@@ -47150,9 +56179,9 @@ var init_task_cell_controller = __esm({
       }
       /** The wrapper writes the spawn_pending handle BEFORE spawn and the spawned identity after (CD6). */
       wrapWorker(inner) {
-        const handleAbs = (id) => path88.resolve(this.cwd, handleRel(this.claim.run_id, id));
+        const handleAbs = (id) => path89.resolve(this.cwd, handleRel(this.claim.run_id, id));
         const write2 = (id, record) => {
-          fs75.mkdirSync(path88.dirname(handleAbs(id)), { recursive: true, mode: 448 });
+          fs75.mkdirSync(path89.dirname(handleAbs(id)), { recursive: true, mode: 448 });
           publishHandle(handleAbs(id), record);
         };
         return {
@@ -47193,7 +56222,7 @@ var init_task_cell_controller = __esm({
       }
       setHeartbeat(state) {
         fs75.writeFileSync(
-          path88.resolve(this.cwd, heartbeatRel(this.claim.run_id)),
+          path89.resolve(this.cwd, heartbeatRel(this.claim.run_id)),
           json({ state, heartbeat_at: this.now() }),
           { encoding: "utf8", mode: 384 }
         );
@@ -47213,7 +56242,7 @@ var init_task_cell_controller = __esm({
        * spawn_pending with no identity; only the spawn wrapper records a spawned identity.
        */
       noteHandle(instanceId, patch2) {
-        const abs = path88.resolve(this.cwd, handleRel(this.claim.run_id, instanceId));
+        const abs = path89.resolve(this.cwd, handleRel(this.claim.run_id, instanceId));
         const read = readJsonFile2(abs);
         const valid = read !== null && typeof read === "object" && !Array.isArray(read) && read.schema_version === CONTROLLER_HANDLE_SCHEMA && read.instance_id === instanceId && (read.state === "spawn_pending" || read.state === "spawned");
         const current = valid ? read : { schema_version: CONTROLLER_HANDLE_SCHEMA, instance_id: instanceId, state: "spawn_pending" };
@@ -47231,18 +56260,18 @@ var init_task_cell_controller = __esm({
           publisher: { host_id: "task-cell-controller", role: "task-cell-controller" },
           now: this.now
         });
-        const rel2 = path88.relative(this.cwd, planAbs);
+        const rel2 = path89.relative(this.cwd, planAbs);
         const canonical = runRel(this.claim.run_id, "team-plan", `${this.phaseStation()}.json`);
-        if (rel2 !== canonical || rel2.startsWith("..") || path88.isAbsolute(rel2)) throw new ControllerRefusal("team_plan_path_refused");
+        if (rel2 !== canonical || rel2.startsWith("..") || path89.isAbsolute(rel2)) throw new ControllerRefusal("team_plan_path_refused");
         const stat = fs75.lstatSync(planAbs);
         if (!stat.isFile() || stat.isSymbolicLink()) throw new ControllerRefusal("team_plan_path_refused");
         const realRoot2 = fs75.realpathSync(this.cwd);
-        if (!fs75.realpathSync(planAbs).startsWith(realRoot2 + path88.sep)) throw new ControllerRefusal("team_plan_path_refused");
+        if (!fs75.realpathSync(planAbs).startsWith(realRoot2 + path89.sep)) throw new ControllerRefusal("team_plan_path_refused");
         this.planRel = rel2;
         return rel2;
       }
       phaseStation() {
-        return path88.basename(this.plan.plan_ref.path, ".json");
+        return path89.basename(this.plan.plan_ref.path, ".json");
       }
       planLane(logicalTaskId) {
         return this.plan.plan.lanes.find((l) => l.logical_task_id === logicalTaskId) ?? null;
@@ -47279,7 +56308,7 @@ var init_task_cell_controller = __esm({
         const modelFamily = registryFamily === null ? null : modelFamilyForHostFamily(registryFamily);
         if (modelFamily === null || spec.host.host_family !== modelFamily) return outcome("refused", null, "host_family_mismatch");
         const station = this.phaseStation();
-        const bindingRel = path88.relative(this.cwd, runBindingPath(this.cwd, this.claim.run_id));
+        const bindingRel = path89.relative(this.cwd, runBindingPath(this.cwd, this.claim.run_id));
         if (spec.scope_paths.some((s) => bindingRel === s || bindingRel.startsWith(`${s.replace(/\/$/, "")}/`) || s === "." || s === "")) {
           return outcome("refused", null, "binding_inside_scope");
         }
@@ -47292,7 +56321,7 @@ var init_task_cell_controller = __esm({
         if (dependencies.some((d) => d.accepted_artifact_ref === null)) return outcome("blocked", null, "dependencies_blocked");
         const typed = validateExecutableDoneWhen(lane.done_when, { scope_paths: spec.scope_paths, dependencies });
         if (!typed.ok) return outcome("refused", null, typed.reason);
-        const contextBytes = regularBytes(path88.resolve(this.cwd, spec.context_bundle_id));
+        const contextBytes = regularBytes(path89.resolve(this.cwd, spec.context_bundle_id));
         if (contextBytes === null) return outcome("refused", null, "context_bundle_absent");
         const cell = await this.runtime.spawnCell({
           run_id: this.claim.run_id,
@@ -47433,7 +56462,7 @@ var init_task_cell_controller = __esm({
           this.noteHandle(iid, { runtime_state: "running" });
           const receiptRel = `.guild/runs/${this.claim.run_id}/handoffs/${spec.worker_role}-${spec.logical_task_id}.md`;
           const stable = await this.poll(() => {
-            const a = regularBytes(path88.resolve(this.cwd, receiptRel));
+            const a = regularBytes(path89.resolve(this.cwd, receiptRel));
             return a === null ? null : sha2567(a);
           }, 2e3, spec.receipt_timeout_ms ?? 36e5);
           if (stable === null) {
@@ -47441,7 +56470,7 @@ var init_task_cell_controller = __esm({
             return this.settleLaneTermination(instance, "receipt_timeout", attempt, outcome);
           }
           await this.sleep(2e3);
-          const again = regularBytes(path88.resolve(this.cwd, receiptRel));
+          const again = regularBytes(path89.resolve(this.cwd, receiptRel));
           if (again === null || sha2567(again) !== stable) return outcome("running", iid, null, "receipt_unstable");
           const submitted = submitObservedHandoff({
             cwd: this.cwd,
@@ -47466,7 +56495,7 @@ var init_task_cell_controller = __esm({
           const threwCleanup = error instanceof CleanupThrewError ? error : null;
           const reason = error instanceof ControllerRefusal ? error.reason : threwCleanup?.primary ?? `controller_error:${error.message}`;
           const ids = this.idsFor(instance);
-          const persisted = readJsonFile2(path88.resolve(this.cwd, taskCellPaths(ids).acceptance_path));
+          const persisted = readJsonFile2(path89.resolve(this.cwd, taskCellPaths(ids).acceptance_path));
           if (persisted?.schema_version === "guild.handoff_acceptance.v1" && persisted.downstream_release_at !== null) {
             const prior = threwCleanup ? { prior_error: threwCleanup.cause_message } : {};
             const termination = await this.cleanup(instance, ids, threwCleanup?.final ?? null).then(
@@ -47523,7 +56552,7 @@ var init_task_cell_controller = __esm({
         const rel2 = taskCellPaths(ids).validation_path;
         let reconcilerRan = false;
         for (let round = 0; round < 4; round++) {
-          const persisted = readJsonFile2(path88.resolve(this.cwd, rel2));
+          const persisted = readJsonFile2(path89.resolve(this.cwd, rel2));
           if (!persisted || persisted.schema_version !== "guild.handoff_validation.v1") throw new ControllerRefusal("collect_failed");
           const state2 = (await this.runtime.observe(instance))?.handle.state ?? null;
           if (state2 === "handoff_validated") {
@@ -47576,7 +56605,7 @@ var init_task_cell_controller = __esm({
         const iid = instance.instance_id;
         const observed = (await this.runtime.observe(instance))?.handle.state ?? null;
         const attempt = readAttemptForInstance(this.cwd, ids);
-        const seal = readJsonFile2(path88.resolve(this.cwd, taskCellPaths(ids).terminal_path));
+        const seal = readJsonFile2(path89.resolve(this.cwd, taskCellPaths(ids).terminal_path));
         const orphaned = attempt?.orphaned === true;
         const sealedAs = attempt?.immutable && attempt.terminal_state !== null && seal?.terminal_state === attempt.terminal_state ? attempt.terminal_state : null;
         const result2 = termination?.result;
@@ -47627,10 +56656,10 @@ var init_task_cell_controller = __esm({
       }
       /** True when the bus holds an artifact.published event for the CURRENT bytes of `rel`. */
       busHasCurrentBytes(runId, rel2) {
-        const bytes = regularBytes(path88.resolve(this.cwd, rel2));
+        const bytes = regularBytes(path89.resolve(this.cwd, rel2));
         if (bytes === null) return false;
         const digest = sha2567(bytes);
-        return readBusLog(path88.join(durableGuildDir(this.cwd), "runs", runId)).some((e) => e.event === "artifact.published" && e.path === rel2 && e.sha256 === digest);
+        return readBusLog(path89.join(durableGuildDir(this.cwd), "runs", runId)).some((e) => e.event === "artifact.published" && e.path === rel2 && e.sha256 === digest);
       }
       idsFor(instance) {
         return { run_id: instance.run_id, logical_task_id: instance.logical_task_id, attempt: instance.attempt, instance_id: instance.instance_id };
@@ -47653,7 +56682,7 @@ var init_task_cell_controller = __esm({
         });
         for (let i = 0; i < 3; i++) {
           try {
-            const outcome = writeExclusiveIdempotent(path88.resolve(this.cwd, rel2), body);
+            const outcome = writeExclusiveIdempotent(path89.resolve(this.cwd, rel2), body);
             if (outcome === "conflict") throw new ControllerRefusal("reconciliation_sidecar_conflict");
             return { path: rel2, sha256: sha2567(body) };
           } catch (error) {
@@ -47694,7 +56723,7 @@ var init_task_cell_controller = __esm({
             }
           } else if (decoded.kind === "artifact_exists") {
             const target = decoded.value;
-            const abs = path88.resolve(this.cwd, target.path);
+            const abs = path89.resolve(this.cwd, target.path);
             const realRoot2 = fs75.realpathSync(this.cwd);
             let real = null;
             try {
@@ -47703,7 +56732,7 @@ var init_task_cell_controller = __esm({
               real = null;
             }
             const bytes = regularBytes(abs);
-            if (bytes !== null && real !== null && real.startsWith(realRoot2 + path88.sep)) {
+            if (bytes !== null && real !== null && real.startsWith(realRoot2 + path89.sep)) {
               artifactSha = sha2567(bytes);
               result2 = target.sha256 === null || target.sha256 === artifactSha ? "pass" : "fail";
             }
@@ -47792,7 +56821,7 @@ var init_task_cell_controller = __esm({
         for (const j of joins.filter((x) => x.reason !== null)) {
           if (j.kind !== "handoff") return this.awaiting(iid, "prerelease_bus_join_missing", outcome);
           const pub = publishPersistedLifecycleRecord(this.cwd, ids, "handoff", this.binding, this.now);
-          const pointer = readJsonFile2(path88.resolve(this.cwd, paths.handoff_path));
+          const pointer = readJsonFile2(path89.resolve(this.cwd, paths.handoff_path));
           manifest.push({ kind: "handoff", ...this.writeSidecar(ids, "handoff", pub, pointer?.submitted_at ?? validation.validated_at, null) });
         }
         const preflight = this.preflight(assignment, validation, oracleEvidence, originRef);
@@ -47879,7 +56908,7 @@ var init_task_cell_controller = __esm({
           written_at: writtenAt
         };
         const preRel = evidenceRel(ids.run_id, iid, "pre.json");
-        if (!writeExclusive(path88.resolve(this.cwd, preRel), json(pre))) return this.awaiting(iid, "pre_evidence_exists", outcome);
+        if (!writeExclusive(path89.resolve(this.cwd, preRel), json(pre))) return this.awaiting(iid, "pre_evidence_exists", outcome);
         const accepted = await this.acceptWithRecognition(instance, intended, required, observed, manifest);
         if (!accepted.ok) {
           if (accepted.termination) return this.settleLaneTermination(instance, accepted.reason, accepted.termination, outcome);
@@ -47895,7 +56924,7 @@ var init_task_cell_controller = __esm({
           const cleanupTermination2 = await this.cleanupOrRaise(instance, ids, null, repairIncomplete, false);
           return this.settleLaneTermination(instance, repairIncomplete, cleanupTermination2, outcome);
         }
-        const acceptanceBytes = regularBytes(path88.resolve(this.cwd, paths.acceptance_path));
+        const acceptanceBytes = regularBytes(path89.resolve(this.cwd, paths.acceptance_path));
         if (acceptanceBytes === null) return outcome("handoff_accepted", iid, "finalization_failed");
         const final = {
           schema_version: ACCEPTANCE_EVIDENCE_FINAL_SCHEMA,
@@ -47908,7 +56937,7 @@ var init_task_cell_controller = __esm({
         let finalized = false;
         for (let i = 0; i < 3 && !finalized; i++) {
           try {
-            finalized = writeExclusiveIdempotent(path88.resolve(this.cwd, evidenceRel(ids.run_id, iid, "final.json")), json(final)) !== "conflict";
+            finalized = writeExclusiveIdempotent(path89.resolve(this.cwd, evidenceRel(ids.run_id, iid, "final.json")), json(final)) !== "conflict";
           } catch {
             finalized = false;
           }
@@ -47937,7 +56966,7 @@ var init_task_cell_controller = __esm({
       }
       async reject(instance, lane, validation, authority, at, reason, outcome) {
         const ids = this.idsFor(instance);
-        if (fs75.existsSync(path88.resolve(this.cwd, taskCellPaths(ids).acceptance_path))) {
+        if (fs75.existsSync(path89.resolve(this.cwd, taskCellPaths(ids).acceptance_path))) {
           return this.settleLaneTermination(instance, "acceptance_conflict", null, outcome);
         }
         const termination = await attemptTermination(() => this.runtime.rejectHandoff(instance, {
@@ -47973,7 +57002,7 @@ var init_task_cell_controller = __esm({
           evidence_dir: runRel(ids.run_id, "review", packetId)
         };
         const rel2 = reviewRequestRel(ids.run_id, ids.instance_id);
-        writeExclusiveIdempotent(path88.resolve(this.cwd, rel2), json(request));
+        writeExclusiveIdempotent(path89.resolve(this.cwd, rel2), json(request));
         return rel2;
       }
       /** CD17a P1–P7, reading only artifacts that exist before acceptance. */
@@ -47988,7 +57017,7 @@ var init_task_cell_controller = __esm({
           const now = fileRef(this.cwd, e.path);
           if (!now || now.sha256 !== e.sha256 || e.result !== "pass") return refuse5("preflight_oracle_evidence");
         }
-        const origin = readJsonFile2(path88.resolve(this.cwd, originRef.path));
+        const origin = readJsonFile2(path89.resolve(this.cwd, originRef.path));
         const receipt2 = fileRef(this.cwd, paths.receipt_path);
         if (!origin || fileRef(this.cwd, originRef.path)?.sha256 !== originRef.sha256 || !receipt2 || origin.receipt_sha256 !== receipt2.sha256 || origin.native_task_completed !== false || origin.controller_instance_id !== this.claim.controller_instance_id) return refuse5("preflight_origin");
         const root = readRootIdentity(this.cwd);
@@ -48050,7 +57079,7 @@ var init_task_cell_controller = __esm({
           reason
         }));
         if (termination.result?.ok) return { ok: false, state: "rejected", reason, accepted_fact: false, termination };
-        const record = readJsonFile2(path88.resolve(this.cwd, taskCellPaths(ids).acceptance_path));
+        const record = readJsonFile2(path89.resolve(this.cwd, taskCellPaths(ids).acceptance_path));
         const state = (await this.runtime.observe(instance))?.handle.state ?? "handoff_validated";
         if (record?.schema_version === "guild.handoff_acceptance.v1" && record.downstream_release_at === null) {
           return { ok: false, state, reason, accepted_fact: false, termination };
@@ -48155,7 +57184,7 @@ var init_task_cell_controller = __esm({
               let written = false;
               for (let i = 0; i < 3 && !written; i++) {
                 try {
-                  written = writeExclusiveIdempotent(path88.resolve(this.cwd, rel2), body) !== "conflict";
+                  written = writeExclusiveIdempotent(path89.resolve(this.cwd, rel2), body) !== "conflict";
                 } catch {
                   written = false;
                 }
@@ -48176,11 +57205,11 @@ var init_task_cell_controller = __esm({
           else if (!eventPresent) cleanupState = "lifecycle_event_incomplete";
         }
         const terminal = fileRef(this.cwd, p.terminal_path);
-        const finalBytes = final === null ? null : regularBytes(path88.resolve(this.cwd, evidenceRel(ids.run_id, ids.instance_id, "final.json")));
+        const finalBytes = final === null ? null : regularBytes(path89.resolve(this.cwd, evidenceRel(ids.run_id, ids.instance_id, "final.json")));
         const finalSha = finalBytes !== null && finalBytes.toString("utf8") === json(final) ? sha2567(finalBytes) : null;
         let cleanupRecord;
         try {
-          cleanupRecord = writeExclusive(path88.resolve(this.cwd, cleanupRel(ids.run_id, ids.instance_id, "cleanup.json")), json({
+          cleanupRecord = writeExclusive(path89.resolve(this.cwd, cleanupRel(ids.run_id, ids.instance_id, "cleanup.json")), json({
             schema_version: TASK_CELL_CLEANUP_SCHEMA,
             instance_id: ids.instance_id,
             final_sha256: finalSha,
@@ -48195,7 +57224,7 @@ var init_task_cell_controller = __esm({
         } catch {
           cleanupRecord = "write_failed";
         }
-        const seal = readJsonFile2(path88.resolve(this.cwd, p.terminal_path));
+        const seal = readJsonFile2(path89.resolve(this.cwd, p.terminal_path));
         const sealed = attempt?.immutable === true && attempt.terminal_state != null && seal?.terminal_state === attempt.terminal_state;
         if (sealed) {
           this.noteHandle(ids.instance_id, { runtime_state: attempt.terminal_state, awaiting: null });
@@ -48220,8 +57249,8 @@ var init_task_cell_controller = __esm({
           return {
             role: assignment.worker_role,
             instance_id: assignment.instance_id,
-            handoff_ref: fs75.existsSync(path88.resolve(this.cwd, paths.handoff_path)) ? paths.handoff_path : null,
-            acceptance_ref: fs75.existsSync(path88.resolve(this.cwd, paths.acceptance_path)) ? paths.acceptance_path : null
+            handoff_ref: fs75.existsSync(path89.resolve(this.cwd, paths.handoff_path)) ? paths.handoff_path : null,
+            acceptance_ref: fs75.existsSync(path89.resolve(this.cwd, paths.acceptance_path)) ? paths.acceptance_path : null
           };
         });
         const abs = writeTeamResult(this.cwd, this.claim.run_id, {
@@ -48230,7 +57259,7 @@ var init_task_cell_controller = __esm({
           team_plan_ref: this.planRel,
           lanes
         }, { publisher: { host_id: "task-cell-controller", role: "task-cell-controller" }, now: this.now });
-        return path88.relative(this.cwd, abs);
+        return path89.relative(this.cwd, abs);
       }
       outcomes() {
         return [...this.settled.values()];
@@ -48241,10 +57270,10 @@ var init_task_cell_controller = __esm({
 
 // src/domains/dispatch/comms-format-lint.ts
 function normalisePath(p) {
-  return path89.normalize(p).replace(/\\/g, "/");
+  return path90.normalize(p).replace(/\\/g, "/");
 }
 function loadInventoryAllowList() {
-  const inventoryPath = path89.resolve(
+  const inventoryPath = path90.resolve(
     __dirname,
     // __dirname = <repo>/src/domains/dispatch; three `..` reach the repo root:
     // dispatch → domains → src → <repo>. Overshooting lands on the umbrella
@@ -48441,7 +57470,7 @@ function checkAmbiguousReceipt(filePath, content) {
   return [];
 }
 function checkNewHandRolledYaml(filePath, content, allowList) {
-  const ext = path89.extname(filePath).toLowerCase();
+  const ext = path90.extname(filePath).toLowerCase();
   if (![".ts", ".js", ".tsx", ".jsx"].includes(ext)) return [];
   const normalised = normalisePath(filePath);
   if (SELF_EXEMPT_SUFFIXES.some((s) => normalised.endsWith(s))) return [];
@@ -48503,7 +57532,7 @@ function checkUndeclaredCategory(filePath, content) {
   ];
 }
 function readRunStartedAt(runDir3) {
-  const runYamlPath = path89.join(runDir3, "run.yaml");
+  const runYamlPath = path90.join(runDir3, "run.yaml");
   try {
     if (!fs76.existsSync(runYamlPath)) return null;
     const raw = fs76.readFileSync(runYamlPath, "utf8");
@@ -48527,7 +57556,7 @@ function resolvePathsFromDiffRange(diffRange) {
       encoding: "utf8",
       timeout: 1e4
     });
-    return output.trim().split("\n").filter(Boolean).map((p) => path89.resolve(p));
+    return output.trim().split("\n").filter(Boolean).map((p) => path90.resolve(p));
   } catch {
     return [];
   }
@@ -48560,12 +57589,12 @@ function lintCommsFormat(opts = {}) {
   if (opts.runsDir) {
     try {
       if (!fs76.existsSync(opts.runsDir)) return findings;
-      const runDirs = fs76.readdirSync(opts.runsDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path89.join(opts.runsDir, d.name));
+      const runDirs = fs76.readdirSync(opts.runsDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path90.join(opts.runsDir, d.name));
       for (const runDir3 of runDirs) {
         if (!isRunInScope(runDir3)) continue;
-        const handoffsDir = path89.join(runDir3, "handoffs");
+        const handoffsDir = path90.join(runDir3, "handoffs");
         if (!fs76.existsSync(handoffsDir)) continue;
-        const receiptFiles = fs76.readdirSync(handoffsDir, { withFileTypes: true }).filter((f) => f.isFile() && f.name.endsWith(".md")).map((f) => path89.join(handoffsDir, f.name));
+        const receiptFiles = fs76.readdirSync(handoffsDir, { withFileTypes: true }).filter((f) => f.isFile() && f.name.endsWith(".md")).map((f) => path90.join(handoffsDir, f.name));
         for (const receiptPath of receiptFiles) {
           if (isLegacyExempt(receiptPath)) continue;
           if (inScopePaths.has(receiptPath)) continue;
@@ -48605,22 +57634,22 @@ function parseArgs9(args) {
   const opts = {};
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--paths" && args[i + 1]) {
-      opts.paths = args[++i].split(",").map((p) => path89.resolve(p));
+      opts.paths = args[++i].split(",").map((p) => path90.resolve(p));
     } else if (args[i] === "--diff-range" && args[i + 1]) {
       opts.diffRange = args[++i];
     } else if (args[i] === "--runs-dir" && args[i + 1]) {
-      opts.runsDir = path89.resolve(args[++i]);
+      opts.runsDir = path90.resolve(args[++i]);
     } else if (args[i] === "--enforce") {
       opts.enforce = true;
     }
   }
   return opts;
 }
-var fs76, path89, yaml3, POLICY_EFFECTIVE_DATE, ALLOWED_ENVELOPE_KEYS, VALID_ENVELOPE_TIERS, VALID_ENVELOPE_STATUSES, ENVELOPE_SUMMARY_MAX, ENVELOPE_NOTES_MAX, HAND_ROLLED_PATTERN_SOURCES, HAND_ROLLED_PATTERNS, SELF_EXEMPT_SUFFIXES, COMM_ARTIFACT_TYPES;
+var fs76, path90, yaml3, POLICY_EFFECTIVE_DATE, ALLOWED_ENVELOPE_KEYS, VALID_ENVELOPE_TIERS, VALID_ENVELOPE_STATUSES, ENVELOPE_SUMMARY_MAX, ENVELOPE_NOTES_MAX, HAND_ROLLED_PATTERN_SOURCES, HAND_ROLLED_PATTERNS, SELF_EXEMPT_SUFFIXES, COMM_ARTIFACT_TYPES;
 var init_comms_format_lint = __esm({
   "src/domains/dispatch/comms-format-lint.ts"() {
     fs76 = __toESM(require("fs"));
-    path89 = __toESM(require("path"));
+    path90 = __toESM(require("path"));
     init_distribution();
     init_kernel();
     yaml3 = loadYamlApi();
@@ -48730,7 +57759,7 @@ var init_comms_format_lint = __esm({
 
 // src/domains/dispatch/no-accidental-write.ts
 function normPath(p) {
-  return path90.normalize(p).replace(/\\/g, "/");
+  return path91.normalize(p).replace(/\\/g, "/");
 }
 function isSettingsJson(filePath) {
   const n = normPath(filePath);
@@ -48966,7 +57995,7 @@ function resolvePathsFromDiffRange2(diffRange) {
       encoding: "utf8",
       timeout: 1e4
     });
-    return output.trim().split("\n").filter(Boolean).map((p) => path90.resolve(p));
+    return output.trim().split("\n").filter(Boolean).map((p) => path91.resolve(p));
   } catch {
     return [];
   }
@@ -48974,7 +58003,7 @@ function resolvePathsFromDiffRange2(diffRange) {
 function checkAccidentalWrite(opts = {}) {
   const violations = [];
   const pathSet = new Set(
-    (opts.paths ?? []).map((p) => path90.resolve(p))
+    (opts.paths ?? []).map((p) => path91.resolve(p))
   );
   if (opts.diffRange) {
     for (const p of resolvePathsFromDiffRange2(opts.diffRange)) {
@@ -49007,11 +58036,11 @@ function checkAccidentalWrite(opts = {}) {
     hasViolations: violations.length > 0
   };
 }
-var fs77, path90, yaml4, SETTINGS_JSON_REQUIRED_KEYS, SETTINGS_JSON_KNOWN_KEYS, WORKSPACE_JSON_REQUIRED_KEYS, PROVENANCE_JSON_REQUIRED_KEYS, TRACE_JSONL_REQUIRED_KEYS, DOCS_KNOWLEDGE_FRONTMATTER_REQUIRED_KEYS, KNOWN_PROVENANCE_SCHEMA_VERSIONS;
+var fs77, path91, yaml4, SETTINGS_JSON_REQUIRED_KEYS, SETTINGS_JSON_KNOWN_KEYS, WORKSPACE_JSON_REQUIRED_KEYS, PROVENANCE_JSON_REQUIRED_KEYS, TRACE_JSONL_REQUIRED_KEYS, DOCS_KNOWLEDGE_FRONTMATTER_REQUIRED_KEYS, KNOWN_PROVENANCE_SCHEMA_VERSIONS;
 var init_no_accidental_write = __esm({
   "src/domains/dispatch/no-accidental-write.ts"() {
     fs77 = __toESM(require("fs"));
-    path90 = __toESM(require("path"));
+    path91 = __toESM(require("path"));
     init_kernel();
     yaml4 = loadYamlApi();
     SETTINGS_JSON_REQUIRED_KEYS = Object.freeze([
@@ -49100,7 +58129,7 @@ function parseArgs10(args) {
   const opts = { paths: [], enforce: false };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--paths" && args[i + 1]) {
-      opts.paths = args[++i].split(",").map((p) => p.trim()).filter(Boolean).map((p) => path91.resolve(p));
+      opts.paths = args[++i].split(",").map((p) => p.trim()).filter(Boolean).map((p) => path92.resolve(p));
     } else if (args[i] === "--diff-range" && args[i + 1]) {
       opts.diffRange = args[++i];
     } else if (args[i] === "--enforce") {
@@ -49149,10 +58178,10 @@ function main5(args = process.argv.slice(2)) {
     process.exit(0);
   }
 }
-var path91;
+var path92;
 var init_no_accidental_write_cli = __esm({
   "src/domains/dispatch/no-accidental-write.cli.ts"() {
-    path91 = __toESM(require("path"));
+    path92 = __toESM(require("path"));
     init_no_accidental_write();
     if (typeof module !== "undefined" && require.main === module && /^no-accidental-write\.cli\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
       main5();

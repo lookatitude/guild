@@ -14,9 +14,10 @@
  * recursive Grep/Glob whose filters do not name the file, and tools other than these six.
  */
 import { isLaneWorker } from "./lane-wiki-guard.js";
+import { sealSet } from "../../../src/domains/kernel/index";
 
 /** Exactly the six native tools the frozen contract names; no projection widening. */
-export const BINDING_GUARDED_TOOLS: ReadonlySet<string> = new Set(["Read", "Grep", "Glob", "Edit", "Write", "Bash"]);
+export const BINDING_GUARDED_TOOLS: ReadonlySet<string> = sealSet(["Read", "Grep", "Glob", "Edit", "Write", "Bash"], "BINDING_GUARDED_TOOLS");
 
 /** The limits a deny reason states, so no caller reads the guard as isolation. */
 export const BINDING_GUARD_LIMITS =
