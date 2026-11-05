@@ -43,7 +43,8 @@ import { RunKindConflictError, checkContained, claimRunKind, isRefused, prepareC
 import { durableGuildDir } from "../state";
 import { readSessionBinding, type SessionBinding } from "../config";
 import { redactHomeDirPaths, redactKeyValueSecrets, redactTokenShapes } from "../security";
-import { LOGICAL_RUN_MANIFEST_RELPATH, readRunBindingRecord, runBindingPath, type RunBindingRecord } from "./run-binding";
+import { readRunBindingRecord, runBindingPath, type RunBindingRecord } from "./run-binding";
+import { LOGICAL_RUN_MANIFEST_RELPATH } from "./run-binding-fields";
 
 // ── Schema names ─────────────────────────────────────────────────────────────
 
@@ -295,55 +296,55 @@ const SHAPES: Record<R01SchemaName, Check> = {
 const hasKeys = (o: Record<string, unknown>, keys: string[]) => keys.every((k) => own(o, k));
 
 /** verify_contracts.py `walk`: rules keyed on object shape, applied at every depth. */
-function walkRules(value: unknown, require: (ok: boolean, msg: string) => void, level = 0): void {
-  if (level > 32) return require(false, "object depth exceeds validation budget");
-  if (Array.isArray(value)) { for (const x of value) walkRules(x, require, level + 1); return; }
+function walkRules(value: unknown, assertRule: (ok: boolean, msg: string) => void, level = 0): void {
+  if (level > 32) return assertRule(false, "object depth exceeds validation budget");
+  if (Array.isArray(value)) { for (const x of value) walkRules(x, assertRule, level + 1); return; }
   if (!isObj(value)) return;
   const o = value;
   if (hasKeys(o, ["lifecycle", "outcome", "acceptance", "observability"])) {
-    if (o["outcome"] === "succeeded") require(o["acceptance"] === "verified", "success requires verified acceptance");
-    if (o["lifecycle"] === "closed") require(o["outcome"] !== "pending" && o["outcome"] !== "unknown", "closed cannot have pending/unknown outcome");
+    if (o["outcome"] === "succeeded") assertRule(o["acceptance"] === "verified", "success requires verified acceptance");
+    if (o["lifecycle"] === "closed") assertRule(o["outcome"] !== "pending" && o["outcome"] !== "unknown", "closed cannot have pending/unknown outcome");
   }
   if (hasKeys(o, ["start", "end", "duration_ms", "clock"])) {
-    require(o["end"] === null || compareInstants(o["end"] as string, o["start"] as string) >= 0, "interval cannot end before start");
-    require(o["duration_ms"] === null || (o["clock"] as Record<string, unknown>)["basis"] !== "unknown", "unknown clock cannot claim duration");
+    assertRule(o["end"] === null || compareInstants(o["end"] as string, o["start"] as string) >= 0, "interval cannot end before start");
+    assertRule(o["duration_ms"] === null || (o["clock"] as Record<string, unknown>)["basis"] !== "unknown", "unknown clock cannot claim duration");
   }
   if (hasKeys(o, ["source_id", "run_id", "execution_id", "host_session_id", "attempt_id", "logical_task_id", "request_id"])) {
-    require(o["attempt_id"] === null || o["logical_task_id"] !== null, "attempt requires logical task");
+    assertRule(o["attempt_id"] === null || o["logical_task_id"] !== null, "attempt requires logical task");
   }
   if (hasKeys(o, ["provider", "model", "status", "reason"])) {
-    if (o["status"] === "observed") require(o["model"] !== null, "observed identity needs observed model");
-    if (o["status"] === "unavailable") require(o["model"] === null && Boolean(o["reason"]), "unavailable observed identity needs null model and reason");
+    if (o["status"] === "observed") assertRule(o["model"] !== null, "observed identity needs observed model");
+    if (o["status"] === "unavailable") assertRule(o["model"] === null && Boolean(o["reason"]), "unavailable observed identity needs null model and reason");
   }
-  for (const x of Object.values(o)) walkRules(x, require, level + 1);
+  for (const x of Object.values(o)) walkRules(x, assertRule, level + 1);
 }
 
 function semanticErrors(schema: R01SchemaName, v: any): string[] {
   const errs: string[] = [];
-  const require = (ok: boolean, msg: string) => { if (!ok) errs.push(msg); };
-  walkRules(v, require);
+  const assertRule = (ok: boolean, msg: string) => { if (!ok) errs.push(msg); };
+  walkRules(v, assertRule);
   if (schema === "logical-run") {
-    require(v.controller.source_id === v.source_id, "logical run fixed-controller owner mismatch");
-    require(v.execution_refs.every((x: Entity) => x.source_id === v.source_id && x.kind === "execution"), "foreign execution reference");
-    require(v.initial_prompt_ref === null || v.initial_prompt_ref.source_id === v.source_id, "initial prompt evidence owner mismatch");
+    assertRule(v.controller.source_id === v.source_id, "logical run fixed-controller owner mismatch");
+    assertRule(v.execution_refs.every((x: Entity) => x.source_id === v.source_id && x.kind === "execution"), "foreign execution reference");
+    assertRule(v.initial_prompt_ref === null || v.initial_prompt_ref.source_id === v.source_id, "initial prompt evidence owner mismatch");
   } else if (schema === "run-binding") {
-    require(v.controller_source_id === v.source_id, "binding controller moved to another source");
+    assertRule(v.controller_source_id === v.source_id, "binding controller moved to another source");
   } else {
     const l: Lineage = v.lineage;
     if (own(v, "authority")) {
-      require(v.authority.controller_source_id === l.source_id && v.authority.execution_id === l.execution_id && v.authority.attempt_id === l.attempt_id, "lineage/authority mismatch");
+      assertRule(v.authority.controller_source_id === l.source_id && v.authority.execution_id === l.execution_id && v.authority.attempt_id === l.attempt_id, "lineage/authority mismatch");
     }
     if (schema === "task-assignment" || schema === "task-attempt") {
-      require(l.attempt_id !== null && l.logical_task_id !== null, "assignment/attempt missing immutable identity");
+      assertRule(l.attempt_id !== null && l.logical_task_id !== null, "assignment/attempt missing immutable identity");
     }
     const owned: Array<Evidence | null> =
       schema === "execution-lineage" ? [...v.evidence, ...v.handoffs.map((h: { evidence: Evidence }) => h.evidence)]
         : schema === "execution-segment" ? [v.seal_evidence]
           : schema === "task-attempt" ? [v.assignment_ref, ...v.result_refs]
             : [];
-    require(owned.every((e) => e === null || e.source_id === l.source_id), "lineage-owned evidence recorded by another source");
+    assertRule(owned.every((e) => e === null || e.source_id === l.source_id), "lineage-owned evidence recorded by another source");
     if (schema === "task-attempt" && v.state.outcome === "succeeded") {
-      require(v.receipt_loss_reconciled && !v.uncertain_effects && v.accepted_by_controller_epoch !== null && v.acceptance_subject_hash !== null, "uncertain/unreconciled task cannot succeed");
+      assertRule(v.receipt_loss_reconciled && !v.uncertain_effects && v.accepted_by_controller_epoch !== null && v.acceptance_subject_hash !== null, "uncertain/unreconciled task cannot succeed");
     }
   }
   return errs;
