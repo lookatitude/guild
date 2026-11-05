@@ -193,7 +193,8 @@ function decimalScaled(x: unknown, places: number): bigint | null {
   const div = 10n ** BigInt(-exp);
   return digits % div === 0n ? digits / div : null;
 }
-const femtoToUsd = (f: bigint) => Number(f) / FEMTO;
+/** Correctly rounded USD from femto-USD; decimal parsing avoids `Number(f)` overflowing first. */
+const femtoToUsd = (f: bigint) => Number(`${f}e-${FEMTO_PLACES}`);
 const usdToFemto = (x: number): bigint | null => decimalScaled(x, FEMTO_PLACES);
 
 function costValue(basis: CostValue["basis"], pricing: string | null, eligible: number | null, samples: readonly bigint[], reason: string | null): CostValue {
@@ -284,8 +285,8 @@ function selectRevision(obs: readonly TraceAnalysisV3[], poisoned: boolean, loss
   }
   const revs = [...byRev.keys()].sort((a, b) => a - b);
   const finals = revs.filter((r) => byRev.get(r)![0]!.usage!.final);
-  // A native session estimate is cumulative and readable before the session ends.
-  const chosenRev = finals.length ? finals[finals.length - 1]! : native ? revs[revs.length - 1]! : null;
+  // A native session estimate is cumulative: the newest revision wins even past a "final" one.
+  const chosenRev = native ? revs[revs.length - 1]! : finals.length ? finals[finals.length - 1]! : null;
   if (chosenRev === null) return { usage: null, event: null, trusted: false, reason: reason ?? "no final usage revision" };
   for (const r of revs) {
     if (r === chosenRev) continue;
@@ -345,14 +346,14 @@ function normalizeUsage(input: RunLedgerInput, prices: Prices | null, priceRefus
   const started = new Map<string, string>();
   const reqKey = (e: TraceAnalysisV3) => `${e.lineage.execution_id}\u0000${e.lineage.request_id}`;
   for (const { event: e } of byId.values()) {
-    const conflicted = conflictedIds.has(e.event_id);
+    // Every copy of a conflicting event id is dropped, so the result does not depend on which came first.
+    if (conflictedIds.has(e.event_id)) continue;
     if (e.event_class === "request_started" && e.lineage.request_id !== null) started.set(reqKey(e), e.lineage.request_id);
     if (e.usage && e.event_class !== "request_completed") { losses.add("usage_off_completion", "usage on a non-completion event is not billed"); continue; }
     if (e.event_class !== "request_completed") continue;
     const u = e.usage;
     if (!u) { if (!completedKeys.has(reqKey(e))) completedKeys.set(reqKey(e), null); continue; }
     completedKeys.set(reqKey(e), u.accounting_identity);
-    if (conflicted) poisonedAccts.add(u.accounting_identity);
     if (u.granularity === "native_session") push(nativeObs, u.accounting_identity, e);
     else if (u.inclusion === "parent_inclusive") losses.add("parent_inclusive_excluded", "parent-inclusive counters are not billable leaf usage");
     else push(leafObs, u.accounting_identity, e);
@@ -422,7 +423,8 @@ function normalizeUsage(input: RunLedgerInput, prices: Prices | null, priceRefus
     const [execution_id, request_id] = k.split("\u0000") as [string, string];
     return { execution_id, request_id };
   });
-  const eligibleKnown = input.capture !== null && input.capture.state === "complete" && invalid === 0;
+  // Session-only accounting and conflicting event ids both hide how many leaf requests ran.
+  const eligibleKnown = input.capture !== null && input.capture.state === "complete" && invalid === 0 && conflictedIds.size === 0 && nativeObs.size === 0;
   return { leaves, femto, pending, nativeFemto, nativeSessions: nativeObs.size, eligibleKnown, duplicates: replays + losses.get("mirror_suppressed"), invalid };
 }
 
@@ -439,8 +441,13 @@ interface Span { id: string; kind: SpanKind; start: bigint; end: bigint | null; 
 type Seg = [bigint, bigint];
 
 const BASES = new Set(["controller", "local_monotonic", "provider", "unknown"]);
+const SPAN_KEYS = new Set(["span_id", "kind", "interval", "agent_instance_id", "reason"]);
+const INTERVAL_KEYS = new Set(["start", "end", "duration_ms", "clock"]);
+const CLOCK_KEYS = new Set(["domain", "basis", "comparable", "skew_bound_ms"]);
+const onlyKeys = (o: Record<string, unknown>, keys: ReadonlySet<string>) => Object.keys(o).every((k) => keys.has(k));
+
 function parseClock(c: unknown): TraceClock | null {
-  if (!isObj(c) || !isId(c.domain) || typeof c.basis !== "string" || !BASES.has(c.basis) || typeof c.comparable !== "boolean") return null;
+  if (!isObj(c) || !onlyKeys(c, CLOCK_KEYS) || !isId(c.domain) || typeof c.basis !== "string" || !BASES.has(c.basis) || typeof c.comparable !== "boolean") return null;
   const skew = c.skew_bound_ms;
   if (skew !== null && (typeof skew !== "number" || !Number.isFinite(skew) || skew < 0)) return null;
   return { domain: c.domain, basis: c.basis as TraceClock["basis"], comparable: c.comparable, skew_bound_ms: skew as number | null };
@@ -449,7 +456,7 @@ function parseClock(c: unknown): TraceClock | null {
 /** Span, `"mismatch"` (duration disagrees with bounds), or null (malformed). */
 function parseSpan(raw: Record<string, unknown>, kind: SpanKind): Span | "mismatch" | null {
   const iv = raw.interval;
-  if (!isId(raw.span_id) || !isObj(iv)) return null;
+  if (!onlyKeys(raw, SPAN_KEYS) || !isId(raw.span_id) || !isObj(iv) || !onlyKeys(iv, INTERVAL_KEYS)) return null;
   const agent = raw.agent_instance_id ?? null, reason = raw.reason ?? null;
   if ((agent !== null && !isId(agent)) || (reason !== null && !isId(reason))) return null;
   const clock = parseClock(iv.clock);

@@ -233,8 +233,10 @@ describe("AT23 · usage arithmetic", () => {
     const forged = structuredClone(e);
     forged.usage!.input_inclusive = 70; forged.usage!.total = 73;
     const r2 = normalizeRunLedger(base({ events: [e, forged] }));
-    expect(leafOf(r2, "req-r").covered).toBe(false);
+    // Both copies are dropped and the request denominator becomes unknown (R2-F8).
+    expect(r2.leaves).toEqual([]);
     expect(r2.usage.total.known_subtotal).toBeNull();
+    expect(r2.usage.total.coverage.eligible).toBeNull();
     expect(loss(r2, "event_id_conflict")).toBe(1);
   });
 
@@ -346,7 +348,9 @@ describe("AT24 · pricing and attribution", () => {
     expect(l.cost.native_estimate.value).not.toBe(2.08);
     expect(l.cost.native_estimate.basis).toBe("native_estimate");
     expect(l.cost.measured.value).toBeNull();
-    expect(l.usage.total.coverage.eligible).toBe(3);
+    // Session-only accounting hides how many leaf requests ran (R2-F7).
+    expect(l.usage.total.coverage.eligible).toBeNull();
+    expect(l.usage.total.known_subtotal).toBe(180);
   });
 
   it("budget threshold is an estimate: overshoot 0.08, remaining 0, not a strict cap", () => {
@@ -751,5 +755,50 @@ describe("review round 1 regressions", () => {
     const leaf = leafOf(r, "req-m");
     expect(leaf.normalized_usage.cost_basis).toBe("measured");
     expect(validateTraceAnalysisV3({ ...e, usage: leaf.normalized_usage })).toEqual({ ok: true });
+  });
+});
+
+describe("review round 2 regressions", () => {
+  it("R2-F7: native-only accounting is not exact zero token usage", () => {
+    const r = normalizeRunLedger(base({ events: [ev({ id: "n", request: "s", observed: null, usage: nativeUse("s", 1, true, 0, 1) })] }));
+    expect(r.cost.native_estimate.exact_total).toBe(1);
+    expect(r.usage.total.exact_total).toBeNull();
+    expect(r.usage.total.reason).toBeTruthy();
+    expect(r.coverage.requests.eligible).toBeNull();
+  });
+
+  it("R2-F8: a conflicting event id never yields exact zero, in either order", () => {
+    const phase = ev({ id: "same", cls: "phase", request: null });
+    const done = ev({ id: "same", usage: use({ acct: "q", input: 10, cache: 0, write: 0, output: 5 }) });
+    const a = normalizeRunLedger(base({ events: [phase, done] }));
+    const b = normalizeRunLedger(base({ events: [done, phase] }));
+    for (const r of [a, b]) {
+      expect(r.usage.total.exact_total).toBeNull();
+      expect(r.usage.total.coverage.eligible).toBeNull();
+    }
+    expect([a.usage, a.cost, a.allocation, a.leaves]).toEqual([b.usage, b.cost, b.allocation, b.leaves]);
+  });
+
+  it("R2-F9: the newest cumulative native revision wins over an older final one", () => {
+    const r = normalizeRunLedger(base({ events: [
+      ev({ id: "n1", request: "s", observed: null, usage: nativeUse("s", 1, true, 0, 1) }),
+      ev({ id: "n2", request: "s", observed: null, usage: nativeUse("s", 2, false, 0, 2) }),
+    ], budget: { threshold_usd: 1.5 } }));
+    expect(r.cost.native_estimate.exact_total).toBe(2);
+    expect(r.cost.budget!.remaining_usd).toBe(0);
+    expect(r.cost.budget!.overshoot_usd).toBe(0.5);
+  });
+
+  it("R2-F10: a huge but valid counter prices to a finite USD value", () => {
+    const r = normalizeRunLedger(base({ events: [ev({ id: "huge", usage: use({ acct: "huge", input: Number.MAX_SAFE_INTEGER - 1, cache: 0, write: 0, output: 0 }) })], pricing: { ...P1, entries: [{ ...P1.entries[0]!, uncached_input: 1e30 }] } }));
+    expect(Number.isFinite(r.cost.derived_estimate.exact_total!)).toBe(true);
+    expect(r.cost.derived_estimate.exact_total).toBe(Number(`${BigInt(Number.MAX_SAFE_INTEGER - 1) * 10n ** 30n}e-6`));
+  });
+
+  it("R2-F11: a span with unknown or deeply nested fields is malformed, not a crash", () => {
+    const deep = JSON.parse("[".repeat(100000) + "0" + "]".repeat(100000));
+    const r = normalizeRunLedger(base({ spans: [gf2Spans()[0], { ...gf2Spans()[1], extra: deep }, { ...gf2Spans()[2], interval: { ...gf2Spans()[2]!.interval, extra: 1 } }] })).time;
+    expect(r.losses.find((x) => x.code === "invalid_span")!.count).toBe(2);
+    expect(r.active_union_ms.exact_total).toBeNull();
   });
 });
