@@ -281,5 +281,6 @@ export { loadInitiativeManifest, buildD8Input, checkInitiativeEvidenceRefs, type
 export const stackP05Schemas = deepFreezeStack(stackP05SchemasJson);
 
 export * from "./managed-run";
+export * from "./managed-segment";
 
 export const stackManagedSchemas = deepFreezeStack(stackManagedSchemasJson);

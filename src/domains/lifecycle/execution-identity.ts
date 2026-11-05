@@ -774,6 +774,56 @@ export function readLogicalRunView(root: string, runId: string): LogicalRunView 
   };
 }
 
+// ── Segment seal ─────────────────────────────────────────────────────────────
+
+export const EXECUTION_SEGMENT_SEAL_SCHEMA = "guild.stack.execution_segment_seal.v1" as const;
+/** Host exit seals one segment; the logical run stays open. Immutable: a segment seals once. */
+export interface ExecutionSegmentSeal {
+  schema_version: typeof EXECUTION_SEGMENT_SEAL_SCHEMA; source_id: string; run_id: string; execution_id: string;
+  segment_revision: Hash; sealed_by: { operation_id: string; attempt_id: string; launch_hash: Hash };
+  outcome_state: "exited" | "cancelled" | "timed_out"; outcome_sha256: Hash; sealed_at: string;
+}
+const sealPath = (root: string, runId: string, executionId: string) => {
+  if (!ID_RE.test(executionId)) throw new ExecutionIdentityRefusal("record_invalid", "execution id is not an id");
+  return path.join(runDir(root, runId), LINEAGE_DIR, "seals", `${executionId}.json`);
+};
+function assertSealShape(v: unknown): asserts v is ExecutionSegmentSeal {
+  const keys = ["schema_version", "source_id", "run_id", "execution_id", "segment_revision", "sealed_by", "outcome_state", "outcome_sha256", "sealed_at"];
+  const ok = isObj(v) && Object.keys(v).length === keys.length && keys.every((k) => own(v, k))
+    && v["schema_version"] === EXECUTION_SEGMENT_SEAL_SCHEMA
+    && [v["source_id"], v["execution_id"]].every((x) => typeof x === "string" && ID_RE.test(x))
+    && typeof v["run_id"] === "string" && RUN_ID_RE.test(v["run_id"])
+    && [v["segment_revision"], v["outcome_sha256"]].every((x) => typeof x === "string" && HASH_RE.test(x))
+    && ["exited", "cancelled", "timed_out"].includes(v["outcome_state"] as string)
+    && typeof v["sealed_at"] === "string" && isRfc3339(v["sealed_at"])
+    && isObj(v["sealed_by"]) && Object.keys(v["sealed_by"]).length === 3
+    && typeof v["sealed_by"]["operation_id"] === "string" && ID_RE.test(v["sealed_by"]["operation_id"])
+    && typeof v["sealed_by"]["attempt_id"] === "string" && ID_RE.test(v["sealed_by"]["attempt_id"])
+    && typeof v["sealed_by"]["launch_hash"] === "string" && HASH_RE.test(v["sealed_by"]["launch_hash"]);
+  if (!ok) throw new ExecutionIdentityRefusal("record_invalid", "segment seal fields invalid");
+}
+
+/** Seal the exact recorded segment revision. Never touches the logical-run manifest. */
+export function sealExecutionSegment(root: string, seal: ExecutionSegmentSeal): void {
+  assertSealShape(seal);
+  const view = readLogicalRunView(root, seal.run_id);
+  if (view.kind !== "v2") throw new ExecutionIdentityRefusal("logical_run_unknown", `${seal.run_id} is not a logical v2 run`);
+  if (view.manifest.source_id !== seal.source_id) throw new ExecutionIdentityRefusal("record_invalid", "seal source is not the run owner");
+  const e = view.executions.find((x) => x.segment.lineage.execution_id === seal.execution_id);
+  if (!e) throw new ExecutionIdentityRefusal("execution_unknown", `${seal.run_id} has no execution ${seal.execution_id}`);
+  if (e.revision !== seal.segment_revision) throw new ExecutionIdentityRefusal("record_invalid", "seal names a different segment revision");
+  if (e.segment.admission !== "active") throw new ExecutionIdentityRefusal("record_invalid", `segment admission is ${e.segment.admission}`);
+  publishOnce(root, sealPath(root, seal.run_id, seal.execution_id), seal);
+}
+
+export function readExecutionSegmentSeal(root: string, runId: string, executionId: string): ExecutionSegmentSeal | null {
+  const seal = readJson<unknown>(root, sealPath(root, runId, executionId), null);
+  if (seal === null) return null;
+  assertSealShape(seal);
+  if (seal.run_id !== runId || seal.execution_id !== executionId) throw new ExecutionIdentityRefusal("record_location_mismatch", `seal file ${runId}/${executionId} holds ${seal.run_id}/${seal.execution_id}`);
+  return seal;
+}
+
 export interface GoalContribution { run_id: string; execution_id: string; logical_task_id: string; attempt_id: string }
 
 /** Every recorded assignment, in any logical run of this root, that contributes to the goal. */
