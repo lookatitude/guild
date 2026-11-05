@@ -203,6 +203,8 @@ export interface WorkerIngress {
 // ── primitives ───────────────────────────────────────────────────────────────
 
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+/** Record ids name files: lowercase only, so case-insensitive filesystems cannot alias two ids. */
+const RECORD_ID_RE = /^[a-z0-9][a-z0-9._:-]{0,127}$/;
 const ENV_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 /** Names that look like credentials or controller material are never forwarded. */
 const CREDENTIAL_NAME_RE = /(TOKEN|SECRET|PASSW|CREDENTIAL|API_?KEY|PRIVATE|AUTH|SESSION|COOKIE|SSH_|GPG|AWS_|GH_|GITHUB_|NPM_|GUILD_CONTROLLER|_KEY$|^KEY)/i;
@@ -574,7 +576,7 @@ export function openWorkerIngress(opts: WorkerIngressOptions): WorkerIngress {
         let f = state();
         for (const name of order) {
           const record_id = name.slice(0, -5);
-          if (!ID_RE.test(record_id)) continue;
+          if (!RECORD_ID_RE.test(record_id)) continue;
           if (f.ingested.has(`${b.attempt_id}/${record_id}`)) { report.replayed.push(`${b.attempt_id}/${record_id}`); continue; }
           if (examined >= limits.max_records_per_collect || bytes >= limits.max_bytes_per_collect) { report.truncated = true; break; }
           examined++;
@@ -786,6 +788,7 @@ export function submitWorkerRecord(
   r: { record_id: string; kind: RecordKind; body: unknown; effect_key?: string; outcome?: "applied" | "failed" },
 ): void {
   const record_id = requireId(r.record_id, "record_id");
+  if (!RECORD_ID_RE.test(record_id)) throw new IngressRefusal("request_invalid", "record_id must be lowercase");
   const signed = {
     schema_version: WORKER_RECORD_SCHEMA,
     source_id: bundle.source_id,

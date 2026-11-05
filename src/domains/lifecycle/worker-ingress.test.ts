@@ -443,6 +443,17 @@ describe("ingress robustness", () => {
     expect(ing.controller.epoch).toBeGreaterThan(0);
   });
 
+  it("ignores mixed-case record names so case-insensitive filesystems cannot alias ids", () => {
+    const b = dispatch("task-1", "att-1");
+    submitWorkerRecord(b, { record_id: "obs", kind: "observation", body: {} });
+    expect(ing.collect().accepted).toHaveLength(1);
+    expect(code(() => submitWorkerRecord(b, { record_id: "OBS", kind: "observation", body: {} }))).toBe("request_invalid");
+    fs.renameSync(path.join(b.ingress_dir, "obs.json"), path.join(b.ingress_dir, "OBS2.json"));
+    const r = ing.collect();
+    expect(r.accepted).toEqual([]);
+    expect(r.rejected).toEqual([]);
+  });
+
   it("bounds directory scans by every entry, not only matching names", () => {
     ing.close();
     ing = open({ limits: { max_entries_scanned: 10 } });
