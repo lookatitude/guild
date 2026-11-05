@@ -1254,6 +1254,11 @@
       "kind": "cli"
     },
     {
+      "id": "learn/lib/tsconfig-chain",
+      "source_path": "scripts/learn/lib/tsconfig-chain.ts",
+      "kind": "cli"
+    },
+    {
       "id": "learn/lib/walk",
       "source_path": "scripts/learn/lib/walk.ts",
       "kind": "cli"
