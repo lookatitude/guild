@@ -28,6 +28,7 @@ import { composeStationTeam } from "../../src/domains/teams";
 import {
   FIXED_NOW, FULL_RUNGS, FakeWorkerPort, PLUGIN, driveLane, makeRuntime, ownedTempDir, requireExport, sha256,
   teardownOwned, tempRoot, walkFiles, type TempRoot,
+  hostBootSession
 } from "./support/e00-harness";
 import { writeApprovedTeam } from "./support/team-authority-fixture";
 
@@ -184,7 +185,7 @@ describe("C-R1 F2 · approved plan, team decision, lane membership and authority
 // ── F7 fixture: dead owner, a spawned handle, a recording teardown port ──────
 
 function selfBoot(): string {
-  return execFileSync("sysctl", ["-n", "kern.bootsessionuuid"], { encoding: "utf8" }).trim();
+  return hostBootSession();
 }
 
 /** Negative / setup fixture: a dead owner's claim (CD5), as in e00-controller-ta. */
