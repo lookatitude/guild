@@ -48,6 +48,7 @@ import { canonicalizeRealPath, checkContained, isRefused, isWithin, prepareConta
 export const CONTROLLER_JOURNAL_SCHEMA = "guild.controller_journal_entry.v1" as const;
 export const CONTROL_RECEIPT_SCHEMA = "guild.controller_receipt.v1" as const;
 export const WORKER_OBSERVATION_SCHEMA = "guild.worker_observation.v1" as const;
+export const CONTROLLER_ANCHOR_SCHEMA = "guild.controller_anchor.v1" as const;
 
 export type ControlAction = "accept" | "schedule" | "close" | "release";
 export type AdmissionState = "active" | "reconcile_only" | "revoked" | "sealed";
@@ -282,7 +283,7 @@ function linkOnce(final: string, bytes: Buffer, mode: number, precommit?: () => 
 function readNoFollow(file: string, max: number): string | null {
   let fd: number;
   try {
-    fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw e;
@@ -339,7 +340,7 @@ function readKey(privateDir: string): Buffer | null {
   const file = path.join(privateDir, KEY_FILE);
   let fd: number;
   try {
-    fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw e;
@@ -553,7 +554,31 @@ export function openRunController(opts: OpenControllerOptions): RunController {
     key = readKey(privateDir);
     if (!key) throw new ControllerRefusal("controller_key_missing", "controller key could not be created");
   }
+  // The durable anchor pins the run's one authority (host + key id) in the
+  // project, so a second machine with its own empty state root cannot mint a
+  // parallel controller, and a host that lost its state cannot silently re-key.
+  const keyId = sha256(hmac(key, "guild.controller.key_id"));
+  const anchorRel = durablePath("runs", run_id, "controller", "anchor.json");
+  const anchor = { schema_version: CONTROLLER_ANCHOR_SCHEMA, source_id, run_id, host_id, key_id: keyId, failover: "manual_new_run_only" };
+  const anchorBytes = Buffer.from(`${JSON.stringify(anchor, null, 2)}\n`, "utf8");
+  const existingAnchor = readDurable(durableRoot, anchorRel, 4096);
+  if (existingAnchor !== null && existingAnchor !== anchorBytes.toString("utf8")) {
+    let other: Record<string, unknown> | null = null;
+    try { other = JSON.parse(existingAnchor) as Record<string, unknown>; } catch { other = null; }
+    if (isObj(other) && other.host_id !== host_id) throw new ControllerRefusal("controller_failover_refused", `run is anchored to ${String(other.host_id)}; failover is manual_new_run_only`);
+    throw new ControllerRefusal("journal_identity_mismatch", "run is anchored to another controller authority");
+  }
   const view = loadJournal(privateDir, key);
+  if (existingAnchor === null) {
+    try {
+      publishDurable(durableRoot, anchorRel, anchorBytes, "journal_identity_mismatch");
+    } catch (err) {
+      if (err instanceof ControllerRefusal && err.code === "journal_identity_mismatch" && view.entries.length === 0) {
+        throw new ControllerRefusal("controller_failover_refused", "another controller anchored this run first");
+      }
+      throw err;
+    }
+  }
   if (view.entries.length > 0) {
     if (view.source_id !== source_id || view.run_id !== run_id) throw new ControllerRefusal("journal_identity_mismatch", "journal belongs to another run");
     if (view.host_id !== host_id) throw new ControllerRefusal("controller_failover_refused", `run is pinned to ${view.host_id}; failover is manual_new_run_only`);
@@ -602,6 +627,10 @@ export function openRunController(opts: OpenControllerOptions): RunController {
   heartbeatAt = now();
   writeLease(privateDir, { pid, host_id, token, heartbeat_ms: heartbeatAt, epoch });
   const expired = () => now() - heartbeatAt > leaseMs;
+  // Commits stop a margin before the lease ends, so a commit that passed its
+  // check lands before any successor can treat the lease as stale.
+  const commitMargin = Math.floor(leaseMs / 4);
+  const commitExpired = () => now() - heartbeatAt > leaseMs - commitMargin;
 
   /** Every authoritative write goes through here first. */
   const assertLive = (): void => {
@@ -628,7 +657,7 @@ export function openRunController(opts: OpenControllerOptions): RunController {
     // entries have effect, so a crash, an expired lease or a newer epoch taking
     // the next sequence leaves the provisional entry inert. Lease validity is
     // checked after fsync, immediately before each link(2).
-    const live = () => { if (expired()) throw new ControllerRefusal("controller_unavailable", "lease expired before commit"); };
+    const live = () => { if (commitExpired()) throw new ControllerRefusal("controller_unavailable", "lease expired before commit"); };
     const lost = (): never => {
       loadJournal(privateDir, k, view);
       if (view.epoch !== epoch) throw new ControllerRefusal("controller_fenced", `epoch ${epoch} superseded by ${view.epoch}`);

@@ -311,6 +311,21 @@ describe("AT11 · controller outage", () => {
     expect(readControllerJournal({ privateDir }).epoch).toBe(c.epoch);
   });
 
+  it("negative control: a second machine with its own empty state root cannot mint a parallel controller", () => {
+    const c = open();
+    const w = c.issueWriterGrant("s");
+    const otherState = path.join(tmp, "host2-state", "controller", RUN);
+    expect(code(() => open({ host_id: "host-2", privateDir: otherState }))).toBe("controller_failover_refused");
+    expect(c.control(w, { operation_id: "op-1", action: "accept", subject: "a" }).controller_epoch).toBe(c.epoch);
+  });
+
+  it("a host that lost its whole state root cannot silently re-key the run", () => {
+    open().close();
+    fs.rmSync(privateDir, { recursive: true, force: true });
+    clock += LEASE + 1;
+    expect(code(() => open())).toBe("journal_identity_mismatch");
+  });
+
   it("refuses to re-key: a journal without its key is unavailable, not reset", () => {
     open().close();
     fs.rmSync(path.join(privateDir, "controller.key"));
@@ -464,6 +479,26 @@ describe("R02 · codex r1 regressions", () => {
     fs.writeFileSync(path.join(bad, "observations"), "not a dir");
     writeWorkerObservation(durableRoot, RUN, g, { observation_id: "obs-1", body: {} });
     expect(c.collectObservations().accepted.map((a) => a.observation_id)).toEqual(["obs-1"]);
+  });
+});
+
+describe("R02 · codex r3 regressions", () => {
+  it("F3: a FIFO swapped in for a durable record does not hang the controller", () => {
+    const c = open();
+    const w = c.issueWriterGrant("s");
+    c.control(w, { operation_id: "op-1", action: "accept", subject: "a" });
+    const f = path.join(durableRoot, ".guild", "runs", RUN, "controller", "receipts", "op-1.json");
+    fs.rmSync(f);
+    require("node:child_process").execFileSync("mkfifo", [f]);
+    expect(verifyControlReceipt({ privateDir, durableRoot, run_id: RUN, operation_id: "op-1" }).ok).toBe(false);
+  });
+
+  it("F1: commits stop a safety margin before the lease ends", () => {
+    const c = open();
+    const w = c.issueWriterGrant("s");
+    clock += LEASE - Math.floor(LEASE / 4) + 1;
+    expect(code(() => c.control(w, { operation_id: "op-m", action: "release", subject: "run" }))).toBe("controller_unavailable");
+    expect(readControllerJournal({ privateDir }).operations.has("op-m")).toBe(false);
   });
 });
 
