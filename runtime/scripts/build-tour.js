@@ -24,11 +24,11 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // scripts/learn/build-tour.ts
-var path4 = __toESM(require("path"));
+var path5 = __toESM(require("path"));
 
 // scripts/learn/lib/paths.ts
-var fs3 = __toESM(require("fs"));
-var path3 = __toESM(require("path"));
+var fs4 = __toESM(require("fs"));
+var path4 = __toESM(require("path"));
 var import_child_process = require("child_process");
 
 // scripts/lib/state/ensure-storage-layout.ts
@@ -142,6 +142,104 @@ if (isProcessEntry()) {
   }
 }
 
+// src/domains/knowledge/source-basis.ts
+var import_node_child_process = require("node:child_process");
+var fs3 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
+function realRoot(root) {
+  try {
+    return fs3.realpathSync(root);
+  } catch {
+    return path3.resolve(root);
+  }
+}
+function git(cwd, args) {
+  try {
+    return (0, import_node_child_process.execFileSync)("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  } catch {
+    return null;
+  }
+}
+function resolveSourceWorktreeRoot(cwd) {
+  const top = git(cwd, ["rev-parse", "--show-toplevel"])?.trim();
+  return realRoot(top ? top : cwd);
+}
+
+// scripts/learn/lib/ignore.ts
+var DEFAULT_IGNORE_PATTERNS = Object.freeze([
+  "node_modules/",
+  ".git/",
+  "vendor/",
+  "venv/",
+  ".venv/",
+  "__pycache__/",
+  // Guild derived-index dir is never itself indexed (derived, rebuildable).
+  // Any external/forked plugin's dotfolder is excluded by the user's
+  // .guildignore, not hardcoded here (keeps the engine free of external refs).
+  ".guild/",
+  "dist/",
+  "build/",
+  "out/",
+  "coverage/",
+  ".next/",
+  ".cache/",
+  ".turbo/",
+  "target/",
+  "obj/",
+  // Generated module-resource mirrors (src/modules/<id>/resources/**) are
+  // byte-for-byte copies of first-party source (scripts/**, hooks/**) produced by
+  // sync:module-resources for host packaging — exactly like dist/. Indexing them
+  // duplicates every mirrored node (~31% of the graph) and makes each source file
+  // look like it has an exact clone. Exclude the generated tree; the canonical
+  // source is indexed from its real path.
+  "src/modules/*/resources/",
+  // Test directories and fixtures are not first-party knowledge — they must be
+  // excluded from the cost-gate corpus AND from knowledge discovery so the two
+  // share one policy (L13-fix BLOCKER 2 / L17 residual). Without `tests/` the
+  // L12 re-run produced 43 nodes sourced from plugin tests/ (boundary, evolve,
+  // shadow, wiki-lint READMEs + workspace/_fixtures.ts). These dir patterns use
+  // trailing-slash (dirOnly) matching — same as fixtures/ — so they prune whole
+  // subtrees, not just files with those names.
+  "tests/",
+  "test/",
+  "__tests__/",
+  "fixtures/",
+  "testdata/",
+  "__fixtures__/",
+  "*.lock",
+  "package-lock.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  "*.png",
+  "*.jpg",
+  "*.jpeg",
+  "*.gif",
+  "*.svg",
+  "*.ico",
+  "*.woff",
+  "*.woff2",
+  "*.ttf",
+  "*.eot",
+  "*.mp3",
+  "*.mp4",
+  "*.pdf",
+  "*.zip",
+  "*.tar",
+  "*.gz",
+  "*.min.js",
+  "*.min.css",
+  "*.map",
+  "*.generated.*",
+  ".idea/",
+  ".vscode/",
+  "LICENSE",
+  ".gitignore",
+  ".editorconfig",
+  ".prettierrc",
+  ".eslintrc*",
+  "*.log"
+]);
+
 // scripts/learn/lib/paths.ts
 function parseCwd(argv) {
   return parseFlag(argv, "cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
@@ -165,38 +263,47 @@ function resolveMainRepoRoot(cwd) {
       cwd,
       encoding: "utf-8"
     }).trim();
-    const abs = path3.isAbsolute(commonDir) ? commonDir : path3.resolve(cwd, commonDir);
-    const root = path3.dirname(abs);
-    if (fs3.existsSync(root)) return root;
+    const abs = path4.isAbsolute(commonDir) ? commonDir : path4.resolve(cwd, commonDir);
+    const root = path4.dirname(abs);
+    if (fs4.existsSync(root)) return root;
   } catch {
   }
-  return path3.resolve(cwd);
+  return path4.resolve(cwd);
+}
+function sameDir(a, b) {
+  try {
+    return fs4.realpathSync(a) === fs4.realpathSync(b);
+  } catch {
+    return path4.resolve(a) === path4.resolve(b);
+  }
 }
 function guildPaths(cwd) {
   const repoRoot = resolveMainRepoRoot(cwd);
+  const sourceRoot = resolveSourceWorktreeRoot(cwd);
   const guildDir = durableGuildDir(repoRoot);
-  const indexesDir = path3.join(guildDir, "indexes");
-  const runsDir = path3.join(guildDir, "runs");
+  const indexesDir = path4.join(guildDir, "indexes");
+  const runsDir = path4.join(guildDir, "runs");
   return {
     repoRoot,
+    sourceRoot: sameDir(sourceRoot, repoRoot) ? repoRoot : sourceRoot,
     guildDir,
     indexesDir,
     runsDir,
-    codebaseMap: path3.join(indexesDir, "codebase-map.json"),
-    knowledgeGraph: path3.join(indexesDir, "knowledge-graph.json"),
-    knowledgeLinks: path3.join(indexesDir, "knowledge-links.json"),
-    knowledgeRecall: path3.join(indexesDir, "knowledge-recall.json"),
-    fingerprint: path3.join(indexesDir, "understand-fingerprint.json"),
-    partialGraph: path3.join(indexesDir, "understand-partial-graph.json")
+    codebaseMap: path4.join(indexesDir, "codebase-map.json"),
+    knowledgeGraph: path4.join(indexesDir, "knowledge-graph.json"),
+    knowledgeLinks: path4.join(indexesDir, "knowledge-links.json"),
+    knowledgeRecall: path4.join(indexesDir, "knowledge-recall.json"),
+    fingerprint: path4.join(indexesDir, "understand-fingerprint.json"),
+    partialGraph: path4.join(indexesDir, "understand-partial-graph.json")
   };
 }
 function writeJson(filePath, data) {
-  fs3.mkdirSync(path3.dirname(filePath), { recursive: true });
-  fs3.writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf8");
+  fs4.mkdirSync(path4.dirname(filePath), { recursive: true });
+  fs4.writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf8");
 }
 function readJson(filePath) {
   try {
-    return JSON.parse(fs3.readFileSync(filePath, "utf8"));
+    return JSON.parse(fs4.readFileSync(filePath, "utf8"));
   } catch {
     return null;
   }
@@ -253,7 +360,7 @@ function main() {
   ensureStorageLayout(cwd, { detectOnly: true });
   const gp = guildPaths(cwd);
   const inPath = parseFlag(argv, "in");
-  const target = inPath ? path4.resolve(cwd, inPath) : gp.knowledgeGraph;
+  const target = inPath ? path5.resolve(cwd, inPath) : gp.knowledgeGraph;
   const graph = readJson(target);
   if (!graph) {
     process.stderr.write(`[tour] ERROR: cannot read ${target}
@@ -263,7 +370,7 @@ function main() {
   graph.tour = buildTourOrder(graph);
   writeJson(target, graph);
   process.stderr.write(
-    `[tour] ${graph.tour.length} steps \u2192 ${path4.relative(gp.repoRoot, target)}
+    `[tour] ${graph.tour.length} steps \u2192 ${path5.relative(gp.repoRoot, target)}
 `
   );
   if (hasFlag(argv, "print")) process.stdout.write(JSON.stringify(graph.tour, null, 2) + "\n");

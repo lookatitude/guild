@@ -38,12 +38,12 @@ __export(validate_graph_exports, {
   validateWithDispatch: () => validateWithDispatch
 });
 module.exports = __toCommonJS(validate_graph_exports);
-var fs5 = __toESM(require("fs"));
-var path7 = __toESM(require("path"));
+var fs6 = __toESM(require("fs"));
+var path8 = __toESM(require("path"));
 
 // scripts/learn/lib/paths.ts
-var fs3 = __toESM(require("fs"));
-var path3 = __toESM(require("path"));
+var fs4 = __toESM(require("fs"));
+var path4 = __toESM(require("path"));
 var import_child_process = require("child_process");
 
 // scripts/lib/state/ensure-storage-layout.ts
@@ -157,6 +157,104 @@ if (isProcessEntry()) {
   }
 }
 
+// src/domains/knowledge/source-basis.ts
+var import_node_child_process = require("node:child_process");
+var fs3 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
+function realRoot(root) {
+  try {
+    return fs3.realpathSync(root);
+  } catch {
+    return path3.resolve(root);
+  }
+}
+function git(cwd, args) {
+  try {
+    return (0, import_node_child_process.execFileSync)("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  } catch {
+    return null;
+  }
+}
+function resolveSourceWorktreeRoot(cwd) {
+  const top = git(cwd, ["rev-parse", "--show-toplevel"])?.trim();
+  return realRoot(top ? top : cwd);
+}
+
+// scripts/learn/lib/ignore.ts
+var DEFAULT_IGNORE_PATTERNS = Object.freeze([
+  "node_modules/",
+  ".git/",
+  "vendor/",
+  "venv/",
+  ".venv/",
+  "__pycache__/",
+  // Guild derived-index dir is never itself indexed (derived, rebuildable).
+  // Any external/forked plugin's dotfolder is excluded by the user's
+  // .guildignore, not hardcoded here (keeps the engine free of external refs).
+  ".guild/",
+  "dist/",
+  "build/",
+  "out/",
+  "coverage/",
+  ".next/",
+  ".cache/",
+  ".turbo/",
+  "target/",
+  "obj/",
+  // Generated module-resource mirrors (src/modules/<id>/resources/**) are
+  // byte-for-byte copies of first-party source (scripts/**, hooks/**) produced by
+  // sync:module-resources for host packaging — exactly like dist/. Indexing them
+  // duplicates every mirrored node (~31% of the graph) and makes each source file
+  // look like it has an exact clone. Exclude the generated tree; the canonical
+  // source is indexed from its real path.
+  "src/modules/*/resources/",
+  // Test directories and fixtures are not first-party knowledge — they must be
+  // excluded from the cost-gate corpus AND from knowledge discovery so the two
+  // share one policy (L13-fix BLOCKER 2 / L17 residual). Without `tests/` the
+  // L12 re-run produced 43 nodes sourced from plugin tests/ (boundary, evolve,
+  // shadow, wiki-lint READMEs + workspace/_fixtures.ts). These dir patterns use
+  // trailing-slash (dirOnly) matching — same as fixtures/ — so they prune whole
+  // subtrees, not just files with those names.
+  "tests/",
+  "test/",
+  "__tests__/",
+  "fixtures/",
+  "testdata/",
+  "__fixtures__/",
+  "*.lock",
+  "package-lock.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  "*.png",
+  "*.jpg",
+  "*.jpeg",
+  "*.gif",
+  "*.svg",
+  "*.ico",
+  "*.woff",
+  "*.woff2",
+  "*.ttf",
+  "*.eot",
+  "*.mp3",
+  "*.mp4",
+  "*.pdf",
+  "*.zip",
+  "*.tar",
+  "*.gz",
+  "*.min.js",
+  "*.min.css",
+  "*.map",
+  "*.generated.*",
+  ".idea/",
+  ".vscode/",
+  "LICENSE",
+  ".gitignore",
+  ".editorconfig",
+  ".prettierrc",
+  ".eslintrc*",
+  "*.log"
+]);
+
 // scripts/learn/lib/paths.ts
 function parseCwd(argv) {
   return parseFlag(argv, "cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
@@ -180,45 +278,54 @@ function resolveMainRepoRoot(cwd) {
       cwd,
       encoding: "utf-8"
     }).trim();
-    const abs = path3.isAbsolute(commonDir) ? commonDir : path3.resolve(cwd, commonDir);
-    const root = path3.dirname(abs);
-    if (fs3.existsSync(root)) return root;
+    const abs = path4.isAbsolute(commonDir) ? commonDir : path4.resolve(cwd, commonDir);
+    const root = path4.dirname(abs);
+    if (fs4.existsSync(root)) return root;
   } catch {
   }
-  return path3.resolve(cwd);
+  return path4.resolve(cwd);
+}
+function sameDir(a, b) {
+  try {
+    return fs4.realpathSync(a) === fs4.realpathSync(b);
+  } catch {
+    return path4.resolve(a) === path4.resolve(b);
+  }
 }
 function guildPaths(cwd) {
   const repoRoot = resolveMainRepoRoot(cwd);
+  const sourceRoot = resolveSourceWorktreeRoot(cwd);
   const guildDir = durableGuildDir(repoRoot);
-  const indexesDir = path3.join(guildDir, "indexes");
-  const runsDir = path3.join(guildDir, "runs");
+  const indexesDir = path4.join(guildDir, "indexes");
+  const runsDir = path4.join(guildDir, "runs");
   return {
     repoRoot,
+    sourceRoot: sameDir(sourceRoot, repoRoot) ? repoRoot : sourceRoot,
     guildDir,
     indexesDir,
     runsDir,
-    codebaseMap: path3.join(indexesDir, "codebase-map.json"),
-    knowledgeGraph: path3.join(indexesDir, "knowledge-graph.json"),
-    knowledgeLinks: path3.join(indexesDir, "knowledge-links.json"),
-    knowledgeRecall: path3.join(indexesDir, "knowledge-recall.json"),
-    fingerprint: path3.join(indexesDir, "understand-fingerprint.json"),
-    partialGraph: path3.join(indexesDir, "understand-partial-graph.json")
+    codebaseMap: path4.join(indexesDir, "codebase-map.json"),
+    knowledgeGraph: path4.join(indexesDir, "knowledge-graph.json"),
+    knowledgeLinks: path4.join(indexesDir, "knowledge-links.json"),
+    knowledgeRecall: path4.join(indexesDir, "knowledge-recall.json"),
+    fingerprint: path4.join(indexesDir, "understand-fingerprint.json"),
+    partialGraph: path4.join(indexesDir, "understand-partial-graph.json")
   };
 }
 function writeJson(filePath, data) {
-  fs3.mkdirSync(path3.dirname(filePath), { recursive: true });
-  fs3.writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf8");
+  fs4.mkdirSync(path4.dirname(filePath), { recursive: true });
+  fs4.writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf8");
 }
 function readJson(filePath) {
   try {
-    return JSON.parse(fs3.readFileSync(filePath, "utf8"));
+    return JSON.parse(fs4.readFileSync(filePath, "utf8"));
   } catch {
     return null;
   }
 }
 
 // scripts/learn/lib/schema.ts
-var fs4 = __toESM(require("fs"));
+var fs5 = __toESM(require("fs"));
 
 // src/domains/kernel/module-manifest.ts
 var OWNED_INVENTORY_CATEGORIES = Object.freeze([
@@ -231,8 +338,8 @@ var OWNED_INVENTORY_CATEGORIES = Object.freeze([
 ]);
 
 // src/domains/kernel/plugin-root.ts
-var path4 = __toESM(require("node:path"));
-var PLUGIN_ROOT_MARKER = path4.join("runtime", "guild-mcp.js");
+var path5 = __toESM(require("node:path"));
+var PLUGIN_ROOT_MARKER = path5.join("runtime", "guild-mcp.js");
 
 // src/domains/kernel/sealed-collections.ts
 function regExpWritesLastIndex(re) {
@@ -361,7 +468,7 @@ var TIER_BUS_CONTRACT = deepFreeze({
 });
 
 // src/domains/kernel/reserved-identity-fields.ts
-var path5 = __toESM(require("node:path"));
+var path6 = __toESM(require("node:path"));
 var RESERVED_IDENTITY_FIELDS = Object.freeze([
   // logical-run
   "source_id",
@@ -428,10 +535,10 @@ var RESERVED_IDENTITY_FIELDS = Object.freeze([
   "agent_instance_id",
   "request_id"
 ]);
-var RUN_KIND_V2_MANIFEST_RELPATH = path5.join("lineage", "logical-run.json");
+var RUN_KIND_V2_MANIFEST_RELPATH = path6.join("lineage", "logical-run.json");
 
 // scripts/learn/lib/schema.ts
-var path6 = __toESM(require("path"));
+var path7 = __toESM(require("path"));
 var NODE_TYPES = sealSet([
   "file",
   "function",
@@ -913,9 +1020,9 @@ function resolveAnchor(repoRoot, anchor) {
   if (!anchor || typeof anchor !== "string") return false;
   const relPath = anchorToPath(anchor);
   if (!relPath) return false;
-  const absPath = path6.resolve(repoRoot, relPath);
+  const absPath = path7.resolve(repoRoot, relPath);
   try {
-    if (!fs4.existsSync(absPath)) return false;
+    if (!fs5.existsSync(absPath)) return false;
   } catch {
     return false;
   }
@@ -925,7 +1032,7 @@ function resolveAnchor(repoRoot, anchor) {
   }
   let content;
   try {
-    content = fs4.readFileSync(absPath, "utf8");
+    content = fs5.readFileSync(absPath, "utf8");
   } catch {
     return false;
   }
@@ -1376,10 +1483,10 @@ function main() {
   const gp = guildPaths(cwd);
   let input;
   if (hasFlag(argv, "stdin")) {
-    input = JSON.parse(fs5.readFileSync(0, "utf8"));
+    input = JSON.parse(fs6.readFileSync(0, "utf8"));
   } else {
     const inPath = parseFlag(argv, "in");
-    const resolved = inPath ? path7.resolve(cwd, inPath) : gp.partialGraph;
+    const resolved = inPath ? path8.resolve(cwd, inPath) : gp.partialGraph;
     input = readJson(resolved);
     if (input === null) {
       process.stderr.write(`[validate] ERROR: cannot read input graph ${resolved}
@@ -1389,7 +1496,7 @@ function main() {
   }
   if (input && typeof input === "object") delete input._merge_report;
   const dispatchedV2 = isV2Input(input);
-  const result = validateWithDispatch(input, gp.repoRoot);
+  const result = validateWithDispatch(input, gp.sourceRoot);
   const counts = result.issues.reduce((m, i) => {
     m[i.level] = (m[i.level] ?? 0) + 1;
     return m;
@@ -1430,14 +1537,14 @@ function main() {
   }
   if (!dry) {
     writeJson(gp.knowledgeGraph, result.data);
-    process.stderr.write(`[validate] \u2192 ${path7.relative(gp.repoRoot, gp.knowledgeGraph)}
+    process.stderr.write(`[validate] \u2192 ${path8.relative(gp.repoRoot, gp.knowledgeGraph)}
 `);
   }
   if (hasFlag(argv, "print")) {
     process.stdout.write(JSON.stringify({ data: result.data, issues: result.issues }, null, 2) + "\n");
   } else {
     process.stdout.write(
-      dry ? "validated (dry-run)\n" : path7.relative(gp.repoRoot, gp.knowledgeGraph) + "\n"
+      dry ? "validated (dry-run)\n" : path8.relative(gp.repoRoot, gp.knowledgeGraph) + "\n"
     );
   }
 }
