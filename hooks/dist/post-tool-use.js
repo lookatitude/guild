@@ -26514,7 +26514,7 @@ var init_catalog_cache = __esm({
         }
       }
     };
-    defaultSleep = (ms) => new Promise((resolve51) => setTimeout(resolve51, ms));
+    defaultSleep = (ms) => new Promise((resolve52) => setTimeout(resolve52, ms));
   }
 });
 
@@ -41501,7 +41501,7 @@ function supersededWikiPages(wikiDir2) {
     const slug = path78.basename(abs, ".md");
     bySlug.set(slug, [...bySlug.get(slug) ?? [], abs]);
   }
-  const resolve51 = (ref) => {
+  const resolve52 = (ref) => {
     let r = ref.replace(/\\/g, "/");
     if (r.startsWith("decision:")) r = r.slice("decision:".length);
     if (r.startsWith("./")) r = r.slice(2);
@@ -41525,7 +41525,7 @@ function supersededWikiPages(wikiDir2) {
       superseded.add(abs);
     }
     for (const ref of refsOf(fm["supersedes"])) {
-      const target = resolve51(ref);
+      const target = resolve52(ref);
       if (target && target !== abs) superseded.add(target);
     }
   }
@@ -47015,7 +47015,7 @@ function calcDelayMs(attempt, strategy, baseMs) {
 }
 function realSleep(ms) {
   if (ms <= 0) return Promise.resolve();
-  return new Promise((resolve51) => setTimeout(resolve51, ms));
+  return new Promise((resolve52) => setTimeout(resolve52, ms));
 }
 async function runWithRetry(dispatchFn, opts) {
   const maxAttempts = Math.max(1, Math.floor(opts.maxAttempts));
@@ -65983,11 +65983,11 @@ function writeRehydrateHeartbeat(runDir3, snapshot, reason = "compaction rung is
 
 // hooks/lib/guild-hook-event.ts
 async function readHookStdin() {
-  return new Promise((resolve51) => {
+  return new Promise((resolve52) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve51(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve51(""));
+    process.stdin.on("end", () => resolve52(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve52(""));
   });
 }
 function emitClaudeHookEvent(raw) {
