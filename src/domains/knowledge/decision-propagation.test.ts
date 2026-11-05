@@ -482,21 +482,48 @@ describe("K04 R1 regressions", () => {
     expect(resumed.replan_required?.map((e) => e.id)).toEqual(["plan:lane-a"]);
   });
 
-  it("F4: a vanished proposal for an already-accepted id is reported missing", () => {
+  it("F4/R2-F3: only the candidate an acceptance names is explained; a sibling proposal stays missing", () => {
     const r = mkRoot("repo");
     harvest(r, "d1");
-    const staged = harvest(r, "d1", { autopromote: false, body: "Proposed revision of d1." });
-    expect(staged.candidate_path).toBeDefined();
-    fs.rmSync(staged.candidate_path!);
+    const a = harvest(r, "d1", { autopromote: false, body: "Proposal A for d1." });
+    const b = harvest(r, "d1", { autopromote: false, body: "Proposal B for d1." });
+    const aRev = sha(fs.readFileSync(a.candidate_path!));
+    const page = path.join(r.guildDir, "wiki", "decisions", "d1.md");
+    // Human ingest of A only (the wiki-promote door binds the candidate).
+    const promoted = harvest(r, "d1", { body: "Proposal A for d1.", expect_before_hash: sha(fs.readFileSync(page)).slice(7), from_candidate: { path: a.candidate_path!, sha256: aRev } });
+    expect(promoted.promoted).toBe(true);
+    fs.rmSync(a.candidate_path!);
+    fs.rmSync(b.candidate_path!);
     const pub = publishDecisionCandidates({ guildDir: r.guildDir, autopromote: false });
-    expect(pub.status === "ok" && pub.missing).toHaveLength(1);
-    // Still missing on the next publish; an acceptance recorded later explains it.
+    if (pub.status !== "ok") throw new Error(pub.detail);
+    expect(pub.missing).toEqual([path.relative(r.guildDir, b.candidate_path!)]);
+    // Still missing on the next publish; an unrelated acceptance of d1 does not explain it.
+    harvest(r, "d1", { body: "Another d1 revision.", expect_before_hash: sha(fs.readFileSync(page)).slice(7) });
     const again = publishDecisionCandidates({ guildDir: r.guildDir, autopromote: false });
     expect(again.status === "ok" && again.missing).toHaveLength(1);
-    const page = path.join(r.guildDir, "wiki", "decisions", "d1.md");
-    harvest(r, "d1", { body: "Human-ingested d1 revision.", expect_before_hash: sha(fs.readFileSync(page)).slice(7) });
-    const after = publishDecisionCandidates({ guildDir: r.guildDir, autopromote: false });
-    expect(after.status === "ok" && after.missing).toEqual([]);
+  });
+
+  it("R2-F1: re-pinning a summary to the same decision invalidates the generation bound to the old summary", () => {
+    const { r, summary, pinD1 } = at37Fixture();
+    expect(publish(r).status).toBe("published");
+    fs.appendFileSync(summary, "More detail.\n");
+    expect(pinDependent({ guildDir: r.guildDir, kind: "summary", name: "retries", path: summary, decisions: pinD1 }).status).toBe("pinned");
+    const st = publicationStatus({ indexesDir: path.join(r.guildDir, "indexes"), observe: () => basis })!;
+    expect(st.decisions.state).toBe("stale");
+    expect(st.admit_critical).toBe(false);
+  });
+
+  it("R2-F2: a legacy id superseded before it had an event can never become authority", () => {
+    const r = mkRoot("repo");
+    const legacy = write(path.join(r.guildDir, "wiki", "decisions", "legacy.md"), "---\ntype: decision\nschema_version: guild.decision.v1\nid: decision:legacy\nstatus: canonical\n---\n# legacy\n");
+    const d2 = harvest(r, "modern", { replaces: "decision:legacy" });
+    expect(d2.promoted).toBe(true);
+    expect(readDecisionLedger(r.guildDir).tombstones.get("decision:legacy")!.id).toBe("decision:modern");
+    const again = recordAcceptedDecision({ guildDir: r.guildDir, pagePath: legacy });
+    expect(again.status === "refused" && again.reason).toBe("superseded");
+    const plan = write(path.join(r.guildDir, "plan", "p.md"), "p\n");
+    const pin = pinDependent({ guildDir: r.guildDir, kind: "plan", name: "p", path: plan, decisions: [{ id: "decision:legacy", revision: sha(fs.readFileSync(legacy)) }] });
+    expect(pin.status === "refused" && pin.reason).toBe("unapproved");
   });
 });
 

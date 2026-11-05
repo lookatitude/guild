@@ -38870,13 +38870,15 @@ function parseEvent(bytes, seq, prev) {
   if (ev.prev_event_sha256 !== prev) throw new DecisionLedgerError(`event ${seq} does not chain to its predecessor`);
   if (!isEntity(ev.decision, "decision")) throw new DecisionLedgerError(`event ${seq} has an invalid decision ref`);
   if (!Array.isArray(ev.supersedes) || !ev.supersedes.every((s) => isEntity(s, "decision"))) throw new DecisionLedgerError(`event ${seq} has an invalid supersedes list`);
-  if (typeof ev.page !== "string" || !Array.isArray(ev.supersedes_unrecorded)) throw new DecisionLedgerError(`event ${seq} is incomplete`);
+  if (typeof ev.page !== "string" || !Array.isArray(ev.supersedes_unrecorded) || !ev.supersedes_unrecorded.every((x) => typeof x === "string")) throw new DecisionLedgerError(`event ${seq} is incomplete`);
+  const fc = ev.from_candidate;
+  if (fc != null && (typeof fc.path !== "string" || typeof fc.revision !== "string" || !SHA.test(fc.revision))) throw new DecisionLedgerError(`event ${seq} has an invalid candidate ref`);
   return ev;
 }
 function readDecisionLedger(guildDir) {
   const dir = path67.join(decisionsHome(guildDir), "events");
   const c = checkContained(guildDir, dir, { policy: "physical" });
-  const ledger = { head: null, events: [], decisions: /* @__PURE__ */ new Map() };
+  const ledger = { head: null, events: [], decisions: /* @__PURE__ */ new Map(), tombstones: /* @__PURE__ */ new Map() };
   if (isRefused(c)) {
     if (absent(c.code)) return ledger;
     throw new DecisionLedgerError(`events dir: ${c.code}`);
@@ -38891,14 +38893,15 @@ function readDecisionLedger(guildDir) {
     const ev = parseEvent(bytes, i + 1, prev);
     prev = sha2(bytes);
     ledger.events.push(ev);
-    apply(ledger.decisions, ev);
+    apply(ledger, ev);
   }
   if (prev) ledger.head = { seq: seqs.length, sha256: prev };
   return ledger;
 }
-function apply(decisions, ev) {
+function apply(ledger, ev) {
+  const decisions = ledger.decisions;
   const prior = decisions.get(ev.decision.id);
-  if (prior?.status === "superseded") throw new DecisionLedgerError(`event ${ev.seq} re-accepts superseded ${ev.decision.id}`);
+  if (prior?.status === "superseded" || ledger.tombstones.has(ev.decision.id)) throw new DecisionLedgerError(`event ${ev.seq} re-accepts superseded ${ev.decision.id}`);
   decisions.set(ev.decision.id, {
     ref: ev.decision,
     page: ev.page,
@@ -38913,6 +38916,10 @@ function apply(decisions, ev) {
     }
     st.status = "superseded";
     st.superseded_by = ev.decision;
+  }
+  for (const id of ev.supersedes_unrecorded) {
+    if (!ENTITY_ID.test(id) || decisions.has(id)) throw new DecisionLedgerError(`event ${ev.seq} has an invalid unrecorded supersession ${id}`);
+    ledger.tombstones.set(id, ev.decision);
   }
 }
 function eventName(seq) {
@@ -38960,6 +38967,13 @@ function recordAcceptedDecision(input) {
   const replaces = typeof fm["replaces"] === "string" ? [fm["replaces"]] : [];
   const wanted = [.../* @__PURE__ */ new Set([...replaces, ...input.supersededIds ?? []])].sort();
   if (wanted.includes(id)) return { status: "refused", reason: "cycle", detail: `${id} cannot supersede itself` };
+  let fromCandidate = null;
+  if (input.fromCandidate) {
+    const home = path67.join(guildDir, "knowledge", "candidates", "decisions");
+    const c = checkContained(home, input.fromCandidate.path, { policy: "physical" });
+    if (isRefused(c) || !SHA.test(input.fromCandidate.revision)) return { status: "refused", reason: "scope", detail: `${input.fromCandidate.path} is not a candidate of this root` };
+    fromCandidate = { path: rel2(guildDir, path67.resolve(input.fromCandidate.path)), revision: input.fromCandidate.revision };
+  }
   const owner = ownerSourceId(guildDir);
   const decision = { source_id: owner, kind: "decision", id, revision: sha2(bytes) };
   const page = rel2(guildDir, path67.resolve(input.pagePath));
@@ -38968,18 +38982,19 @@ function recordAcceptedDecision(input) {
       for (let attempt = 0; attempt < 8; attempt++) {
         const ledger = readDecisionLedger(guildDir);
         const cur = ledger.decisions.get(id);
-        if (cur?.status === "superseded") {
-          return { status: "refused", reason: "superseded", detail: `${id} was superseded by ${cur.superseded_by?.id ?? "?"}; it cannot become authority again` };
+        const tomb = ledger.tombstones.get(id);
+        if (cur?.status === "superseded" || tomb) {
+          return { status: "refused", reason: "superseded", detail: `${id} was superseded by ${(cur?.superseded_by ?? tomb)?.id ?? "?"}; it cannot become authority again` };
         }
         const supersedes = [];
         const unrecorded = [];
         for (const sid of wanted) {
           const s = ledger.decisions.get(sid);
           if (s?.status === "accepted") supersedes.push(s.ref);
-          else if (!s) unrecorded.push(sid);
+          else if (!s && !ledger.tombstones.has(sid)) unrecorded.push(sid);
         }
-        if (cur && cur.ref.revision === decision.revision && supersedes.length === 0) {
-          const last = [...ledger.events].reverse().find((e) => e.decision.id === id);
+        const last = cur ? [...ledger.events].reverse().find((e) => e.decision.id === id) : void 0;
+        if (last && cur.ref.revision === decision.revision && supersedes.length === 0 && unrecorded.length === 0 && (!fromCandidate || last.from_candidate?.revision === fromCandidate.revision)) {
           return { status: "unchanged", event: last };
         }
         const ev = {
@@ -38992,7 +39007,8 @@ function recordAcceptedDecision(input) {
           supersedes,
           supersedes_unrecorded: unrecorded,
           recorded_at: input.now ?? (/* @__PURE__ */ new Date()).toISOString(),
-          op_id: input.opId ?? null
+          op_id: input.opId ?? null,
+          from_candidate: fromCandidate
         };
         const target = path67.join(decisionsHome(guildDir), "events", eventName(ev.seq));
         if (createExclusive2(guildDir, target, JSON.stringify(ev, null, 2) + "\n")) return { status: "recorded", event: ev };
@@ -39136,7 +39152,7 @@ function computeReport(guildDir, now) {
     let state;
     if (pin.dependent_kind === "plan") state = stale.length || drift ? "replan_required" : "current";
     else state = stale.length ? "stale" : drift ? "unknown" : "current";
-    dependents.push({ dependent: pin.dependent, dependent_kind: pin.dependent_kind, path: pin.path, state, observed_revision: observed, stale_decisions: stale, reasons });
+    dependents.push({ dependent: pin.dependent, dependent_kind: pin.dependent_kind, path: pin.path, pinned: pin.decisions, state, observed_revision: observed, stale_decisions: stale, reasons });
   }
   const memory = dependents.filter((d) => d.dependent_kind !== "plan");
   const memStale = memory.filter((d) => d.state === "stale").map((d) => d.dependent);
@@ -39182,7 +39198,8 @@ function decisionPublicationRefs(guildDir, now) {
     project_memory: {
       state: r.project_memory.state,
       reason: memStateReason,
-      digest: sha2(canonicalJson2({ head: r.ledger_head, dependents: r.dependents.map((d) => [d.dependent, d.state]) }))
+      // Every dependent binding (its revision, pinned decisions and state) is in the digest.
+      digest: sha2(canonicalJson2(r.dependents.map((d) => [d.dependent, d.state, d.pinned])))
     }
   };
 }
@@ -39255,7 +39272,7 @@ function publishDecisionCandidates(input) {
       for (const p of prev.candidates ?? []) {
         if (present2.has(p.path)) continue;
         const listedAt = p.state === "missing" && typeof p.listed_at_seq === "number" ? p.listed_at_seq : since;
-        const promoted = !!p.decision_id && ledger.events.some((e) => e.decision.id === p.decision_id && e.seq > listedAt);
+        const promoted = ledger.events.some((e) => e.from_candidate?.path === p.path && e.from_candidate.revision === p.candidate.revision);
         if (promoted) continue;
         entries.push({ ...p, state: "missing", listed_at_seq: listedAt });
         missing.push(p.path);
@@ -39798,7 +39815,7 @@ function finishHarvest(input, op, storage, wikiRoot2, decisionId, now, storeOpts
   }
   const guildDir = (storage.project ?? storage.workspace).definitions();
   const superseded = [.../* @__PURE__ */ new Set([...input.replaces ? [input.replaces] : [], ...op.superseded_ids ?? []])];
-  const accepted = recordAcceptedDecision({ guildDir, pagePath: wikiAbs, supersededIds: superseded, now, opId: op.op_id });
+  const accepted = recordAcceptedDecision({ guildDir, pagePath: wikiAbs, supersededIds: superseded, now, opId: op.op_id, ...input.from_candidate ? { fromCandidate: { path: input.from_candidate.path, revision: input.from_candidate.sha256 } } : {} });
   if (accepted.status === "refused") return blockResume(input, op, "decision-ledger", `${accepted.reason}: ${accepted.detail}`);
   const propagation = propagateDecisions({ guildDir, now });
   if (propagation.status === "refused") return blockResume(input, op, "decision-propagation", `${propagation.reason}: ${propagation.detail}`);

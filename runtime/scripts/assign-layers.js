@@ -6875,13 +6875,15 @@ function parseEvent(bytes, seq, prev) {
   if (ev.prev_event_sha256 !== prev) throw new DecisionLedgerError(`event ${seq} does not chain to its predecessor`);
   if (!isEntity(ev.decision, "decision")) throw new DecisionLedgerError(`event ${seq} has an invalid decision ref`);
   if (!Array.isArray(ev.supersedes) || !ev.supersedes.every((s) => isEntity(s, "decision"))) throw new DecisionLedgerError(`event ${seq} has an invalid supersedes list`);
-  if (typeof ev.page !== "string" || !Array.isArray(ev.supersedes_unrecorded)) throw new DecisionLedgerError(`event ${seq} is incomplete`);
+  if (typeof ev.page !== "string" || !Array.isArray(ev.supersedes_unrecorded) || !ev.supersedes_unrecorded.every((x) => typeof x === "string")) throw new DecisionLedgerError(`event ${seq} is incomplete`);
+  const fc = ev.from_candidate;
+  if (fc != null && (typeof fc.path !== "string" || typeof fc.revision !== "string" || !SHA.test(fc.revision))) throw new DecisionLedgerError(`event ${seq} has an invalid candidate ref`);
   return ev;
 }
 function readDecisionLedger(guildDir) {
   const dir = path21.join(decisionsHome(guildDir), "events");
   const c = checkContained(guildDir, dir, { policy: "physical" });
-  const ledger = { head: null, events: [], decisions: /* @__PURE__ */ new Map() };
+  const ledger = { head: null, events: [], decisions: /* @__PURE__ */ new Map(), tombstones: /* @__PURE__ */ new Map() };
   if (isRefused(c)) {
     if (absent(c.code)) return ledger;
     throw new DecisionLedgerError(`events dir: ${c.code}`);
@@ -6896,14 +6898,15 @@ function readDecisionLedger(guildDir) {
     const ev = parseEvent(bytes, i + 1, prev);
     prev = sha2(bytes);
     ledger.events.push(ev);
-    apply(ledger.decisions, ev);
+    apply(ledger, ev);
   }
   if (prev) ledger.head = { seq: seqs.length, sha256: prev };
   return ledger;
 }
-function apply(decisions, ev) {
+function apply(ledger, ev) {
+  const decisions = ledger.decisions;
   const prior = decisions.get(ev.decision.id);
-  if (prior?.status === "superseded") throw new DecisionLedgerError(`event ${ev.seq} re-accepts superseded ${ev.decision.id}`);
+  if (prior?.status === "superseded" || ledger.tombstones.has(ev.decision.id)) throw new DecisionLedgerError(`event ${ev.seq} re-accepts superseded ${ev.decision.id}`);
   decisions.set(ev.decision.id, {
     ref: ev.decision,
     page: ev.page,
@@ -6918,6 +6921,10 @@ function apply(decisions, ev) {
     }
     st.status = "superseded";
     st.superseded_by = ev.decision;
+  }
+  for (const id of ev.supersedes_unrecorded) {
+    if (!ENTITY_ID.test(id) || decisions.has(id)) throw new DecisionLedgerError(`event ${ev.seq} has an invalid unrecorded supersession ${id}`);
+    ledger.tombstones.set(id, ev.decision);
   }
 }
 function eventName(seq) {
@@ -7005,7 +7012,7 @@ function computeReport(guildDir, now) {
     let state;
     if (pin.dependent_kind === "plan") state = stale.length || drift ? "replan_required" : "current";
     else state = stale.length ? "stale" : drift ? "unknown" : "current";
-    dependents.push({ dependent: pin.dependent, dependent_kind: pin.dependent_kind, path: pin.path, state, observed_revision: observed, stale_decisions: stale, reasons });
+    dependents.push({ dependent: pin.dependent, dependent_kind: pin.dependent_kind, path: pin.path, pinned: pin.decisions, state, observed_revision: observed, stale_decisions: stale, reasons });
   }
   const memory = dependents.filter((d) => d.dependent_kind !== "plan");
   const memStale = memory.filter((d) => d.state === "stale").map((d) => d.dependent);
@@ -7036,7 +7043,8 @@ function decisionPublicationRefs(guildDir, now) {
     project_memory: {
       state: r.project_memory.state,
       reason: memStateReason,
-      digest: sha2(canonicalJson({ head: r.ledger_head, dependents: r.dependents.map((d) => [d.dependent, d.state]) }))
+      // Every dependent binding (its revision, pinned decisions and state) is in the digest.
+      digest: sha2(canonicalJson(r.dependents.map((d) => [d.dependent, d.state, d.pinned])))
     }
   };
 }

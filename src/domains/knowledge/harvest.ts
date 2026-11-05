@@ -264,6 +264,8 @@ export interface HarvestInput {
   /** Ids pinned by a working set / lane bundle / assignment / spec / packet. */
   pinned_decision_ids?: readonly string[];
   glossary_term?: string;
+  /** K04: the staged candidate this op promotes (`wiki-promote`), bound into the accepted event. */
+  from_candidate?: { path: string; sha256: `sha256:${string}` };
   /** Project playbook span to replace in the same op. */
   playbook?: { path: string; span: string; replacement: string };
   /** True when the wiki has uncommitted changes. T0 knows; this module does not shell out. */
@@ -931,7 +933,7 @@ function finishHarvest(
   // not yet authority, and reporting it promoted would skip the replan.
   const guildDir = (storage.project ?? storage.workspace)!.definitions();
   const superseded = [...new Set([...(input.replaces ? [input.replaces] : []), ...(op.superseded_ids ?? [])])];
-  const accepted = recordAcceptedDecision({ guildDir, pagePath: wikiAbs, supersededIds: superseded, now, opId: op.op_id });
+  const accepted = recordAcceptedDecision({ guildDir, pagePath: wikiAbs, supersededIds: superseded, now, opId: op.op_id, ...(input.from_candidate ? { fromCandidate: { path: input.from_candidate.path, revision: input.from_candidate.sha256 } } : {}) });
   if (accepted.status === "refused") return blockResume(input, op, "decision-ledger", `${accepted.reason}: ${accepted.detail}`);
   const propagation = propagateDecisions({ guildDir, now });
   if (propagation.status === "refused") return blockResume(input, op, "decision-propagation", `${propagation.reason}: ${propagation.detail}`);

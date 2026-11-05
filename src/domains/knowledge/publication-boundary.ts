@@ -294,7 +294,7 @@ export function publicationStatus(input: {
 }
 
 function decisionView(r: DecisionPublicationRefs | null): string {
-  return canonicalJson(r ? { decision_refs: r.decision_refs, replan_required: r.replan_required, memory: r.project_memory.state } : null);
+  return canonicalJson(r ? { decision_refs: r.decision_refs, replan_required: r.replan_required, memory: r.project_memory.state, bindings: r.project_memory.digest } : null);
 }
 
 /** Compare the decisions bound into a generation with the owner's ledger and pins now. */
