@@ -381,22 +381,35 @@ function atomicWrite(root: string, guildRel: string, bytes: string): void {
   fs.renameSync(tmp, prepared.realPath);
 }
 
-/** Write the body under versions/<analysis_id>/, then repoint current.v2.json. v1 analysis.json is never touched. */
-export function writeRunAnalysisV2(root: string, analysis: RunAnalysisV2): { body: string; pointer: string } {
+/**
+ * Write the body under versions/<analysis_id>/, then repoint current.v2.json. A valid body already at
+ * that id is kept (same key, so same inputs and versions): its bytes stay stable for existing references.
+ * v1 analysis.json is never touched.
+ */
+export function writeRunAnalysisV2(root: string, analysis: RunAnalysisV2): { body: string; pointer: string; analysis: RunAnalysisV2 } {
   assertRunId(analysis.run.id);
   const ok = validateRunAnalysisV2(analysis);
   if (!ok.ok) throw new Error(`refusing to write an invalid run analysis: ${ok.errors.join("; ")}`);
   const key = analysisCacheKey(analysis.query.versions, analysis.query.snapshot.input_manifest_digest, { source_id: analysis.run.source_id, run_id: analysis.run.id });
   if (analysisIdOf(key) !== analysis.analysis_id) throw new Error("analysis id does not match its cache key");
-  const bytes = bodyBytes(analysis);
   const body = bodyRel(analysis.run.id, analysis.analysis_id);
-  atomicWrite(root, body, bytes);
+  const existing = readRetained(root, body);
+  let kept: RunAnalysisV2 | null = null;
+  if (existing.state === "present") {
+    try {
+      const prior = JSON.parse(existing.bytes.toString("utf8")) as RunAnalysisV2;
+      if (validateRunAnalysisV2(prior).ok && prior.analysis_id === analysis.analysis_id && bodyBytes(prior) === existing.bytes.toString("utf8") &&
+          analysisCacheKey(prior.query.versions, prior.query.snapshot.input_manifest_digest, { source_id: prior.run.source_id, run_id: prior.run.id }) === key) kept = prior;
+    } catch { /* corrupt: rewritten below */ }
+  }
+  const bytes = bodyBytes(kept ?? analysis);
+  if (!kept) atomicWrite(root, body, bytes);
   const pointer: RunAnalysisPointer = {
     schema_version: RUN_ANALYSIS_POINTER_SCHEMA, source_id: analysis.run.source_id, run_id: analysis.run.id,
     analysis_id: analysis.analysis_id, cache_key: key, analysis_sha256: sha(bytes),
   };
   atomicWrite(root, pointerRel(analysis.run.id), JSON.stringify(pointer, null, 2) + "\n");
-  return { body, pointer: pointerRel(analysis.run.id) };
+  return { body, pointer: pointerRel(analysis.run.id), analysis: kept ?? analysis };
 }
 
 export type CacheMissReason = "missing" | "legacy_v1_only" | "partial" | "corrupt" | "version_mismatch" | "input_changed";
@@ -458,16 +471,18 @@ export function analyzeRunV2(root: string, opts: AnalyzeRunV2Options): AnalyzeRu
   // Hash, read, hash again: the projection is bound to the digest only when nothing changed in between.
   let snapshot: { evidence: TraceEvidence[]; traceUsable: boolean; trace: ReturnType<typeof readTrace> | null } | null = null;
   for (let attempt = 0; attempt < 3 && snapshot === null; attempt++) {
+    // A probe read discovers the sidecar dependencies so they are hashed before the projection read too.
     const before = retainedEvidence(root, opts.source_id, opts.run_id, opts.as_of);
+    const probe = before.traceUsable ? readTrace(root, opts.run_id) : null;
+    const evidence = [...before.evidence, ...payloadEvidence(root, opts.source_id, probe?.events ?? [], opts.as_of)];
     const read = before.traceUsable ? readTrace(root, opts.run_id) : null;
-    const evidence = [...before.evidence, ...payloadEvidence(root, opts.source_id, read?.events ?? [], opts.as_of)];
     const after = retainedEvidence(root, opts.source_id, opts.run_id, opts.as_of);
     const again = [...after.evidence, ...payloadEvidence(root, opts.source_id, read?.events ?? [], opts.as_of)];
     if (inputManifestDigest(evidence) === inputManifestDigest(again)) snapshot = { evidence, traceUsable: before.traceUsable, trace: read };
   }
   if (snapshot === null) throw new Error(`run ${opts.run_id} inputs kept changing during analysis; retry later`);
   const { evidence, traceUsable, trace } = snapshot;
-  const late = trace?.events.find((e) => compareTraceInstants(e.at, opts.as_of) > 0);
+  const late = trace?.events.find((e) => compareTraceInstants(e.at, opts.as_of) >= 0);
   if (late) throw new Error(`as_of ${opts.as_of} precedes retained trace event ${late.event_id}; the snapshot cannot include later evidence`);
   // as_of is left out of normalization so the projection depends only on keyed inputs; a cache hit
   // therefore returns the same body, stamped with the as_of it was first taken at.
@@ -481,8 +496,8 @@ export function analyzeRunV2(root: string, opts: AnalyzeRunV2Options): AnalyzeRu
   const fresh = buildRunAnalysisV2({ source_id: opts.source_id, run_id: opts.run_id, as_of: opts.as_of, ledger, input_evidence: evidence, trace_usable: traceUsable, pricing, versions: opts.versions, observed_semantics: observed, native_sessions: natives });
   const cached = readCachedRunAnalysisV2(root, opts.source_id, opts.run_id, { versions: fresh.query.versions, input_manifest_digest: fresh.query.snapshot.input_manifest_digest });
   if (cached.state === "hit") return { analysis: cached.analysis, cache: "hit", reason: null, dimensions: [] };
-  writeRunAnalysisV2(root, fresh);
-  return { analysis: fresh, cache: "recomputed", reason: cached.reason, dimensions: cached.dimensions };
+  const written = writeRunAnalysisV2(root, fresh);
+  return { analysis: written.analysis, cache: "recomputed", reason: cached.reason, dimensions: cached.dimensions };
 }
 
 // ── Legacy v1 ────────────────────────────────────────────────────────────────
@@ -522,6 +537,7 @@ export function compareRunsV2(inputs: readonly ComparisonInput[], opts: { as_of:
   const runs: RunEntity[] = [];
   const refs: TraceEvidence[] = [];
   const versions: VersionSet[] = [];
+  const late: string[] = [];
   for (const input of inputs) {
     if ("analysis" in input) {
       const a = input.analysis;
@@ -530,6 +546,7 @@ export function compareRunsV2(inputs: readonly ComparisonInput[], opts: { as_of:
       runs.push(a.run);
       refs.push({ source_id: a.run.source_id, path: bodyRel(a.run.id, a.analysis_id), sha256: sha(bodyBytes(a)), schema_version: RUN_ANALYSIS_V2_SCHEMA, observed_at: opts.as_of, availability: "available", reason: null });
       versions.push(a.query.versions);
+      if (compareTraceInstants(a.query.snapshot.as_of, opts.as_of) > 0) late.push(`${a.run.id}: analysis snapshot ${a.query.snapshot.as_of} is later than the comparison as_of`);
     } else {
       const v1 = input.legacy as Record<string, unknown>;
       legacyV1UsageProjection(v1);
@@ -544,7 +561,7 @@ export function compareRunsV2(inputs: readonly ComparisonInput[], opts: { as_of:
   const keys = runs.map((r) => `${r.source_id}\u0000${r.id}`);
   if (new Set(keys).size !== keys.length) throw new Error("duplicate compared run");
   const pinned = opts.versions ?? versions.find((v) => v.schema === RUN_ANALYSIS_V2_SCHEMA) ?? versions[0]!;
-  const reasons: string[] = [];
+  const reasons: string[] = [...late];
   inputs.forEach((input, i) => {
     if (!("analysis" in input)) reasons.push(`${runs[i]!.id}: legacy v1 analysis (${LEGACY_V1_USAGE_SEMANTICS}) cannot be ranked with v2`);
     else {

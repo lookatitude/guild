@@ -220,6 +220,21 @@ describe("AT26 · cache compatibility", () => {
     expect(later.analysis).toEqual(first.analysis);
     expect(later.analysis.query.snapshot.as_of).toBe(AS_OF);
     expect(() => analyzeRunV2(root, { source_id: SOURCE, run_id: "run-1", pricing: P1, as_of: "2026-10-26T00:00:10.5Z" })).toThrow(/precedes retained trace event/);
+    // The window is half-open: an event exactly at as_of is outside it.
+    expect(() => analyzeRunV2(root, { source_id: SOURCE, run_id: "run-1", pricing: P1, as_of: "2026-10-26T00:00:11Z" })).toThrow(/precedes retained trace event/);
+  });
+
+  it("repairing a lost pointer keeps the existing body bytes for the same analysis id", () => {
+    richRun("run-1");
+    const first = run("run-1");
+    const body = g(`analysis/runs/run-1/versions/${first.analysis.analysis_id}/analysis.json`);
+    const bytes = fs.readFileSync(body);
+    fs.rmSync(g("analysis/runs/run-1/current.v2.json"));
+    const again = analyzeRunV2(root, { source_id: SOURCE, run_id: "run-1", pricing: P1, as_of: "2026-10-27T00:00:00Z" });
+    expect(again.cache).toBe("recomputed");
+    expect(again.analysis).toEqual(first.analysis);
+    expect(fs.readFileSync(body).equals(bytes)).toBe(true);
+    expect(run("run-1").cache).toBe("hit");
   });
 
   it("payload sidecars are keyed inputs: losing one misses the cache and lowers coverage", () => {
@@ -326,6 +341,10 @@ describe("AT26 · cache compatibility", () => {
     // A forged "compatible" verdict over mixed versions fails validation.
     expect(validateRunComparisonV2({ ...mixedPricing, compatibility: "compatible", refusal_reasons: [] }).ok).toBe(false);
     expect(() => compareRunsV2([{ analysis: a }, { analysis: a }], { as_of: AS_OF })).toThrow(/duplicate/);
+    // A comparison cannot cut off before the snapshots it compares.
+    const early = compareRunsV2([{ analysis: a }, { analysis: b }], { as_of: "2026-10-25T00:00:00Z" });
+    expect(early.compatibility).toBe("refused");
+    expect(early.refusal_reasons.join(" ")).toContain("later than the comparison as_of");
   });
 
   it("mixed observed usage semantics refuse comparison", () => {
