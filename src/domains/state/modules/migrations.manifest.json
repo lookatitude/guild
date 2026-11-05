@@ -10,6 +10,8 @@
     "commands": ["migrate"],
     "scripts": [
       "index-migrate",
+      "lib/stack-migration",
+      "stack-migration",
       "sync-migration"
     ],
     "script_id_prefixes": ["dot-guild/"]

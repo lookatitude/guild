@@ -2069,6 +2069,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/stack-migration",
+      "source_path": "scripts/lib/stack-migration.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/state/ensure-storage-layout",
       "source_path": "scripts/lib/state/ensure-storage-layout.ts",
       "kind": "lib"
@@ -2271,6 +2276,11 @@
     {
       "id": "sign-release-attestation",
       "source_path": "scripts/sign-release-attestation.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "stack-migration",
+      "source_path": "scripts/stack-migration.ts",
       "kind": "cli"
     },
     {
