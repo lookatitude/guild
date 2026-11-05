@@ -81,15 +81,17 @@ export function isRfc3339(v: string): boolean {
   return true;
 }
 
+/** Epoch microseconds of an RFC 3339 instant; callers check `isRfc3339` first. */
+export function traceInstantMicros(t: string): bigint {
+  const m = TIME_RE.exec(t)!;
+  const frac = /\.(\d+)/.exec(t.slice(19))?.[1] ?? "";
+  const whole = BigInt(Date.parse(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}${t.slice(19).replace(/^\.\d+/, "")}`));
+  return whole * 1000n + BigInt((frac + "000000").slice(0, 6));
+}
+
 /** Microsecond-precision instant order (the frozen verifier compares datetimes, not ms). */
 export function compareTraceInstants(a: string, b: string): number {
-  const micros = (t: string): bigint => {
-    const m = TIME_RE.exec(t)!;
-    const frac = /\.(\d+)/.exec(t.slice(19))?.[1] ?? "";
-    const whole = BigInt(Date.parse(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}${t.slice(19).replace(/^\.\d+/, "")}`));
-    return whole * 1000n + BigInt((frac + "000000").slice(0, 6));
-  };
-  const d = micros(a) - micros(b);
+  const d = traceInstantMicros(a) - traceInstantMicros(b);
   return d < 0n ? -1 : d > 0n ? 1 : 0;
 }
 
