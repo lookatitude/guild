@@ -338,18 +338,68 @@ describe("R02 · codex r1 regressions", () => {
     expect(readControllerJournal({ privateDir }).operations.has("op-late")).toBe(false);
   });
 
-  it("F1: an entry linked after the lease deadline is voided and has no effect", () => {
+  it("F1: a provisional entry is inert when the lease expires before its commit", () => {
     const c = open();
     const w = c.issueWriterGrant("s");
     const real = fs.linkSync;
-    const spy = spyOn(fs, "linkSync").mockImplementation((a: fs.PathLike, b: fs.PathLike) => { real(a, b); if (String(b).includes(`${path.sep}journal${path.sep}`)) clock += LEASE + 1; });
+    let journalLinks = 0;
+    const spy = spyOn(fs, "linkSync").mockImplementation((a: fs.PathLike, b: fs.PathLike) => { real(a, b); if (String(b).includes(`${path.sep}journal${path.sep}`) && ++journalLinks === 1) clock += LEASE + 1; });
     try {
       expect(code(() => c.control(w, { operation_id: "op-late", action: "release", subject: "run" }))).toBe("controller_unavailable");
     } finally { spy.mockRestore(); }
     const v = readControllerJournal({ privateDir });
-    expect(v.entries[v.entries.length - 1]!.kind).toBe("void");
+    expect(v.entries[v.entries.length - 1]!.kind).toBe("control");
     expect(v.operations.has("op-late")).toBe(false);
     expect(fs.existsSync(path.join(durableRoot, ".guild", "runs", RUN, "controller", "receipts", "op-late.json"))).toBe(false);
+    // The next epoch sees no effect and can perform the operation itself.
+    const c2 = open();
+    const w2 = c2.issueWriterGrant("s");
+    expect(c2.control(w2, { operation_id: "op-late", action: "release", subject: "run" }).controller_epoch).toBe(c2.epoch);
+  });
+
+  it("F1: a crash between the provisional entry and its commit leaves no effect after restart", () => {
+    const c = open();
+    const w = c.issueWriterGrant("s");
+    const real = fs.linkSync;
+    let journalLinks = 0;
+    const spy = spyOn(fs, "linkSync").mockImplementation((a: fs.PathLike, b: fs.PathLike) => {
+      if (String(b).includes(`${path.sep}journal${path.sep}`) && ++journalLinks === 2) throw Object.assign(new Error("crash"), { code: "EIO" });
+      real(a, b);
+    });
+    try { expect(() => c.control(w, { operation_id: "op-x", action: "accept", subject: "a" })).toThrow("crash"); } finally { spy.mockRestore(); }
+    clock += LEASE + 1;
+    open();
+    expect(readControllerJournal({ privateDir }).operations.has("op-x")).toBe(false);
+  });
+
+  it("F1: a newer epoch taking the commit's sequence leaves the late entry inert", () => {
+    const c = open();
+    const w = c.issueWriterGrant("s");
+    const real = fs.linkSync;
+    let journalLinks = 0;
+    let c2: RunController | null = null;
+    const spy = spyOn(fs, "linkSync").mockImplementation((a: fs.PathLike, b: fs.PathLike) => {
+      const isJournal = String(b).includes(`${path.sep}journal${path.sep}`);
+      if (isJournal && ++journalLinks === 2) { spy.mockRestore(); clock += LEASE + 1; c2 = open(); }
+      real(a, b);
+    });
+    try {
+      // The commit link happens after its precommit check passed, then loses the sequence to epoch_open.
+      expect(code(() => c.control(w, { operation_id: "op-y", action: "close", subject: "run" }))).toMatch(/controller_fenced|controller_unavailable/);
+    } finally { spy.mockRestore(); }
+    expect(c2).not.toBeNull();
+    expect(readControllerJournal({ privateDir }).operations.has("op-y")).toBe(false);
+  });
+
+  it("F2: suspend that misses its lease does not corrupt the journal", () => {
+    const c = open();
+    clock += LEASE + 1;
+    c.suspend();
+    const w = (() => { try { return c.issueWriterGrant("s"); } catch (e) { return (e as ControllerRefusal).code; } })();
+    expect(w).toBe("controller_unavailable");
+    const c2 = open();
+    expect(c2.epoch).toBe(c.epoch + 1);
+    expect(readControllerJournal({ privateDir }).epoch).toBe(c2.epoch);
   });
 
   it("F2: a stale epoch's lease write or removal does not wedge the current epoch", () => {
@@ -393,6 +443,27 @@ describe("R02 · codex r1 regressions", () => {
       expect(r.rejected.length + r.accepted.length + r.replayed.length).toBeLessThanOrEqual(3);
     }
     expect(accepted).toEqual(["obs-1"]);
+  });
+
+  it("F3: cursor order matches traversal order for prefix execution ids", () => {
+    const c = open({ maxObservationsPerCollect: 1 });
+    const ga = c.issueAttemptGrant({ execution_id: "a", attempt_id: "att-a", scope: "s", expires_at_ms: clock + 100_000 });
+    const gb = c.issueAttemptGrant({ execution_id: "a-1", attempt_id: "att-b", scope: "s", expires_at_ms: clock + 100_000 });
+    writeWorkerObservation(durableRoot, RUN, ga, { observation_id: "obs-a", body: {} });
+    writeWorkerObservation(durableRoot, RUN, gb, { observation_id: "obs-b", body: {} });
+    const accepted = new Set<string>();
+    for (let i = 0; i < 2; i++) for (const a of c.collectObservations().accepted) accepted.add(a.observation_id);
+    expect([...accepted].sort()).toEqual(["obs-a", "obs-b"]);
+  });
+
+  it("F4: a planted file in place of an observations directory does not abort collection", () => {
+    const c = open();
+    const g = c.issueAttemptGrant({ execution_id: "zzz", attempt_id: "att-1", scope: "s", expires_at_ms: clock + 100_000 });
+    const bad = path.join(durableRoot, ".guild", "runs", RUN, "executions", "aaa");
+    fs.mkdirSync(bad, { recursive: true });
+    fs.writeFileSync(path.join(bad, "observations"), "not a dir");
+    writeWorkerObservation(durableRoot, RUN, g, { observation_id: "obs-1", body: {} });
+    expect(c.collectObservations().accepted.map((a) => a.observation_id)).toEqual(["obs-1"]);
   });
 });
 
