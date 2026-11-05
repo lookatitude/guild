@@ -159,6 +159,10 @@ const shape = object({
   capture: coverage, interval: nullable(interval),
 });
 
+/** Schema-mirror building blocks shared with the T03 v2 analysis validator. */
+export const TRACE_V3_CHECKS = Object.freeze({ id, hash, time, str, int0, num0, bool, konst, oneOf, nullable, relPath, array, object, evidence, coverage, usage });
+export type TraceShapeCheck = Check;
+
 export function validateTraceAnalysisV3Shape(value: unknown): TraceValidationVerdict {
   const errors: string[] = [];
   shape(value, "$", errors);
@@ -183,7 +187,7 @@ function coverageRules(c: any, require: (ok: boolean, msg: string) => void): voi
 /** Python math.isclose(a, b, abs_tol=1e-12) with its default rel_tol=1e-9. */
 const isClose = (a: number, b: number) => Math.abs(a - b) <= Math.max(1e-9 * Math.max(Math.abs(a), Math.abs(b)), 1e-12);
 
-function usageRules(u: any, require: (ok: boolean, msg: string) => void): void {
+export function usageRules(u: any, require: (ok: boolean, msg: string) => void): void {
   coverageRules(u.coverage, require);
   if (u.coverage.state === "unavailable") require(USAGE_COUNTERS.every((k) => u[k] === null), "unavailable usage must report null counters, not zero");
   if (u.input_inclusive !== null) {
