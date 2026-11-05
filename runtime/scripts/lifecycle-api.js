@@ -60502,10 +60502,11 @@ function reserveManagedSegment(root, identity, target) {
 }
 function finalizeManagedSegmentSeal(root, identity, executionId, outcome) {
   if (outcome.state === "recovery_needed") return false;
+  const outcomeState = outcome.state;
   if (outcome.source_id !== identity.source_id || outcome.run_id !== identity.run_id || outcome.attempt_id !== identity.attempt_id) throw new StackError("invalid_state", "Outcome belongs to another attempt", 409);
   const r = refusalToStack(() => readExecutionSegmentReservation(root, identity.run_id, executionId));
   if (r === null || r.attempt_id !== identity.attempt_id || r.operation_id !== identity.operation_id || r.launch_hash !== identity.launch_hash) throw new StackError("segment_reserved", "Seal requires this attempt's segment reservation", 409);
-  refusalToStack(() => sealExecutionSegment(root, { schema_version: EXECUTION_SEGMENT_SEAL_SCHEMA, source_id: identity.source_id, run_id: identity.run_id, execution_id: executionId, segment_revision: r.segment_revision, sealed_by: { operation_id: identity.operation_id, attempt_id: identity.attempt_id, launch_hash: identity.launch_hash }, outcome_state: outcome.state, outcome_sha256: managedOutcomeHash(outcome), sealed_at: outcome.ended_at }));
+  refusalToStack(() => sealExecutionSegment(root, { schema_version: EXECUTION_SEGMENT_SEAL_SCHEMA, source_id: identity.source_id, run_id: identity.run_id, execution_id: executionId, segment_revision: r.segment_revision, sealed_by: { operation_id: identity.operation_id, attempt_id: identity.attempt_id, launch_hash: identity.launch_hash }, outcome_state: outcomeState, outcome_sha256: managedOutcomeHash(outcome), sealed_at: outcome.ended_at }));
   return true;
 }
 function managedExitAction(kind, exit) {
