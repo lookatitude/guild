@@ -127,6 +127,7 @@ export * from "./workflow-graph-overlay";
 export * from "./workflow-component-compiler";
 export * from "./workflow-protected-paths";
 export * from "./phase-composition";
+export * from "./workflow-invocation-state";
 // U-TIER (T08 rework-r2): the per-run stable lock. Exported so the dispatch
 // instance cap can make "count the run's slots" and "claim one" a single atomic
 // step rather than an observation followed by a hopeful write.

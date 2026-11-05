@@ -38416,6 +38416,15 @@ var init_phase_composition = __esm({
   }
 });
 
+// src/domains/lifecycle/workflow-invocation-state.ts
+var LIMITS;
+var init_workflow_invocation_state = __esm({
+  "src/domains/lifecycle/workflow-invocation-state.ts"() {
+    init_kernel();
+    LIMITS = Object.freeze({ fileBytes: 1 << 20, headBytes: 4096, invocations: 1e3, questions: 64, evidence: 64, artifacts: 64, reason: 500, depth: 16 });
+  }
+});
+
 // src/domains/lifecycle/learning-checkpoint-5.ts
 var CHECKPOINT_VERDICTS, VERDICT_ROUTE;
 var init_learning_checkpoint_5 = __esm({
@@ -48155,6 +48164,7 @@ var init_lifecycle = __esm({
     init_workflow_component_compiler();
     init_workflow_protected_paths();
     init_phase_composition();
+    init_workflow_invocation_state();
     init_stable_lock();
     init_learning_checkpoint_5();
     init_workflow_graph_load();

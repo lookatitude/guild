@@ -18,6 +18,14 @@
  *   record      npx tsx scripts/team-decide.ts record --proposal <f> --cwd <root>
  *                   --decision <approve|reject> --decided-by <user|operator>[:<id>]
  *                   --channel <interactive_prompt|terminal_prompt|file_gate> [--decided-at <ts>]
+ *   bind        npx tsx scripts/team-decide.ts bind --cwd <root> --phase <p> --class <c>
+ *                   --source-id <id> --workflow-id <id> --component <id>@<version>
+ *                   --proposal <rel> --plan <rel> --qa-policy <rel>
+ *
+ * `bind` (W03/W04) prints the `plan_ref` + `provenance` a phase proposal must
+ * carry before approval when the phase runs a composed workflow, and the
+ * proposal stamped with them under its recomputed `proposal_hash`. It runs every
+ * W03 composition check except the binding itself; exit 3 on any violation.
  *
  * `gate` reads the PERSISTED decision trail under
  * `.guild/runs/<run-id>/team-plan/` - an in-memory or caller-supplied approval
@@ -57,19 +65,22 @@ import {
   renderRestructurePlan,
   type LoadedDecision,
 } from "../src/domains/teams/index";
-import { writeProposal, type TeamProposalV2 } from "../src/domains/teams/index";
+import { proposalHashOf, writeProposal, type TeamProposalV2 } from "../src/domains/teams/index";
 import type { TeamScheduleV1 } from "../src/domains/teams/index";
 import { recordDecision, writeDecision, type TeamDecisionV1 } from "../src/domains/teams/index";
 import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
+import { loadComponentRegistry, loadPhaseCompositionInputs, phaseBinding, type WorkflowClass } from "../src/domains/lifecycle";
 
 const USAGE = [
-  "usage: team-decide.ts <review|restructure|gate|persist|record> [flags]",
+  "usage: team-decide.ts <review|restructure|gate|persist|record|bind> [flags]",
   "  review      --proposal <f> [--previous <f>] [--schedule <f>] [--decision <f>] [--json]",
   "  restructure --proposal <f> --edits <f.json> --decided-by <actor> --channel <c> [--json]",
   "  gate        --proposal <f> --cwd <root> [--run-id <id>] [--phase <p>] [--json]",
   "  persist     --proposal <f> --cwd <root> [--json]",
   "  record      --proposal <f> --cwd <root> --decision <approve|reject> --decided-by <actor>",
   "              --channel <c> [--decided-at <rfc3339>] [--json]",
+  "  bind        --cwd <root> --phase <p> --class <c> --source-id <id> --workflow-id <id>",
+  "              --component <id>@<version> --proposal <rel> --plan <rel> --qa-policy <rel>",
 ].join("\n");
 
 interface Flags {
@@ -264,6 +275,42 @@ export function main(argv: string[] = process.argv.slice(2)): number {
               written +
               "\n"
       );
+      return 0;
+    }
+
+    if (verb === "bind") {
+      const need = ["phase", "class", "source_id", "workflow_id", "component", "proposal", "plan", "qa_policy"];
+      const missing = need.filter((k) => typeof f[k] !== "string");
+      const ref = typeof f["component"] === "string" ? /^([^@]+)@([^@]+)$/.exec(f["component"]) : null;
+      if (missing.length || !ref) {
+        process.stderr.write(
+          (missing.length ? "missing --" + missing.join(", --").replace(/_/g, "-") : "--component must be <id>@<version>") + "\n" + USAGE + "\n"
+        );
+        return 1;
+      }
+      const cwd = typeof f["cwd"] === "string" ? path.resolve(f["cwd"]) : process.cwd();
+      const refused = (violations: Array<{ rule: string; detail: string }>): number => {
+        process.stderr.write("BIND REFUSED:\n" + violations.map((v) => "  " + v.rule + ": " + v.detail).join("\n") + "\n");
+        return 3;
+      };
+      const loaded = loadPhaseCompositionInputs({ root: cwd, proposal: f["proposal"] as string, plan: f["plan"] as string, qa_policy: f["qa_policy"] as string });
+      if (!loaded.ok) return refused(loaded.violations);
+      const reg = loadComponentRegistry({ cwd });
+      if (!reg.ok) return refused(reg.violations);
+      const b = phaseBinding(reg.registry, {
+        phase: f["phase"] as string,
+        class: f["class"] as WorkflowClass,
+        workflow: { source_id: f["source_id"] as string, id: f["workflow_id"] as string },
+        root: { id: ref[1], version: ref[2] },
+        proposal: loaded.proposal,
+        plan: loaded.plan,
+        qa_policy: loaded.qa_policy,
+      });
+      if (!b.ok) return refused(b.violations);
+      // The binding changes the proposal bytes, so the stamped proposal is returned under its recomputed hash.
+      const stamped = { ...(loaded.proposal as Record<string, unknown>), plan_ref: b.plan_ref, provenance: b.provenance };
+      stamped.proposal_hash = proposalHashOf(stamped as unknown as TeamProposalV2);
+      process.stdout.write(JSON.stringify({ plan_ref: b.plan_ref, provenance: b.provenance, proposal: stamped }, null, 2) + "\n");
       return 0;
     }
 
