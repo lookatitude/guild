@@ -7,7 +7,7 @@
  * this module; its stdout/exit contract is unchanged.
  *
  * The five conditions:
- *   1. parses          — the result parses as `review_result.v1` (lenient reader).
+ *   1. parses          — the result parses as "review_result.v1" (lenient reader).
  *   2. packet_id_match — result.packet_id matches packetId (when given).
  *   3. sha256_match    — result.artifact_sha256_reviewed == sha256(current bytes).
  *   4. satisfied       — result.verdict == "satisfied" OR forcePass.

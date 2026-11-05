@@ -31,7 +31,8 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson } from "./lib/paths";
+import { guildPaths, parseCwd, parseFlag, hasFlag, readJson, computeLearnSourceBasis } from "./lib/paths";
+import { assertPublished, GRAPH_ARTIFACT, learnTarget, publishLearnArtifacts, readLearnBase } from "./lib/publish";
 import { validateGraph, validateGraphV2, type ValidationResult } from "./lib/schema";
 import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
 
@@ -98,6 +99,11 @@ function main(): void {
   ensureStorageLayout(cwd, { detectOnly: true });
   const gp = guildPaths(cwd);
 
+  // K03: basis, then destination, then inputs. A destination that moves later is refused.
+  const dry = hasFlag(argv, "dry");
+  const basis = dry ? null : computeLearnSourceBasis(gp.sourceRoot);
+  const learnBase = dry ? null : readLearnBase(learnTarget(gp));
+
   let input: unknown;
   if (hasFlag(argv, "stdin")) {
     input = JSON.parse(fs.readFileSync(0, "utf8"));
@@ -114,7 +120,7 @@ function main(): void {
   if (input && typeof input === "object") delete (input as Record<string, unknown>)._merge_report;
 
   const dispatchedV2 = isV2Input(input);
-  const result = validateWithDispatch(input, gp.repoRoot);
+  const result = validateWithDispatch(input, gp.sourceRoot);
   const counts = result.issues.reduce<Record<string, number>>((m, i) => {
     m[i.level] = (m[i.level] ?? 0) + 1;
     return m;
@@ -132,9 +138,10 @@ function main(): void {
     `dropped=${counts["dropped"] ?? 0}\n`,
   );
 
-  const dry = hasFlag(argv, "dry");
   const force = hasFlag(argv, "force");
 
+  // K03: a whole-graph replacement. It is built from no destination layer, so a
+  // destination that moved since this read is refused, never rebased over.
   if (!dry) {
     const guard = checkDowngradeGuard(gp.knowledgeGraph, result.data, force);
     if (guard.refused) {
@@ -162,7 +169,16 @@ function main(): void {
   }
 
   if (!dry) {
-    writeJson(gp.knowledgeGraph, result.data);
+    try {
+      const data = result.data;
+      assertPublished(
+        publishLearnArtifacts(learnTarget(gp), { channels: ["semantic_graph"], provenance: { semantic_graph: "ingested" }, base: learnBase!, basis: basis!, build: () => ({ [GRAPH_ARTIFACT]: data }), rebase: false }),
+        "validate",
+      );
+    } catch (err) {
+      process.stderr.write(`${String((err as Error).message ?? err)}\n`);
+      process.exit(2);
+    }
     process.stderr.write(`[validate] → ${path.relative(gp.repoRoot, gp.knowledgeGraph)}\n`);
   }
 

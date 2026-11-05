@@ -35,6 +35,15 @@ import { contentHash } from "./fingerprint";
 import { isValidBundle, bundleChecksum } from "./bundle-validate";
 import type { CachedBundle } from "./bundle-validate";
 import type { GraphEdge, GraphNode } from "./schema";
+import {
+  checkSelectiveEquivalence,
+  createManifestRecorder,
+  planInvalidation,
+  type DependencyManifest,
+  type InvalidationPlan,
+  type ResolutionTrace,
+  type SelectiveEquivalence,
+} from "./dependency-manifest";
 
 // ---------------------------------------------------------------------------
 // Public contract
@@ -608,6 +617,11 @@ export interface StructuralCache {
    * lacks — stamped at serialization, verified on reuse for byte-level integrity.
    */
   files: Record<string, CachedBundle>;
+  /**
+   * K02: the reads the last global resolution made. Diagnostic only: output
+   * never depends on it, and a malformed or absent manifest plans `global`.
+   */
+  dependencies?: DependencyManifest;
 }
 
 /**
@@ -757,7 +771,7 @@ export function buildBundles(
  * given the same final bundle set it always produces byte-identical output,
  * regardless of whether each bundle was freshly extracted or reused from cache.
  */
-export function assembleStructuralGraph(repoRoot: string, bundles: FileBundle[]): StructuralGraph {
+export function assembleStructuralGraph(repoRoot: string, bundles: FileBundle[], trace?: ResolutionTrace): StructuralGraph {
   const sorted = [...bundles].sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
 
   const nodes: GraphNode[] = [];
@@ -769,8 +783,10 @@ export function assembleStructuralGraph(repoRoot: string, bundles: FileBundle[])
     nodeIds.add(n.id);
     nodes.push(n);
   };
+  // JSON tuple keys: paths may contain "|", so a delimited key could collide.
+  const edgeKey = (e: GraphEdge) => JSON.stringify([e.type, e.source, e.target]);
   const addEdge = (e: GraphEdge) => {
-    const k = `${e.type}|${e.source}|${e.target}`;
+    const k = edgeKey(e);
     if (edgeKeys.has(k)) return;
     edgeKeys.add(k);
     edges.push(e);
@@ -799,15 +815,31 @@ export function assembleStructuralGraph(repoRoot: string, bundles: FileBundle[])
   // ── Pass 2a: imports edges (re-resolved against the current file set) ──────
   const known = new Set(sorted.map((b) => b.rel.replace(/\\/g, "/")));
   const aliases = loadTsAliases(repoRoot);
+  // K02: every inventory lookup the resolver makes, hit or miss, is a dependency.
+  const probing = (importer: string): Set<string> => {
+    if (!trace) return known;
+    const s = new Set<string>();
+    s.has = (rel: string) => {
+      const present = known.has(rel);
+      trace.probe(importer, rel, present);
+      return present;
+    };
+    return s;
+  };
+  const emit = (owner: string, e: GraphEdge) => {
+    if (!edgeKeys.has(edgeKey(e))) trace?.output(owner, e);
+    addEdge(e);
+  };
   for (const b of sorted) {
     if (!b.isCode) continue;
+    const probed = probing(b.rel);
     for (const spec of b.importSpecs) {
-      const ie = resolveImportSpec(repoRoot, b.rel, spec, known, aliases);
+      const ie = resolveImportSpec(repoRoot, b.rel, spec, probed, aliases);
       if (!ie) continue;
       const s = `file:${ie.from}`;
       const t = `file:${ie.to}`;
       if (nodeIds.has(s) && nodeIds.has(t)) {
-        addEdge(edge(s, t, "imports", 0.7, ie.kind === "alias" ? "alias import" : undefined));
+        emit(b.rel, edge(s, t, "imports", 0.7, ie.kind === "alias" ? "alias import" : undefined));
       }
     }
   }
@@ -819,7 +851,9 @@ export function assembleStructuralGraph(repoRoot: string, bundles: FileBundle[])
     idToFile: Map<string, string>,
     name: string,
     fromFile: string,
+    key: string,
   ): string | null => {
+    trace?.symbol(fromFile, key);
     const ids = map.get(name);
     if (!ids || ids.size === 0) return null;
     const sameFile = [...ids].filter((id) => idToFile.get(id) === fromFile).sort();
@@ -834,17 +868,17 @@ export function assembleStructuralGraph(repoRoot: string, bundles: FileBundle[])
     if (!b.isCode) continue;
     for (const c of b.classes) {
       for (const base of c.bases) {
-        const targetId = resolve(classNameToIds, classIdToFile, base, b.rel);
+        const targetId = resolve(classNameToIds, classIdToFile, base, b.rel, `class:${base}`);
         if (targetId && targetId !== c.id) {
           const w = classIdToFile.get(targetId) === b.rel ? 0.9 : 0.6;
-          addEdge(edge(c.id, targetId, "inherits", w));
+          emit(b.rel, edge(c.id, targetId, "inherits", w));
         }
       }
       for (const iface of c.ifaces) {
-        const targetId = resolve(classNameToIds, classIdToFile, iface, b.rel);
+        const targetId = resolve(classNameToIds, classIdToFile, iface, b.rel, `class:${iface}`);
         if (targetId && targetId !== c.id) {
           const w = classIdToFile.get(targetId) === b.rel ? 0.9 : 0.6;
-          addEdge(edge(c.id, targetId, "implements", w));
+          emit(b.rel, edge(c.id, targetId, "implements", w));
         }
       }
     }
@@ -855,16 +889,29 @@ export function assembleStructuralGraph(repoRoot: string, bundles: FileBundle[])
     if (!b.isCode) continue;
     for (const c of b.callables) {
       for (const name of c.callees) {
-        const targetId = resolve(fnNameToIds, fnIdToFile, name, b.rel);
+        const targetId = resolve(fnNameToIds, fnIdToFile, name, b.rel, `fn:${name}`);
         if (targetId && targetId !== c.id) {
           const w = fnIdToFile.get(targetId) === b.rel ? 0.9 : 0.6;
-          addEdge(edge(c.id, targetId, "calls", w));
+          emit(b.rel, edge(c.id, targetId, "calls", w));
         }
       }
     }
   }
 
   return canonicalize({ nodes, edges });
+}
+
+/**
+ * K02: global resolution plus the manifest of every read it made. The graph is
+ * exactly `assembleStructuralGraph(repoRoot, bundles)`.
+ */
+export function buildDependencyManifest(
+  repoRoot: string,
+  bundles: FileBundle[],
+): { graph: StructuralGraph; manifest: DependencyManifest } {
+  const rec = createManifestRecorder(repoRoot, bundles);
+  const graph = assembleStructuralGraph(repoRoot, bundles, rec.trace);
+  return { graph, manifest: rec.finish() };
 }
 
 /**
@@ -912,6 +959,8 @@ export interface RefreshStats {
   newFiles: string[];
   /** files in the cache but no longer in the tree → bundle dropped */
   deleted: string[];
+  /** K02: unchanged files whose resolver output the change can move, checked against global resolution. */
+  invalidation: InvalidationPlan & { selective_equivalence: SelectiveEquivalence; violations: string[] };
 }
 
 /**
@@ -928,14 +977,14 @@ export function refreshStructuralIncremental(
   relFiles: string[],
   readFile: (abs: string) => string,
   prior: StructuralCache,
-): { structural: StructuralGraph; bundles: FileBundle[]; stats: RefreshStats } {
+): { structural: StructuralGraph; bundles: FileBundle[]; stats: RefreshStats; dependencies: DependencyManifest } {
   // FIX-T4.1-3: a stamp mismatch (or a pre-fix cache with no `version`) means the
   // cached bundles were produced by a different extractor/config/shape — none are
   // trustworthy, so drop the whole cache and re-extract every file. The result is
   // a full rebuild surfaced through the incremental path (still == a clean build).
   const versionOk = prior.version === STRUCTURAL_CACHE_VERSION;
   const priorFiles = versionOk ? (prior.files ?? {}) : {};
-  const stats: RefreshStats = { mode: "incremental", reExtracted: [], reused: [], newFiles: [], deleted: [] };
+  const stats: Omit<RefreshStats, "invalidation"> = { mode: "incremental", reExtracted: [], reused: [], newFiles: [], deleted: [] };
 
   const currentSet = new Set(relFiles);
   for (const rel of Object.keys(priorFiles)) {
@@ -965,8 +1014,14 @@ export function refreshStructuralIncremental(
     }
   }
 
-  const structural = assembleStructuralGraph(repoRoot, bundles);
-  return { structural, bundles, stats };
+  // Incremental parse may reuse bundles; resolution stays global. The prior
+  // manifest only names which unchanged files should move, and the global
+  // result proves or refutes that claim.
+  const priorDeps = versionOk ? prior.dependencies ?? null : null;
+  const plan = planInvalidation(repoRoot, priorDeps, bundles);
+  const { graph: structural, manifest: dependencies } = buildDependencyManifest(repoRoot, bundles);
+  const eq = checkSelectiveEquivalence(plan, priorDeps, dependencies);
+  return { structural, bundles, stats: { ...stats, invalidation: { ...plan, ...eq } }, dependencies };
 }
 
 /**
@@ -1017,7 +1072,11 @@ export function canonicalize(g: StructuralGraph): StructuralGraph {
   const edges = [...g.edges].sort((a, b) => {
     const ak = `${a.type}|${a.source}|${a.target}`;
     const bk = `${b.type}|${b.source}|${b.target}`;
-    return ak < bk ? -1 : ak > bk ? 1 : 0;
+    if (ak !== bk) return ak < bk ? -1 : 1;
+    // Same delimited key, different tuple ("|" inside a path): order by tuple.
+    const at = JSON.stringify([a.type, a.source, a.target]);
+    const bt = JSON.stringify([b.type, b.source, b.target]);
+    return at < bt ? -1 : at > bt ? 1 : 0;
   });
   return { nodes, edges };
 }
@@ -1076,9 +1135,10 @@ export function mergeStructuralInto(
   }
 
   const edgeByKey = new Map<string, GraphEdge>();
-  for (const e of existingEdges) edgeByKey.set(`${e.type}|${e.source}|${e.target}`, e);
+  const key = (e: GraphEdge) => JSON.stringify([e.type, e.source, e.target]);
+  for (const e of existingEdges) edgeByKey.set(key(e), e);
   for (const e of structural.edges) {
-    const k = `${e.type}|${e.source}|${e.target}`;
+    const k = key(e);
     if (!edgeByKey.has(k)) edgeByKey.set(k, e);
   }
 

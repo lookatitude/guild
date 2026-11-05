@@ -25,6 +25,7 @@ import * as crypto from "crypto";
 import * as fsReal from "fs";
 import * as path from "path";
 import { RUN_KIND_FILE, assertRunKindAllows, parseRunKind, claimRunKind, reservedIdentityFieldsIn, writeContainedFile } from "../kernel";
+import { RUN_BINDING_V1_FIELDS } from "./run-binding-fields";
 import { initStableLockfile, withStableLock } from "./stable-lock";
 import { durableGuildDir } from "../state";
 
@@ -79,7 +80,7 @@ export interface BindingFs {
 // binding.json carries the run nonce: the real writers create and update it
 // owner-only (0600, CD21). chmod after the write also tightens a record created
 // earlier with a wider mode the first time this process updates it.
-export const PRIVATE_BINDING_MODE = 0o600;
+const PRIVATE_BINDING_MODE = 0o600;
 
 function realBindingFs(): BindingFs {
   return {
@@ -271,12 +272,6 @@ export function mintRunBinding(opts: RunBindingLocator & { readonly reserved_bin
   }
   return record;
 }
-
-/** The v2 logical-run manifest path inside a run dir (R01). */
-export const LOGICAL_RUN_MANIFEST_RELPATH = path.join("lineage", "logical-run.json");
-
-/** Fields `guild.run_binding.v1` owns; every other R01 reserved identity field is refused. */
-export const RUN_BINDING_V1_FIELDS = Object.freeze(["schema_version", "run_id", "binding_ref", "state"] as const);
 
 /**
  * Full schema validation of a persisted `guild.run_binding.v1` record (T3

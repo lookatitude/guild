@@ -10,7 +10,8 @@
  */
 
 import * as path from "path";
-import { guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson } from "./lib/paths";
+import { guildPaths, parseCwd, parseFlag, hasFlag } from "./lib/paths";
+import { runGraphStage } from "./lib/publish";
 import { buildTourOrder } from "./lib/tour";
 import type { KnowledgeGraph } from "./lib/schema";
 import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
@@ -23,14 +24,20 @@ function main(): void {
   const inPath = parseFlag(argv, "in");
   const target = inPath ? path.resolve(cwd, inPath) : gp.knowledgeGraph;
 
-  const graph = readJson<KnowledgeGraph>(target);
+  // K03: the owner graph is read from and published to the generation store.
+  const graph = runGraphStage<KnowledgeGraph>(gp, {
+    target: inPath ? target : null,
+    who: "tour",
+    channels: ["semantic_graph"],
+    transform: (g) => {
+      g.tour = buildTourOrder(g);
+      return g;
+    },
+  });
   if (!graph) {
     process.stderr.write(`[tour] ERROR: cannot read ${target}\n`);
     process.exit(1);
   }
-
-  graph.tour = buildTourOrder(graph);
-  writeJson(target, graph);
 
   process.stderr.write(
     `[tour] ${graph.tour.length} steps → ${path.relative(gp.repoRoot, target)}\n`,

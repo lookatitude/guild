@@ -10,6 +10,12 @@ import { durableGuildDir } from "../../lib/state/ensure-storage-layout";
 export interface WalkResult {
   files: string[]; // repo-relative, POSIX-separated, sorted
   filter: IgnoreFilter;
+  /** True when a file was left out because `maxFiles` was reached. */
+  truncated: boolean;
+  /** Repo-relative directories whose listing failed ("" = root): their files are missing. */
+  unreadable: string[];
+  /** Entries whose name cannot be spelled as a repo path (a literal "\\" on POSIX, non-UTF-8 bytes). */
+  unsupported: string[];
 }
 
 /**
@@ -39,18 +45,28 @@ export function walkRepo(repoRoot: string, maxFiles = 20000): WalkResult {
   const filter = createIgnoreFilter(repoRoot);
   const subGuilds = registeredSubGuildPaths(repoRoot);
   const out: string[] = [];
+  let truncated = false;
+  const unreadable: string[] = [];
+  const unsupported: string[] = [];
 
   const visit = (absDir: string) => {
-    if (out.length >= maxFiles) return;
+    if (truncated) return;
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(absDir, { withFileTypes: true });
     } catch {
+      unreadable.push(path.relative(repoRoot, absDir).replace(/\\/g, "/"));
       return;
     }
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const e of entries) {
       const abs = path.join(absDir, e.name);
+      // On POSIX "\\" is a filename byte; mapping it to "/" would name another path.
+      // U+FFFD: the name was not valid UTF-8 and cannot be addressed by this string.
+      if ((path.sep === "/" && e.name.includes("\\")) || e.name.includes("\uFFFD")) {
+        unsupported.push(path.relative(repoRoot, abs));
+        continue;
+      }
       const rel = path.relative(repoRoot, abs).replace(/\\/g, "/");
       if (e.isDirectory()) {
         if (subGuilds.has(rel)) continue;
@@ -58,12 +74,15 @@ export function walkRepo(repoRoot: string, maxFiles = 20000): WalkResult {
         visit(abs);
       } else if (e.isFile()) {
         if (filter.isIgnored(rel)) continue;
+        if (out.length >= maxFiles) {
+          truncated = true;
+          return;
+        }
         out.push(rel);
-        if (out.length >= maxFiles) return;
       }
     }
   };
   visit(repoRoot);
   out.sort();
-  return { files: out, filter };
+  return { files: out, filter, truncated, unreadable: unreadable.sort(), unsupported: unsupported.sort() };
 }
