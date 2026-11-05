@@ -48,8 +48,8 @@ import { guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson, SCHEMA }
 import { headSha, isTracked } from "./lib/git";
 import { walkRepo } from "./lib/walk";
 import {
-  assembleStructuralGraph,
   buildBundles,
+  buildDependencyManifest,
   bundlesToCache,
   mergeStructuralInto,
   refreshStructuralIncremental,
@@ -60,6 +60,7 @@ import {
   type StructuralCache,
   type StructuralGraph,
 } from "./lib/structural";
+import type { DependencyManifest } from "./lib/dependency-manifest";
 import { validateGraph } from "./lib/schema";
 import type { GraphEdge, GraphNode } from "./lib/schema";
 import * as fs from "fs";
@@ -133,6 +134,7 @@ function main(): void {
   let structural: StructuralGraph;
   let bundles: FileBundle[];
   let stats: RefreshStats | { mode: "full" } = { mode: "full" };
+  let dependencies: DependencyManifest;
   // The merge base: EVERY mode first STRIPS this extractor's prior structural
   // items so the freshly assembled subgraph replaces them wholesale
   // (cascade-delete of changed/deleted/descoped files), while every foreign
@@ -165,6 +167,7 @@ function main(): void {
     structural = r.structural;
     bundles = r.bundles;
     stats = r.stats;
+    dependencies = r.dependencies;
   } else {
     if (incremental) {
       process.stderr.write(
@@ -173,7 +176,9 @@ function main(): void {
       );
     }
     bundles = buildBundles(sourceRoot, relFiles, readFile);
-    structural = assembleStructuralGraph(sourceRoot, bundles);
+    const built = buildDependencyManifest(sourceRoot, bundles);
+    structural = built.graph;
+    dependencies = built.manifest;
   }
 
   // I15 (legacy G3-F4): EVERY mode strips the prior structural tier so the
@@ -248,7 +253,7 @@ function main(): void {
   // graph and never validated — purely a metadata sidecar. Best-effort: a failed
   // cache write only forfeits the next incremental speedup, never corrupts state.
   try {
-    writeJson(cachePath, bundlesToCache(bundles));
+    writeJson(cachePath, { ...bundlesToCache(bundles), dependencies });
   } catch { /* cache best-effort */ }
 
   // Sidecar — non-deterministic facts ONLY (never in the graph).
@@ -263,6 +268,12 @@ function main(): void {
           deleted_file_count: stats.deleted.length,
         }
       : {};
+  // K02: which unchanged files the change could move, and whether the global
+  // result agreed. Output above is global resolution either way.
+  const invalidation =
+    stats.mode === "incremental"
+      ? stats.invalidation
+      : { mode: "global", reason: "full build", affected_unchanged: [], reasons: {}, selective_equivalence: "not_attempted", violations: [] };
   const sidecar = {
     schema: "guild.structural_extraction_meta.v1",
     generated_at: new Date(started).toISOString(),
@@ -273,6 +284,8 @@ function main(): void {
     structural_edge_count: subset.edges.length,
     refresh_mode: stats.mode,
     ...refresh,
+    invalidation,
+    dependency_unknown: dependencies.unknown,
     dangling_edges_removed: danglingEdgesRemoved,
     model_calls: 0,
     network_calls: 0,

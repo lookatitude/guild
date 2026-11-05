@@ -8180,7 +8180,7 @@ function redactHomeDirPaths(input) {
 function redactKeyValueSecrets(input) {
   return input.replace(
     KV_SECRET_PATTERN,
-    (_match, key, sep15) => `${key}${sep15}${KV_REDACTED}`
+    (_match, key, sep16) => `${key}${sep16}${KV_REDACTED}`
   );
 }
 function allWordsWordish(words) {
@@ -15873,12 +15873,12 @@ function parseValue(c, ctx) {
       const value = parseValue(c, ctx);
       assignKey(table, keyPath, value, ctx, { insideClosed: true });
       skipInlineWs(c);
-      const sep15 = c.next();
-      if (sep15 === ",") {
+      const sep16 = c.next();
+      if (sep16 === ",") {
         skipInlineWs(c);
         continue;
       }
-      if (sep15 === "}") return table;
+      if (sep16 === "}") return table;
       c.fail("expected ',' or '}' in inline table");
     }
   }

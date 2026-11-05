@@ -51043,11 +51043,11 @@ ${lanes.join("\n")}
             if (i < rootLength) {
               return void 0;
             }
-            const sep4 = directory.lastIndexOf(directorySeparator, i - 1);
-            if (sep4 === -1) {
+            const sep5 = directory.lastIndexOf(directorySeparator, i - 1);
+            if (sep5 === -1) {
               return void 0;
             }
-            return directory.substr(0, Math.max(sep4, rootLength));
+            return directory.substr(0, Math.max(sep5, rootLength));
           }
         }
       }
@@ -214511,17 +214511,25 @@ function walkRepo(repoRoot, maxFiles = 2e4) {
   const filter = createIgnoreFilter(repoRoot);
   const subGuilds = registeredSubGuildPaths(repoRoot);
   const out = [];
+  let truncated = false;
+  const unreadable = [];
+  const unsupported = [];
   const visit = (absDir) => {
-    if (out.length >= maxFiles) return;
+    if (truncated) return;
     let entries;
     try {
       entries = fs6.readdirSync(absDir, { withFileTypes: true });
     } catch {
+      unreadable.push(path7.relative(repoRoot, absDir).replace(/\\/g, "/"));
       return;
     }
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const e of entries) {
       const abs = path7.join(absDir, e.name);
+      if (path7.sep === "/" && e.name.includes("\\") || e.name.includes("\uFFFD")) {
+        unsupported.push(path7.relative(repoRoot, abs));
+        continue;
+      }
       const rel2 = path7.relative(repoRoot, abs).replace(/\\/g, "/");
       if (e.isDirectory()) {
         if (subGuilds.has(rel2)) continue;
@@ -214529,14 +214537,17 @@ function walkRepo(repoRoot, maxFiles = 2e4) {
         visit(abs);
       } else if (e.isFile()) {
         if (filter.isIgnored(rel2)) continue;
+        if (out.length >= maxFiles) {
+          truncated = true;
+          return;
+        }
         out.push(rel2);
-        if (out.length >= maxFiles) return;
       }
     }
   };
   visit(repoRoot);
   out.sort();
-  return { files: out, filter };
+  return { files: out, filter, truncated, unreadable: unreadable.sort(), unsupported: unsupported.sort() };
 }
 
 // scripts/learn/lib/paths.ts

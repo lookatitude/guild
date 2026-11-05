@@ -296,6 +296,9 @@ type BasisRef = Pick<SourceBasis, "basis" | "source_basis_hash"> & { resolver_un
  */
 export function freshnessFor(published: BasisRef, observed: BasisRef | null): ChannelState {
   if (!observed) return "unknown";
+  // K02: a stored hash is evidence only if it is the digest of the basis it ships with.
+  if (basisDigest(published.basis) !== published.source_basis_hash) return "unknown";
+  if (basisDigest(observed.basis) !== observed.source_basis_hash) return "unknown";
   if (published.basis.source_worktree_id !== observed.basis.source_worktree_id) return "unknown";
   if (published.resolver_unresolved?.length || observed.resolver_unresolved?.length) return "unknown";
   return published.source_basis_hash === observed.source_basis_hash ? "current_for_basis" : "stale";

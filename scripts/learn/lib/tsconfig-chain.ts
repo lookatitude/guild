@@ -36,7 +36,13 @@ export interface TsconfigChain {
   probed: string[];
 }
 
-/** JSONC → JSON: drops a BOM, comments and trailing commas, never inside strings. */
+/** TypeScript's line terminators: a `//` comment ends at any of them. */
+const LINE_BREAK = /[\n\r\u2028\u2029]/;
+
+/**
+ * JSONC → JSON: drops a BOM, comments and trailing commas, never inside strings.
+ * An unterminated string or block comment throws (unparseable ⇒ unresolved).
+ */
 export function parseJsonc(text: string): unknown {
   const src = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   // Pass 1: strip comments, copying strings verbatim.
@@ -46,15 +52,17 @@ export function parseJsonc(text: string): unknown {
     if (c === '"') {
       let j = i + 1;
       while (j < src.length && src[j] !== '"') j += src[j] === "\\" ? 2 : 1;
+      if (j >= src.length) throw new SyntaxError("parseJsonc: unterminated string");
       noComments += src.slice(i, j + 1);
       i = j;
     } else if (c === "/" && src[i + 1] === "/") {
-      while (i < src.length && src[i] !== "\n") i++;
+      while (i < src.length && !LINE_BREAK.test(src[i])) i++;
       noComments += "\n";
     } else if (c === "/" && src[i + 1] === "*") {
       const end = src.indexOf("*/", i + 2);
+      if (end < 0) throw new SyntaxError("parseJsonc: unterminated block comment");
       noComments += " ";
-      i = end < 0 ? src.length : end + 1;
+      i = end + 1;
     } else {
       noComments += c;
     }
@@ -87,12 +95,27 @@ function contained(root: string, abs: string): string | null {
   return rel.split(path.sep).join("/");
 }
 
+/** Only "no such entry" is absence; an access error may hide a present file. */
+function isAbsentError(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException | null)?.code;
+  return code === "ENOENT" || code === "ENOTDIR";
+}
+
 function entryPresent(root: string, rel: string): boolean {
   try {
     fs.lstatSync(path.join(root, rel));
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    return !isAbsentError(err);
+  }
+}
+
+/** Present and not a directory (a symlink, a file behind a symlinked dir, a fifo…). */
+function presentNonDirectory(root: string, rel: string): boolean {
+  try {
+    return !fs.lstatSync(path.join(root, rel)).isDirectory();
+  } catch (err) {
+    return !isAbsentError(err);
   }
 }
 
@@ -107,8 +130,19 @@ function readJson(root: string, rel: string): Record<string, unknown> | null {
   }
 }
 
-/** Candidate files for an extends specifier, in TypeScript's lookup order. */
-function candidates(root: string, fromRel: string, spec: string, probed: Set<string>): string[] | "escape" {
+/**
+ * Candidate files for an extends specifier, in TypeScript's lookup order.
+ * Package metadata that is present but refused, malformed, or declares a
+ * `tsconfig` outside the worktree is reported through `refuse`: falling back to
+ * the next candidate would resolve differently from tsc.
+ */
+function candidates(
+  root: string,
+  fromRel: string,
+  spec: string,
+  probed: Set<string>,
+  refuse: (why: string) => void,
+): string[] | "escape" {
   const fromDir = path.join(root, path.posix.dirname(fromRel));
   const withJson = (p: string) => (p.endsWith(".json") ? [p] : [p, `${p}.json`]);
   if (spec.startsWith("./") || spec.startsWith("../") || path.isAbsolute(spec)) {
@@ -129,7 +163,12 @@ function candidates(root: string, fromRel: string, spec: string, probed: Set<str
     const pkgRel = contained(root, path.join(base, "package.json"));
     if (pkgRel) probed.add(pkgRel);
     const pkg = pkgRel ? readJson(root, pkgRel) : null;
-    if (pkg && typeof pkg.tsconfig === "string") push(path.join(base, pkg.tsconfig));
+    if (pkgRel && !pkg && entryPresent(root, pkgRel)) refuse(`${pkgRel}: not a contained, parseable regular file`);
+    if (pkg && pkg.tsconfig !== undefined) {
+      if (typeof pkg.tsconfig !== "string") refuse(`${pkgRel}: tsconfig field is not a string`);
+      else if (contained(root, path.join(base, pkg.tsconfig)) === null) refuse(`${pkgRel}: tsconfig ${pkg.tsconfig} outside worktree`);
+      else push(path.join(base, pkg.tsconfig));
+    }
     push(path.join(base, "tsconfig.json"));
     if (contained(root, dir) === null) break; // reached the worktree root
   }
@@ -168,18 +207,33 @@ export function loadTsconfigChain(root: string, rootConfig = "tsconfig.json"): T
         unresolved.push(`${tag}: depth>${TSCONFIG_MAX_DEPTH}`);
         continue;
       }
-      const cands = candidates(root, from.path, spec, probedSet);
+      const refused: string[] = [];
+      const cands = candidates(root, from.path, spec, probedSet, (why) => refused.push(why));
+      if (refused.length) {
+        for (const why of refused) unresolved.push(`${tag}: ${why}`);
+        continue;
+      }
       if (cands === "escape") {
         unresolved.push(`${tag}: outside worktree`);
         continue;
       }
       let hit: string | undefined;
+      let refusedHit: string | undefined;
       for (const rel of cands) {
         probedSet.add(rel);
         if (readContainedFile(root, rel) !== null) {
           hit = rel;
           break;
         }
+        // tsc would read a present file here; a refused one must not fall through.
+        if (presentNonDirectory(root, rel)) {
+          refusedHit = rel;
+          break;
+        }
+      }
+      if (refusedHit) {
+        unresolved.push(`${tag}: not a contained regular file`);
+        continue;
       }
       if (!hit) {
         unresolved.push(`${tag}: not a contained regular file`);

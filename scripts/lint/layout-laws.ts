@@ -1908,7 +1908,10 @@ const KTD29_DEEP_IMPORTS: ReadonlyMap<string, readonly string[]> = new Map<strin
   ["scripts/learn/lib/resolve-calls-ts.ts", LEARN_SOURCE_BASIS],
   ["scripts/learn/lib/tsconfig-chain.ts", LEARN_SOURCE_BASIS],
   ["scripts/learn/scan.ts", LEARN_SOURCE_BASIS],
-  ["scripts/learn/staleness.ts", LEARN_SOURCE_BASIS],
+  // K02 (CW-16): same bundle reason; staleness also reaches the freshness boundary.
+  ["scripts/learn/staleness.ts", ["knowledge/source-basis", "knowledge/freshness-boundary"]],
+  ["scripts/learn/lib/dependency-manifest.ts", LEARN_SOURCE_BASIS],
+  ["scripts/learn/lib/dependency-invalidation.test.ts", ["knowledge/source-basis", "knowledge/freshness-boundary"]],
   ["scripts/learn/lib/source-basis.test.ts", ["knowledge/source-basis", "knowledge/working-set"]],
 ]);
 
