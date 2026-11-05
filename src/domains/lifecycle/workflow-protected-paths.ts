@@ -54,7 +54,8 @@ export type ProtectedPathRule =
   | "invalid-gate-scope"
   | "assurance-outside-gate"
   | "disguised-release"
-  | "disguised-privileged";
+  | "disguised-privileged"
+  | "assurance-unbound";
 
 export interface ProtectedPathViolation { rule: ProtectedPathRule; detail: string }
 export type ProtectedPathResult = { ok: true } | { ok: false; violations: ProtectedPathViolation[] };
@@ -76,8 +77,12 @@ interface Parsed {
   edges: Array<{ from: string; to: string }>;
   entry: string;
   protectedGates: string[];
-  obligations: Array<{ id: string; kind: string; node_id: string }>;
+  obligations: Array<{ id: string; kind: string; node_id: string; invocation_id: string }>;
+  invocations: Map<string, string>;
 }
+
+/** Format an untrusted value for a message without invoking its coercion hooks. */
+const show = (v: unknown): string => (typeof v === "string" ? v.slice(0, 80) : typeof v === "number" || typeof v === "boolean" || v === null ? `${v}` : typeof v);
 
 class Invalid extends Error {}
 const invalid = (why: string): never => {
@@ -102,11 +107,11 @@ function snapshot(value: unknown): unknown {
     for (const k of keys) {
       if (typeof k === "symbol") invalid(`${at} carries a symbol key`);
       if (isArr && k === "length") continue;
-      if (k === "toJSON" || k === "__proto__") invalid(`${at} carries reserved key '${String(k)}'`);
+      if (k === "toJSON" || k === "__proto__") invalid(`${at} carries reserved key '${show(k)}'`);
       const d = Object.getOwnPropertyDescriptor(v, k)!;
-      if (!("value" in d) || !d.enumerable) invalid(`${at}.${String(k)} is an accessor or hidden property`);
+      if (!("value" in d) || !d.enumerable) invalid(`${at}.${show(k)} is an accessor or hidden property`);
       if (isArr && !/^(0|[1-9][0-9]*)$/.test(k as string)) invalid(`${at} is a decorated array`);
-      (out as Record<string, unknown>)[k as string] = walk(d.value, depth + 1, `${at}.${String(k)}`);
+      (out as Record<string, unknown>)[k as string] = walk(d.value, depth + 1, `${at}.${show(k)}`);
     }
     return out;
   };
@@ -124,18 +129,18 @@ function idList(v: unknown, max: number, at: string): string[] {
 function parse(raw: unknown): Parsed {
   const p = snapshot(raw);
   if (!isObj(p)) return invalid("projection is not a mapping");
-  if (!(WORKFLOW_CLASSES as readonly unknown[]).includes(p.class)) invalid(`class '${String(p.class)}' is not one of the five classes`);
+  if (!(WORKFLOW_CLASSES as readonly unknown[]).includes(p.class)) invalid(`class '${show(p.class)}' is not one of the five classes`);
   if (!Array.isArray(p.nodes) || p.nodes.length === 0 || p.nodes.length > LIMITS.nodes) invalid(`nodes must hold 1..${LIMITS.nodes} entries`);
   const nodes: PNode[] = (p.nodes as unknown[]).map((n, i) => {
     if (!isObj(n)) return invalid(`nodes[${i}] is not a mapping`);
     if (typeof n.id !== "string" || !ID.test(n.id)) invalid(`nodes[${i}].id is not an id`);
-    if (!(EFFECTS as readonly unknown[]).includes(n.effect)) invalid(`node ${String(n.id)} effect '${String(n.effect)}' is not a C8 effect`);
-    if (n.gate_role !== null && !isRole(n.gate_role)) invalid(`node ${String(n.id)} gate_role is not a gate role`);
-    if (n.within_gate !== null && !isRole(n.within_gate)) invalid(`node ${String(n.id)} within_gate is not a gate role`);
-    if (typeof n.required !== "boolean") invalid(`node ${String(n.id)} required must be boolean`);
-    if (typeof n.role !== "string" || !ID.test(n.role)) invalid(`node ${String(n.id)} role is not an id`);
+    if (!(EFFECTS as readonly unknown[]).includes(n.effect)) invalid(`node ${show(n.id)} effect '${show(n.effect)}' is not a C8 effect`);
+    if (n.gate_role !== null && !isRole(n.gate_role)) invalid(`node ${show(n.id)} gate_role is not a gate role`);
+    if (n.within_gate !== null && !isRole(n.within_gate)) invalid(`node ${show(n.id)} within_gate is not a gate role`);
+    if (typeof n.required !== "boolean") invalid(`node ${show(n.id)} required must be boolean`);
+    if (typeof n.role !== "string" || !ID.test(n.role)) invalid(`node ${show(n.id)} role is not an id`);
     const outputs = n.outputs;
-    if (!Array.isArray(outputs) || outputs.length > LIMITS.list || !outputs.every((o) => isObj(o) && typeof o.type === "string")) invalid(`node ${String(n.id)} outputs must be typed ports`);
+    if (!Array.isArray(outputs) || outputs.length > LIMITS.list || !outputs.every((o) => isObj(o) && typeof o.type === "string")) invalid(`node ${show(n.id)} outputs must be typed ports`);
     return {
       id: n.id as string,
       effect: n.effect as Effect,
@@ -143,7 +148,7 @@ function parse(raw: unknown): Parsed {
       within_gate: n.within_gate as GateRole | null,
       required: n.required as boolean,
       role: n.role as string,
-      capabilities: idList(n.capabilities, LIMITS.list, `node ${String(n.id)} capabilities`),
+      capabilities: idList(n.capabilities, LIMITS.list, `node ${show(n.id)} capabilities`),
       outputTypes: (outputs as Array<{ type: string }>).map((o) => o.type),
     };
   });
@@ -155,16 +160,25 @@ function parse(raw: unknown): Parsed {
     if (!ids.has(e.from) || !ids.has(e.to)) invalid(`edge ${e.from} -> ${e.to} names an unknown node`);
     return { from: e.from, to: e.to };
   });
-  if (typeof p.entry !== "string" || !ids.has(p.entry)) invalid(`entry '${String(p.entry)}' is not a node`);
+  if (typeof p.entry !== "string" || !ids.has(p.entry)) invalid(`entry '${show(p.entry)}' is not a node`);
   const protectedGates = idList(p.protected_gates, LIMITS.gates, "protected_gates");
   if (new Set(protectedGates).size !== protectedGates.length) invalid("protected_gates repeats an entry");
   const rawObs = p.obligations ?? [];
   if (!Array.isArray(rawObs) || rawObs.length > LIMITS.obligations) invalid(`obligations must hold at most ${LIMITS.obligations} entries`);
   const obligations = (rawObs as unknown[]).map((o, i) => {
-    if (!isObj(o) || typeof o.id !== "string" || typeof o.kind !== "string" || typeof o.node_id !== "string") return invalid(`obligations[${i}] lacks id/kind/node_id`);
-    return { id: o.id, kind: o.kind, node_id: o.node_id };
+    if (!isObj(o) || typeof o.id !== "string" || typeof o.kind !== "string" || typeof o.node_id !== "string" || typeof o.invocation_id !== "string") return invalid(`obligations[${i}] lacks id/kind/node_id/invocation_id`);
+    return { id: o.id, kind: o.kind, node_id: o.node_id, invocation_id: o.invocation_id };
   });
-  return { cls: p.class as string, nodes, edges, entry: p.entry as string, protectedGates, obligations };
+  const rawInvs = p.invocations ?? [];
+  if (!Array.isArray(rawInvs) || rawInvs.length > LIMITS.obligations) invalid(`invocations must hold at most ${LIMITS.obligations} entries`);
+  const invocations = new Map<string, string>();
+  for (const [i, v] of (rawInvs as unknown[]).entries()) {
+    if (!isObj(v) || typeof v.id !== "string" || typeof v.node_id !== "string") invalid(`invocations[${i}] lacks id/node_id`);
+    const inv = v as { id: string; node_id: string };
+    if (invocations.has(inv.id)) invalid(`invocation ${inv.id} is declared twice`);
+    invocations.set(inv.id, inv.node_id);
+  }
+  return { cls: p.class as string, nodes, edges, entry: p.entry as string, protectedGates, obligations, invocations };
 }
 
 /** Verify a C8 v2 projection's protected paths. Pure, deterministic, never throws on bad input. */
@@ -285,10 +299,19 @@ export function verifyProtectedPaths(raw: unknown): ProtectedPathResult {
   }
 
   // Supplied obligations: security/adversarial/UI/UX assurance executes inside QA.
+  // Each obligation is bound to its own invocation at the same node; QA kinds check both.
+  const inQa = (id: string | undefined) => {
+    const n = id === undefined ? undefined : byId.get(id);
+    return !!n && (n.gate_role === "qa" || n.within_gate === "qa");
+  };
   for (const o of g.obligations) {
-    if (!(QA_ASSURANCE_KINDS as readonly string[]).includes(o.kind)) continue;
-    const n = byId.get(o.node_id);
-    if (!n || (n.gate_role !== "qa" && n.within_gate !== "qa")) flag("assurance-outside-gate", `${o.kind} obligation ${o.id} is bound to ${o.node_id}, outside the QA gate scope`);
+    const invNode = g.invocations.get(o.invocation_id);
+    if (!byId.has(o.node_id)) flag("assurance-unbound", `obligation ${o.id} names unknown node ${o.node_id}`);
+    if (invNode === undefined) flag("assurance-unbound", `obligation ${o.id} names unknown invocation ${o.invocation_id}`);
+    else if (invNode !== o.node_id) flag("assurance-unbound", `obligation ${o.id} is at ${o.node_id} but its invocation ${o.invocation_id} ran at ${invNode}`);
+    if ((QA_ASSURANCE_KINDS as readonly string[]).includes(o.kind) && (!inQa(o.node_id) || (invNode !== undefined && !inQa(invNode)))) {
+      flag("assurance-outside-gate", `${o.kind} obligation ${o.id} is bound outside the QA gate scope`);
+    }
   }
 
   if (!found.size) return { ok: true };

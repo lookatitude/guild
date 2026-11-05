@@ -44708,11 +44708,11 @@ function snapshot(value) {
     for (const k of keys) {
       if (typeof k === "symbol") invalid(`${at} carries a symbol key`);
       if (isArr && k === "length") continue;
-      if (k === "toJSON" || k === "__proto__") invalid(`${at} carries reserved key '${String(k)}'`);
+      if (k === "toJSON" || k === "__proto__") invalid(`${at} carries reserved key '${show4(k)}'`);
       const d = Object.getOwnPropertyDescriptor(v, k);
-      if (!("value" in d) || !d.enumerable) invalid(`${at}.${String(k)} is an accessor or hidden property`);
+      if (!("value" in d) || !d.enumerable) invalid(`${at}.${show4(k)} is an accessor or hidden property`);
       if (isArr && !/^(0|[1-9][0-9]*)$/.test(k)) invalid(`${at} is a decorated array`);
-      out[k] = walk(d.value, depth + 1, `${at}.${String(k)}`);
+      out[k] = walk(d.value, depth + 1, `${at}.${show4(k)}`);
     }
     return out;
   };
@@ -44725,18 +44725,18 @@ function idList(v, max, at) {
 function parse3(raw) {
   const p = snapshot(raw);
   if (!isObj(p)) return invalid("projection is not a mapping");
-  if (!WORKFLOW_CLASSES2.includes(p.class)) invalid(`class '${String(p.class)}' is not one of the five classes`);
+  if (!WORKFLOW_CLASSES2.includes(p.class)) invalid(`class '${show4(p.class)}' is not one of the five classes`);
   if (!Array.isArray(p.nodes) || p.nodes.length === 0 || p.nodes.length > LIMITS.nodes) invalid(`nodes must hold 1..${LIMITS.nodes} entries`);
   const nodes = p.nodes.map((n, i) => {
     if (!isObj(n)) return invalid(`nodes[${i}] is not a mapping`);
     if (typeof n.id !== "string" || !ID.test(n.id)) invalid(`nodes[${i}].id is not an id`);
-    if (!EFFECTS.includes(n.effect)) invalid(`node ${String(n.id)} effect '${String(n.effect)}' is not a C8 effect`);
-    if (n.gate_role !== null && !isRole(n.gate_role)) invalid(`node ${String(n.id)} gate_role is not a gate role`);
-    if (n.within_gate !== null && !isRole(n.within_gate)) invalid(`node ${String(n.id)} within_gate is not a gate role`);
-    if (typeof n.required !== "boolean") invalid(`node ${String(n.id)} required must be boolean`);
-    if (typeof n.role !== "string" || !ID.test(n.role)) invalid(`node ${String(n.id)} role is not an id`);
+    if (!EFFECTS.includes(n.effect)) invalid(`node ${show4(n.id)} effect '${show4(n.effect)}' is not a C8 effect`);
+    if (n.gate_role !== null && !isRole(n.gate_role)) invalid(`node ${show4(n.id)} gate_role is not a gate role`);
+    if (n.within_gate !== null && !isRole(n.within_gate)) invalid(`node ${show4(n.id)} within_gate is not a gate role`);
+    if (typeof n.required !== "boolean") invalid(`node ${show4(n.id)} required must be boolean`);
+    if (typeof n.role !== "string" || !ID.test(n.role)) invalid(`node ${show4(n.id)} role is not an id`);
     const outputs = n.outputs;
-    if (!Array.isArray(outputs) || outputs.length > LIMITS.list || !outputs.every((o) => isObj(o) && typeof o.type === "string")) invalid(`node ${String(n.id)} outputs must be typed ports`);
+    if (!Array.isArray(outputs) || outputs.length > LIMITS.list || !outputs.every((o) => isObj(o) && typeof o.type === "string")) invalid(`node ${show4(n.id)} outputs must be typed ports`);
     return {
       id: n.id,
       effect: n.effect,
@@ -44744,7 +44744,7 @@ function parse3(raw) {
       within_gate: n.within_gate,
       required: n.required,
       role: n.role,
-      capabilities: idList(n.capabilities, LIMITS.list, `node ${String(n.id)} capabilities`),
+      capabilities: idList(n.capabilities, LIMITS.list, `node ${show4(n.id)} capabilities`),
       outputTypes: outputs.map((o) => o.type)
     };
   });
@@ -44756,16 +44756,25 @@ function parse3(raw) {
     if (!ids.has(e.from) || !ids.has(e.to)) invalid(`edge ${e.from} -> ${e.to} names an unknown node`);
     return { from: e.from, to: e.to };
   });
-  if (typeof p.entry !== "string" || !ids.has(p.entry)) invalid(`entry '${String(p.entry)}' is not a node`);
+  if (typeof p.entry !== "string" || !ids.has(p.entry)) invalid(`entry '${show4(p.entry)}' is not a node`);
   const protectedGates = idList(p.protected_gates, LIMITS.gates, "protected_gates");
   if (new Set(protectedGates).size !== protectedGates.length) invalid("protected_gates repeats an entry");
   const rawObs = p.obligations ?? [];
   if (!Array.isArray(rawObs) || rawObs.length > LIMITS.obligations) invalid(`obligations must hold at most ${LIMITS.obligations} entries`);
   const obligations = rawObs.map((o, i) => {
-    if (!isObj(o) || typeof o.id !== "string" || typeof o.kind !== "string" || typeof o.node_id !== "string") return invalid(`obligations[${i}] lacks id/kind/node_id`);
-    return { id: o.id, kind: o.kind, node_id: o.node_id };
+    if (!isObj(o) || typeof o.id !== "string" || typeof o.kind !== "string" || typeof o.node_id !== "string" || typeof o.invocation_id !== "string") return invalid(`obligations[${i}] lacks id/kind/node_id/invocation_id`);
+    return { id: o.id, kind: o.kind, node_id: o.node_id, invocation_id: o.invocation_id };
   });
-  return { cls: p.class, nodes, edges, entry: p.entry, protectedGates, obligations };
+  const rawInvs = p.invocations ?? [];
+  if (!Array.isArray(rawInvs) || rawInvs.length > LIMITS.obligations) invalid(`invocations must hold at most ${LIMITS.obligations} entries`);
+  const invocations = /* @__PURE__ */ new Map();
+  for (const [i, v] of rawInvs.entries()) {
+    if (!isObj(v) || typeof v.id !== "string" || typeof v.node_id !== "string") invalid(`invocations[${i}] lacks id/node_id`);
+    const inv = v;
+    if (invocations.has(inv.id)) invalid(`invocation ${inv.id} is declared twice`);
+    invocations.set(inv.id, inv.node_id);
+  }
+  return { cls: p.class, nodes, edges, entry: p.entry, protectedGates, obligations, invocations };
 }
 function verifyProtectedPaths(raw) {
   let g;
@@ -44867,16 +44876,24 @@ function verifyProtectedPaths(raw) {
     }
     if (n.required && reach.has(owner) && !dominates2(n.id, owner)) flag("assurance-outside-gate", `required ${n.id} can be skipped on a path to its gate ${owner}`);
   }
+  const inQa = (id) => {
+    const n = id === void 0 ? void 0 : byId.get(id);
+    return !!n && (n.gate_role === "qa" || n.within_gate === "qa");
+  };
   for (const o of g.obligations) {
-    if (!QA_ASSURANCE_KINDS.includes(o.kind)) continue;
-    const n = byId.get(o.node_id);
-    if (!n || n.gate_role !== "qa" && n.within_gate !== "qa") flag("assurance-outside-gate", `${o.kind} obligation ${o.id} is bound to ${o.node_id}, outside the QA gate scope`);
+    const invNode = g.invocations.get(o.invocation_id);
+    if (!byId.has(o.node_id)) flag("assurance-unbound", `obligation ${o.id} names unknown node ${o.node_id}`);
+    if (invNode === void 0) flag("assurance-unbound", `obligation ${o.id} names unknown invocation ${o.invocation_id}`);
+    else if (invNode !== o.node_id) flag("assurance-unbound", `obligation ${o.id} is at ${o.node_id} but its invocation ${o.invocation_id} ran at ${invNode}`);
+    if (QA_ASSURANCE_KINDS.includes(o.kind) && (!inQa(o.node_id) || invNode !== void 0 && !inQa(invNode))) {
+      flag("assurance-outside-gate", `${o.kind} obligation ${o.id} is bound outside the QA gate scope`);
+    }
   }
   if (!found.size) return { ok: true };
   const violations = [...found.entries()].sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0).map(([, v]) => v);
   return { ok: false, violations };
 }
-var PROTECTED_PATHS_VERSION, GATE_ORDER, EFFECTS, CLASS_REQUIRED_GATE_ROLES, RELEASE_REQUIRED_GATE_ROLES, RELEASE_CLASS_GATE_ROLES, QA_ASSURANCE_KINDS, LIMITS, ID, Invalid, invalid, isObj, isRole;
+var PROTECTED_PATHS_VERSION, GATE_ORDER, EFFECTS, CLASS_REQUIRED_GATE_ROLES, RELEASE_REQUIRED_GATE_ROLES, RELEASE_CLASS_GATE_ROLES, QA_ASSURANCE_KINDS, LIMITS, ID, show4, Invalid, invalid, isObj, isRole;
 var init_workflow_protected_paths = __esm({
   "src/domains/lifecycle/workflow-protected-paths.ts"() {
     init_security();
@@ -44890,6 +44907,7 @@ var init_workflow_protected_paths = __esm({
     QA_ASSURANCE_KINDS = Object.freeze(["security", "adversarial_security", "ui", "ux"]);
     LIMITS = { nodes: 1e3, edges: 5e3, gates: 10, list: 50, obligations: 200, values: 2e5, depth: 32 };
     ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+    show4 = (v) => typeof v === "string" ? v.slice(0, 80) : typeof v === "number" || typeof v === "boolean" || v === null ? `${v}` : typeof v;
     Invalid = class extends Error {
     };
     invalid = (why) => {
@@ -44970,8 +44988,8 @@ function checkPorts(v, where) {
   const names = /* @__PURE__ */ new Set();
   for (const p of v) {
     if (!isPlain(p) || exactKeys(p, ["name", "type"]) !== null) fail("invalid-component", `${where} port must be exactly {name, type}`);
-    if (typeof p.name !== "string" || !ID2.test(p.name)) fail("invalid-component", `${where} port name '${String(p.name)}' is not an id`);
-    if (typeof p.type !== "string" || !PORT_TYPE.test(p.type)) fail("invalid-component", `${where} port type '${String(p.type)}' is not a typed artifact`);
+    if (typeof p.name !== "string" || !ID2.test(p.name)) fail("invalid-component", `${where} port name '${show5(p.name)}' is not an id`);
+    if (typeof p.type !== "string" || !PORT_TYPE.test(p.type)) fail("invalid-component", `${where} port type '${show5(p.type)}' is not a typed artifact`);
     if (names.has(p.name)) fail("invalid-component", `${where} declares port '${p.name}' twice`);
     names.add(p.name);
   }
@@ -44979,10 +44997,10 @@ function checkPorts(v, where) {
 function checkIdList(v, max, where) {
   if (!Array.isArray(v) || v.length > max) fail("invalid-component", `${where} must be an array of at most ${max} ids`);
   if (new Set(v).size !== v.length) fail("invalid-component", `${where} repeats an entry`);
-  for (const x of v) if (typeof x !== "string" || !ID2.test(x)) fail("invalid-component", `${where} entry '${String(x)}' is not an id`);
+  for (const x of v) if (typeof x !== "string" || !ID2.test(x)) fail("invalid-component", `${where} entry '${show5(x)}' is not an id`);
 }
 function checkGateRole(v, where) {
-  if (v !== void 0 && v !== null && !COMPONENT_GATE_ROLES.includes(v)) fail("invalid-component", `${where} '${String(v)}' is not a gate role`);
+  if (v !== void 0 && v !== null && !COMPONENT_GATE_ROLES.includes(v)) fail("invalid-component", `${where} '${show5(v)}' is not a gate role`);
 }
 function checkCondition(c, depth, where) {
   if (!isPlain(c) || typeof c.kind !== "string") fail("bad-condition", `${where} must be a declarative condition object, not ${typeof c}`);
@@ -45018,7 +45036,7 @@ function checkStep(s, depth, ids, where) {
   if (!isPlain(s) || typeof s.kind !== "string") fail("invalid-component", `${where} step must be an object with a kind`);
   if (s.kind === "parallel") fail("parallel-join-unsupported", `${where}: parallel joins are excluded from the first release`);
   if (!COMPONENT_STEP_KINDS.includes(s.kind)) fail("unknown-step-kind", `${where}: step kind '${s.kind}' is not one of ${COMPONENT_STEP_KINDS.join(", ")}`);
-  if (typeof s.id !== "string" || !STEP_ID.test(s.id)) fail("invalid-component", `${where}: step id '${String(s.id)}' must match ${STEP_ID}`);
+  if (typeof s.id !== "string" || !STEP_ID.test(s.id)) fail("invalid-component", `${where}: step id '${show5(s.id)}' must match ${STEP_ID}`);
   if (ids.has(s.id)) fail("duplicate-step-id", `${where}: step id '${s.id}' is declared twice in one component`);
   ids.add(s.id);
   const at = `${where}/${s.id}`;
@@ -45026,7 +45044,7 @@ function checkStep(s, depth, ids, where) {
     case "task": {
       const k = exactKeys(s, ["kind", "id", "effect", "role", "capabilities", "inputs", "outputs"], ["required", "gate_role", "within_gate"]);
       if (k) fail("invalid-component", `${at}: ${k}`);
-      if (!COMPONENT_EFFECTS.includes(s.effect)) fail("invalid-component", `${at}: effect '${String(s.effect)}' is not one of ${COMPONENT_EFFECTS.join(", ")}`);
+      if (!COMPONENT_EFFECTS.includes(s.effect)) fail("invalid-component", `${at}: effect '${show5(s.effect)}' is not one of ${COMPONENT_EFFECTS.join(", ")}`);
       if (typeof s.role !== "string" || !ID2.test(s.role)) fail("invalid-component", `${at}: role must be an id`);
       checkIdList(s.capabilities, COMPILER_LIMITS.maxCapabilities, `${at} capabilities`);
       checkPorts(s.inputs, `${at} inputs`);
@@ -45048,7 +45066,7 @@ function checkStep(s, depth, ids, where) {
       if (k) fail("invalid-component", `${at}: ${k}`);
       const m = s.max_rounds;
       if (typeof m !== "number" || !Number.isInteger(m) || m < 1 || m > COMPILER_LIMITS.maxRepeatRounds) {
-        fail("unbounded-repeat", `${at}: max_rounds must be an integer in 1..${COMPILER_LIMITS.maxRepeatRounds}, got ${String(m)}`);
+        fail("unbounded-repeat", `${at}: max_rounds must be an integer in 1..${COMPILER_LIMITS.maxRepeatRounds}, got ${show5(m)}`);
       }
       if (s.until === void 0) fail("bad-condition", `${at}: repeat needs an 'until' condition`);
       checkCondition(s.until, 0, `${at} until`);
@@ -45075,9 +45093,9 @@ function checkComponent(raw) {
     if (!isPlain(doc)) fail("invalid-component", "component is not a mapping");
     const k = exactKeys(doc, ["schema_version", "id", "version", "effects", "inputs", "outputs", "body"]);
     if (k) fail("invalid-component", `component: ${k}`);
-    if (doc.schema_version !== WORKFLOW_COMPONENT_SCHEMA_VERSION) fail("invalid-component", `schema_version '${String(doc.schema_version)}' is not ${WORKFLOW_COMPONENT_SCHEMA_VERSION}`);
-    if (typeof doc.id !== "string" || !ID2.test(doc.id)) fail("invalid-component", `component id '${String(doc.id)}' is not an id`);
-    if (typeof doc.version !== "string" || !VERSION.test(doc.version)) fail("invalid-component", `component version '${String(doc.version)}' is invalid`);
+    if (doc.schema_version !== WORKFLOW_COMPONENT_SCHEMA_VERSION) fail("invalid-component", `schema_version '${show5(doc.schema_version)}' is not ${WORKFLOW_COMPONENT_SCHEMA_VERSION}`);
+    if (typeof doc.id !== "string" || !ID2.test(doc.id)) fail("invalid-component", `component id '${show5(doc.id)}' is not an id`);
+    if (typeof doc.version !== "string" || !VERSION.test(doc.version)) fail("invalid-component", `component version '${show5(doc.version)}' is invalid`);
     const where = `${doc.id}@${doc.version}`;
     if (!Array.isArray(doc.effects) || doc.effects.length === 0 || new Set(doc.effects).size !== doc.effects.length || !doc.effects.every((e) => COMPONENT_EFFECTS.includes(e))) {
       fail("invalid-component", `${where}: effects must be a non-empty unique subset of ${COMPONENT_EFFECTS.join(", ")}`);
@@ -45381,7 +45399,7 @@ function compileWorkflow(registry, rawRequest) {
     const entries = registryEntries(registry);
     const request = detach(rawRequest, "invalid-request", "request");
     if (!isPlain(request)) fail("invalid-request", "request is not a mapping");
-    if (!WORKFLOW_CLASSES2.includes(request.class)) fail("unknown-class", `'${String(request.class)}' is not one of the five classes`);
+    if (!WORKFLOW_CLASSES2.includes(request.class)) fail("unknown-class", `'${show5(request.class)}' is not one of the five classes`);
     const wf = request.workflow;
     if (!isPlain(wf) || typeof wf.source_id !== "string" || !ID2.test(wf.source_id) || typeof wf.id !== "string" || !ID2.test(wf.id)) {
       fail("invalid-request", "workflow must be {source_id, id} ids");
@@ -45440,7 +45458,7 @@ function compileWorkflow(registry, rawRequest) {
     throw err;
   }
 }
-var crypto22, fs62, path75, WORKFLOW_COMPONENT_SCHEMA_VERSION, WORKFLOW_COMPILE_MANIFEST_SCHEMA_VERSION, WORKFLOW_PROJECTION_V2_SCHEMA_VERSION, WORKFLOW_COMPILER_ID, WORKFLOW_COMPILER_VERSION, COMPONENT_DEFINITION_SEGMENT, COMPILER_LIMITS, COMPONENT_EFFECTS, COMPONENT_GATE_ROLES, COMPONENT_CONDITION_KINDS, COMPONENT_STEP_KINDS, CLASS_REQUIRED_GATE_ROLES2, RELEASE_REQUIRED_GATE_ROLES2, RELEASE_CLASS_GATE_ROLES2, ID2, STEP_ID, VERSION, PORT_TYPE, COMPILER_HASH, Abort, DETACH_MAX_VALUES, DETACH_MAX_DEPTH, REGISTRY_FACTORY, REGISTRY_ENTRIES, WorkflowComponentRegistry;
+var crypto22, fs62, path75, WORKFLOW_COMPONENT_SCHEMA_VERSION, WORKFLOW_COMPILE_MANIFEST_SCHEMA_VERSION, WORKFLOW_PROJECTION_V2_SCHEMA_VERSION, WORKFLOW_COMPILER_ID, WORKFLOW_COMPILER_VERSION, COMPONENT_DEFINITION_SEGMENT, COMPILER_LIMITS, COMPONENT_EFFECTS, COMPONENT_GATE_ROLES, COMPONENT_CONDITION_KINDS, COMPONENT_STEP_KINDS, CLASS_REQUIRED_GATE_ROLES2, RELEASE_REQUIRED_GATE_ROLES2, RELEASE_CLASS_GATE_ROLES2, ID2, STEP_ID, VERSION, PORT_TYPE, COMPILER_HASH, show5, Abort, DETACH_MAX_VALUES, DETACH_MAX_DEPTH, REGISTRY_FACTORY, REGISTRY_ENTRIES, WorkflowComponentRegistry;
 var init_workflow_component_compiler = __esm({
   "src/domains/lifecycle/workflow-component-compiler.ts"() {
     crypto22 = __toESM(require("node:crypto"));
@@ -45491,6 +45509,7 @@ var init_workflow_component_compiler = __esm({
       edge_outcomes: ["next", "repeat"],
       protected_paths: PROTECTED_PATHS_VERSION
     });
+    show5 = (v) => typeof v === "string" ? v.slice(0, 80) : typeof v === "number" || typeof v === "boolean" || v === null ? `${v}` : typeof v;
     Abort = class extends Error {
       constructor(violation) {
         super(violation.detail);

@@ -62,6 +62,8 @@ const OBLIGATIONS: ObligationSpec[] = [
   { id: "ob-lint", kind: "quality", node_id: "lint", required: false, authority: "linter", scope: ["docs"], max_rounds: 3 },
 ];
 
+const DEF = { projection: PROJECTION, obligations: OBLIGATIONS };
+
 function ok<T>(r: AssuranceResult<T>): T {
   if (!r.ok) throw new Error(JSON.stringify(r.violations));
   return r.value;
@@ -91,7 +93,7 @@ function reviewedA(): AssuranceLedger {
 describe("AT07 assurance state machine — review A, repair B, restart, accept", () => {
   it("A is fully accepted against A", () => {
     const l = reviewedA();
-    expect(checkAcceptance(l, A)).toEqual({ ok: true, accepted: ["ob-lint", "ob-sec", "ob-ux"] });
+    expect(checkAcceptance(l, A, DEF)).toEqual({ ok: true, accepted: ["ob-lint", "ob-sec", "ob-ux"] });
   });
 
   it("repair to B invalidates the affected obligation; after restart evidence for B is required", () => {
@@ -102,17 +104,17 @@ describe("AT07 assurance state machine — review A, repair B, restart, accept",
     // Unaffected scope keeps its acceptance (reuse when the declared input subset still matches exactly).
     expect(repaired.obligations.find((o) => o.id === "ob-ux")!.status).toBe("accepted");
 
-    const restarted = ok(restoreLedger(serializeLedger(repaired), B));
-    const blocked = checkAcceptance(restarted, B);
+    const restarted = ok(restoreLedger(serializeLedger(repaired), B, DEF));
+    const blocked = checkAcceptance(restarted, B, DEF);
     expect(blocked.ok).toBe(false);
     if (!blocked.ok) expect(blocked.blockers).toEqual([{ obligation_id: "ob-sec", reason: "not-accepted:invalidated" }]);
 
     let l = ok(beginInvocation(restarted, { obligation_id: "ob-sec", invocation_id: "inv-sec-2" }));
     expect(l.invocations.find((i) => i.id === "inv-sec-2")!.round).toBe(2);
     l = ok(recordVerdict(l, receipt(l, "ob-sec", "inv-sec-2", "f")));
-    expect(checkAcceptance(l, B)).toEqual({ ok: true, accepted: ["ob-lint", "ob-sec", "ob-ux"] });
+    expect(checkAcceptance(l, B, DEF)).toEqual({ ok: true, accepted: ["ob-lint", "ob-sec", "ob-ux"] });
     // And B's acceptance does not carry back to A.
-    expect(checkAcceptance(l, A).ok).toBe(false);
+    expect(checkAcceptance(l, A, DEF).ok).toBe(false);
   });
 
   it("negative control: the valid A receipt re-used for B is refused, as-is or relabelled", () => {
@@ -130,7 +132,7 @@ describe("AT07 assurance state machine — review A, repair B, restart, accept",
     expect(rules(recordVerdict(l, relabelled))).toContain("evidence-reused");
     // A's subject hash on the new invocation.
     expect(rules(recordVerdict(l, { ...relabelled, evidence: evidence("f"), subject_hash: subjectHash(l.workflow, A) }))).toContain("subject-mismatch");
-    expect(checkAcceptance(l, B).ok).toBe(false);
+    expect(checkAcceptance(l, B, DEF).ok).toBe(false);
   });
 
   it("source, obligation, round and authority are each checked when a verdict is recorded", () => {
@@ -157,7 +159,7 @@ describe("AT07 assurance state machine — review A, repair B, restart, accept",
       expect(o.status).toBe("invalidated");
       expect(o.invalidated_by).toBe("unknown-mutation");
     }
-    const r = checkAcceptance(l, B);
+    const r = checkAcceptance(l, B, DEF);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.blockers.map((b) => b.obligation_id)).toEqual(["ob-sec", "ob-ux"]);
   });
@@ -170,24 +172,24 @@ describe("AT07 assurance state machine — review A, repair B, restart, accept",
   });
 
   it("restart with a subject that moved after the last ledger write invalidates everything (unknown basis)", () => {
-    const restarted = ok(restoreLedger(serializeLedger(reviewedA()), B));
+    const restarted = ok(restoreLedger(serializeLedger(reviewedA()), B, DEF));
     for (const o of restarted.obligations.filter((x) => x.required)) expect(o.invalidated_by).toBe("restart-subject-mismatch");
-    expect(checkAcceptance(restarted, B).ok).toBe(false);
+    expect(checkAcceptance(restarted, B, DEF).ok).toBe(false);
   });
 
   it("acceptance re-checks the subject at the boundary: an unrecorded change blocks every required obligation", () => {
-    const r = checkAcceptance(reviewedA(), B);
+    const r = checkAcceptance(reviewedA(), B, DEF);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.blockers).toEqual([{ obligation_id: "ob-sec", reason: "subject-changed" }, { obligation_id: "ob-ux", reason: "subject-changed" }]);
   });
 
   it("restore fails closed on corrupt, foreign or hostile bytes", () => {
     const text = serializeLedger(reviewedA());
-    expect(rules(restoreLedger(text.replace('"accepted"', '"pending"'), A))).toContain("ledger-corrupt");
-    expect(rules(restoreLedger("{", A))).toContain("ledger-corrupt");
-    expect(rules(restoreLedger(JSON.stringify({ ...JSON.parse(text), extra: 1 }), A))).toContain("ledger-corrupt");
-    expect(rules(restoreLedger(text, { ...A, source_id: "source-b" }))).toContain("foreign-source");
-    expect(rules(restoreLedger("x".repeat(5_000_000), A))).toContain("ledger-corrupt");
+    expect(rules(restoreLedger(text.replace('"accepted"', '"pending"'), A, DEF))).toContain("ledger-corrupt");
+    expect(rules(restoreLedger("{", A, DEF))).toContain("ledger-corrupt");
+    expect(rules(restoreLedger(JSON.stringify({ ...JSON.parse(text), extra: 1 }), A, DEF))).toContain("ledger-corrupt");
+    expect(rules(restoreLedger(text, { ...A, source_id: "source-b" }, DEF))).toContain("foreign-source");
+    expect(rules(restoreLedger("x".repeat(5_000_000), A, DEF))).toContain("ledger-corrupt");
   });
 
   it("restore re-proves internal consistency, not only the hash", () => {
@@ -195,7 +197,7 @@ describe("AT07 assurance state machine — review A, repair B, restart, accept",
     parsed.obligations[0].accepted.round = 7;
     const { ledger_hash: _drop, ...body } = parsed;
     const forged = JSON.stringify({ ...body, ledger_hash: review.assuranceLedgerHash(body) });
-    expect(rules(restoreLedger(forged, A))).toContain("ledger-corrupt");
+    expect(rules(restoreLedger(forged, A, DEF))).toContain("ledger-corrupt");
   });
 
   it("rounds are bounded: exhaustion blocks instead of accepting", () => {
@@ -239,5 +241,50 @@ describe("AT07 assurance state machine — review A, repair B, restart, accept",
   it("the review domain exposes the ledger through its index", () => {
     expect(typeof review.createAssuranceLedger).toBe("function");
     expect(typeof review.checkAcceptance).toBe("function");
+  });
+});
+
+describe("AT07 codex r1 regressions", () => {
+  it("F2: restore and acceptance judge requiredness/authority/policy by the trusted definition", () => {
+    const parsed = JSON.parse(serializeLedger(ok(createAssuranceLedger({ projection: PROJECTION, subject: A, obligations: OBLIGATIONS }))));
+    for (const o of parsed.obligations) o.required = false;
+    const { ledger_hash: _h, ...body } = parsed;
+    const forged = JSON.stringify({ ...body, ledger_hash: review.assuranceLedgerHash(body) });
+    expect(rules(restoreLedger(forged, A, DEF))).toContain("definition-changed");
+    const l = reviewedA();
+    const newAuthority = { projection: PROJECTION, obligations: OBLIGATIONS.map((o) => (o.id === "ob-sec" ? { ...o, authority: "other" } : o)) };
+    const r = checkAcceptance(l, A, newAuthority);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.blockers.every((b) => b.reason === "definition-changed")).toBe(true);
+    const newPolicy = { projection: { ...PROJECTION, policy_hash: H("f") }, obligations: OBLIGATIONS };
+    expect(checkAcceptance(l, A, newPolicy).ok).toBe(false);
+    expect(rules(restoreLedger(serializeLedger(l), A, newPolicy))).toContain("definition-changed");
+  });
+
+  it("F3: after an unknown invalidation and restart, the old receipt cannot be re-spent on a new round", () => {
+    let l = ok(applyMutation(reviewedA(), { subject: B, changed: "unknown" }));
+    l = ok(restoreLedger(serializeLedger(l), B, DEF));
+    l = ok(beginInvocation(l, { obligation_id: "ob-ux", invocation_id: "inv-ux-2" }));
+    const old = { ...receipt(l, "ob-ux", "inv-ux-2", "d") };
+    expect(rules(recordVerdict(l, old))).toContain("evidence-reused");
+  });
+
+  it("F4: an unknown mutation invalidates even when the manifest is unchanged", () => {
+    const l = ok(applyMutation(reviewedA(), { subject: A, changed: "unknown" }));
+    expect(l.obligations.filter((o) => o.required).every((o) => o.status === "invalidated")).toBe(true);
+    expect(checkAcceptance(l, A, DEF).ok).toBe(false);
+  });
+
+  it("F5: hostile coercion objects in restored bytes fail closed without throwing", () => {
+    const parsed = JSON.parse(serializeLedger(reviewedA()));
+    parsed.obligations[0].status = { toString: 0 };
+    expect(rules(restoreLedger(JSON.stringify(parsed), A, DEF))).toContain("ledger-corrupt");
+  });
+
+  it("F6: a deleted scoped artifact blocks new rounds instead of minting an unrestorable acceptance", () => {
+    const gone: SubjectManifest = { ...B, artifacts: [A.artifacts[1], A.artifacts[2]] };
+    const l = ok(applyMutation(reviewedA(), { subject: gone, changed: ["src"] }));
+    expect(rules(beginInvocation(l, { obligation_id: "ob-sec", invocation_id: "inv-sec-2" }))).toContain("scope-missing");
+    expect(restoreLedger(serializeLedger(l), gone, DEF).ok).toBe(true);
   });
 });

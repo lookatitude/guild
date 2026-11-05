@@ -76,6 +76,8 @@ export interface AssuranceLedger {
   workflow: WorkflowBasis;
   subject: SubjectManifest;
   subject_hash: string;
+  /** Bumped by every unknown invalidation; part of every scope hash, so pre-epoch evidence never matches again. */
+  epoch: number;
   obligations: ObligationState[];
   invocations: InvocationState[];
   spent_evidence: Array<{ sha256: string; scope_hash: string }>;
@@ -108,7 +110,9 @@ export type AssuranceRule =
   | "subject-mismatch"
   | "authority-mismatch"
   | "missing-evidence"
-  | "evidence-reused";
+  | "evidence-reused"
+  | "scope-missing"
+  | "definition-changed";
 export interface AssuranceViolation { rule: AssuranceRule; detail: string }
 export type AssuranceResult<T> = { ok: true; value: T } | { ok: false; violations: AssuranceViolation[] };
 
@@ -139,11 +143,11 @@ export function subjectHash(workflow: WorkflowBasis, subject: SubjectManifest): 
 }
 
 /** Hash of the subset one obligation covers: reuse is allowed only while this is unchanged. */
-function scopeHash(workflow: WorkflowBasis, subject: SubjectManifest, ob: Pick<ObligationSpec, "id" | "authority" | "scope">): string {
+function scopeHash(workflow: WorkflowBasis, subject: SubjectManifest, ob: Pick<ObligationSpec, "id" | "authority" | "scope">, epoch: number): string {
   const bytes = new Map(subject.artifacts.map((a) => [a.name, a.sha256]));
   const names = ob.scope.length ? [...ob.scope].sort() : sortedArtifacts(subject).map((a) => a.name);
   const scoped = ob.scope.length ? names.map((n) => [n, bytes.get(n) ?? null]) : [...names.map((n) => [n, bytes.get(n)!]), ["@source_revision", subject.source_revision]];
-  return sha({ workflow: basisOf(workflow), source_id: subject.source_id, obligation: ob.id, authority: ob.authority, scope: scoped });
+  return sha({ workflow: basisOf(workflow), source_id: subject.source_id, epoch, obligation: ob.id, authority: ob.authority, scope: scoped });
 }
 
 /** Hash over every ledger field except `ledger_hash`. */
@@ -152,6 +156,9 @@ export function assuranceLedgerHash(body: Omit<AssuranceLedger, "ledger_hash">):
 }
 
 // ---------------------------------------------------------------- strict reading
+
+/** Format an untrusted value for a message without invoking its coercion hooks. */
+const show = (v: unknown): string => (typeof v === "string" ? v.slice(0, 80) : typeof v === "number" || typeof v === "boolean" || v === null ? `${v}` : typeof v);
 
 class Bad extends Error {
   constructor(readonly rule: AssuranceRule, msg: string, readonly all?: AssuranceViolation[]) {
@@ -179,11 +186,11 @@ function snapshot(value: unknown, rule: AssuranceRule, where: string): unknown {
     for (const k of keys) {
       if (typeof k === "symbol") bad(rule, `${at} carries a symbol key`);
       if (isArr && k === "length") continue;
-      if (k === "toJSON" || k === "__proto__") bad(rule, `${at} carries reserved key '${String(k)}'`);
+      if (k === "toJSON" || k === "__proto__") bad(rule, `${at} carries reserved key '${show(k)}'`);
       const d = Object.getOwnPropertyDescriptor(v, k)!;
-      if (!("value" in d) || !d.enumerable) bad(rule, `${at}.${String(k)} is an accessor or hidden property`);
+      if (!("value" in d) || !d.enumerable) bad(rule, `${at}.${show(k)} is an accessor or hidden property`);
       if (isArr && !/^(0|[1-9][0-9]*)$/.test(k as string)) bad(rule, `${at} is a decorated array`);
-      (out as Record<string, unknown>)[k as string] = walk(d.value, depth + 1, `${at}.${String(k)}`);
+      (out as Record<string, unknown>)[k as string] = walk(d.value, depth + 1, `${at}.${show(k)}`);
     }
     return out;
   };
@@ -211,7 +218,7 @@ function arr(v: unknown, max: number, rule: AssuranceRule, at: string): unknown[
   return v as unknown[];
 }
 function oneOf<T extends string>(v: unknown, set: readonly T[], rule: AssuranceRule, at: string): T {
-  if (!(set as readonly unknown[]).includes(v)) bad(rule, `${at} '${String(v)}' is not one of ${set.join(", ")}`);
+  if (!(set as readonly unknown[]).includes(v)) bad(rule, `${at} '${show(v)}' is not one of ${set.join(", ")}`);
   return v as T;
 }
 
@@ -294,6 +301,50 @@ function run<T>(fn: () => T): AssuranceResult<T> {
   }
 }
 
+/** The trusted current definition: compiled projection plus the obligation policy. */
+export interface AssuranceDefinition {
+  projection: unknown;
+  obligations: ObligationSpec[];
+}
+
+interface ResolvedDefinition { workflow: WorkflowBasis; specs: ObligationSpec[] }
+
+function specKey(o: ObligationSpec): unknown {
+  return { id: o.id, kind: o.kind, node_id: o.node_id, required: o.required, authority: o.authority, scope: [...o.scope].sort(), max_rounds: o.max_rounds };
+}
+
+function resolveDefinition(raw: unknown, names: ReadonlySet<string> | null): ResolvedDefinition {
+  const d = exact(snapshot(raw, "invalid-ledger", "definition"), ["projection", "obligations"], "invalid-ledger", "definition");
+  const p = d.projection;
+  if (!isObj(p) || !isObj(p.workflow) || !Array.isArray(p.nodes)) return bad("invalid-ledger", "projection lacks workflow/nodes");
+  const workflow: WorkflowBasis = {
+    source_id: str(p.workflow.source_id, ID, "invalid-ledger", "projection.workflow.source_id"),
+    id: str(p.workflow.id, ID, "invalid-ledger", "projection.workflow.id"),
+    definition_hash: str(p.definition_hash, HASH, "invalid-ledger", "projection.definition_hash"),
+    compiler_hash: str(p.compiler_hash, HASH, "invalid-ledger", "projection.compiler_hash"),
+    policy_hash: str(p.policy_hash, HASH, "invalid-ledger", "projection.policy_hash"),
+    expanded_hash: str(p.expanded_hash, HASH, "invalid-ledger", "projection.expanded_hash"),
+  };
+  const nodes = new Map<string, { gate_role: unknown; within_gate: unknown }>();
+  for (const n of p.nodes as unknown[]) if (isObj(n) && typeof n.id === "string") nodes.set(n.id, { gate_role: n.gate_role, within_gate: n.within_gate });
+  const specs = arr(d.obligations, LIMITS.obligations, "invalid-ledger", "obligations").map((o, i) => readSpec(o, "invalid-ledger", `obligations[${i}]`));
+  if (new Set(specs.map((s) => s.id)).size !== specs.length) bad("invalid-ledger", "an obligation id is declared twice");
+  for (const s of specs) {
+    const n = nodes.get(s.node_id);
+    if (!n) bad("invalid-ledger", `obligation ${s.id} names unknown node ${s.node_id}`);
+    if (QA_KINDS.includes(s.kind) && n!.gate_role !== "qa" && n!.within_gate !== "qa") bad("assurance-outside-gate", `${s.kind} obligation ${s.id} must execute inside the QA gate scope; ${s.node_id} is outside it`);
+    if (names) for (const name of s.scope) if (!names.has(name)) bad("invalid-ledger", `obligation ${s.id} scopes unknown artifact ${name}`);
+  }
+  const clean = specs.map((s) => specKey(s) as ObligationSpec).sort((a, b) => (a.id < b.id ? -1 : 1));
+  return { workflow, specs: clean };
+}
+
+/** Does the ledger still describe exactly this trusted definition? */
+function sameDefinition(body: Body, def: ResolvedDefinition): boolean {
+  const mine = [...body.obligations].sort((a, b) => (a.id < b.id ? -1 : 1)).map(specKey);
+  return canonical(basisOf(body.workflow)) === canonical(basisOf(def.workflow)) && canonical(mine) === canonical(def.specs);
+}
+
 export interface CreateLedgerInput {
   /** The compiled C8 v2 projection (only workflow, hashes and node scopes are read). */
   projection: unknown;
@@ -306,31 +357,11 @@ export function createAssuranceLedger(input: CreateLedgerInput): AssuranceResult
   return run(() => {
     const raw = snapshot(input, "invalid-ledger", "input");
     const inp = exact(raw, ["projection", "subject", "obligations"], "invalid-ledger", "input");
-    const p = inp.projection;
-    if (!isObj(p) || !isObj(p.workflow) || !Array.isArray(p.nodes)) return bad("invalid-ledger", "projection lacks workflow/nodes");
-    const workflow: WorkflowBasis = {
-      source_id: str(p.workflow.source_id, ID, "invalid-ledger", "projection.workflow.source_id"),
-      id: str(p.workflow.id, ID, "invalid-ledger", "projection.workflow.id"),
-      definition_hash: str(p.definition_hash, HASH, "invalid-ledger", "projection.definition_hash"),
-      compiler_hash: str(p.compiler_hash, HASH, "invalid-ledger", "projection.compiler_hash"),
-      policy_hash: str(p.policy_hash, HASH, "invalid-ledger", "projection.policy_hash"),
-      expanded_hash: str(p.expanded_hash, HASH, "invalid-ledger", "projection.expanded_hash"),
-    };
-    const nodes = new Map<string, { gate_role: unknown; within_gate: unknown }>();
-    for (const n of p.nodes as unknown[]) if (isObj(n) && typeof n.id === "string") nodes.set(n.id, { gate_role: n.gate_role, within_gate: n.within_gate });
     const subject = readSubject(inp.subject, "invalid-ledger");
+    const { workflow, specs } = resolveDefinition({ projection: inp.projection, obligations: inp.obligations }, new Set(subject.artifacts.map((a) => a.name)));
     if (subject.source_id !== workflow.source_id) bad("foreign-source", `subject source ${subject.source_id} is not workflow source ${workflow.source_id}`);
-    const specs = arr(inp.obligations, LIMITS.obligations, "invalid-ledger", "obligations").map((o, i) => readSpec(o, "invalid-ledger", `obligations[${i}]`));
-    if (new Set(specs.map((s) => s.id)).size !== specs.length) bad("invalid-ledger", "an obligation id is declared twice");
-    const names = new Set(subject.artifacts.map((a) => a.name));
-    const obligations: ObligationState[] = specs.map((s) => {
-      const n = nodes.get(s.node_id);
-      if (!n) bad("invalid-ledger", `obligation ${s.id} names unknown node ${s.node_id}`);
-      if (QA_KINDS.includes(s.kind) && n!.gate_role !== "qa" && n!.within_gate !== "qa") bad("assurance-outside-gate", `${s.kind} obligation ${s.id} must execute inside the QA gate scope; ${s.node_id} is outside it`);
-      for (const name of s.scope) if (!names.has(name)) bad("invalid-ledger", `obligation ${s.id} scopes unknown artifact ${name}`);
-      return { id: s.id, kind: s.kind, node_id: s.node_id, required: s.required, authority: s.authority, scope: s.scope, max_rounds: s.max_rounds, status: "pending", round: 0, accepted: null, invalidated_by: null };
-    });
-    return seal({ schema_version: ASSURANCE_LEDGER_SCHEMA_VERSION, workflow, subject, subject_hash: subjectHash(workflow, subject), obligations, invocations: [], spent_evidence: [] });
+    const obligations: ObligationState[] = specs.map((s) => ({ ...s, status: "pending", round: 0, accepted: null, invalidated_by: null }));
+    return seal({ schema_version: ASSURANCE_LEDGER_SCHEMA_VERSION, workflow, subject, subject_hash: subjectHash(workflow, subject), epoch: 0, obligations, invocations: [], spent_evidence: [] });
   });
 }
 
@@ -340,10 +371,13 @@ export function beginInvocation(ledger: AssuranceLedger, req: { obligation_id: s
     const body: Body = clone(ledger);
     const errs: AssuranceViolation[] = [];
     const ob = body.obligations.find((o) => o.id === req.obligation_id);
-    if (!ob) bad("unknown-obligation", `no obligation ${String(req.obligation_id)}`);
+    if (!ob) bad("unknown-obligation", `no obligation ${show(req.obligation_id)}`);
     if (typeof req.invocation_id !== "string" || !ID.test(req.invocation_id)) bad("invalid-ledger", "invocation id is not an id");
     if (body.invocations.some((i) => i.id === req.invocation_id)) errs.push({ rule: "duplicate-invocation", detail: `invocation ${req.invocation_id} already exists` });
     if (ob!.round + 1 > ob!.max_rounds) errs.push({ rule: "round-cap", detail: `obligation ${ob!.id} has used ${ob!.round} of ${ob!.max_rounds} rounds; exhaustion blocks` });
+    const present = new Set(body.subject.artifacts.map((a) => a.name));
+    const lacking = ob!.scope.filter((n) => !present.has(n));
+    if (lacking.length) errs.push({ rule: "scope-missing", detail: `obligation ${ob!.id} covers ${lacking.join(", ")}, which the current subject lacks; revise the definition` });
     if (body.invocations.length >= LIMITS.invocations) errs.push({ rule: "round-cap", detail: `ledger holds ${LIMITS.invocations} invocations` });
     if (errs.length) throw new Bad(errs[0].rule, errs[0].detail, errs);
     for (const i of body.invocations) if (i.obligation_id === ob!.id && i.state === "active") i.state = "superseded";
@@ -351,7 +385,7 @@ export function beginInvocation(ledger: AssuranceLedger, req: { obligation_id: s
     ob!.status = "pending";
     ob!.accepted = null;
     ob!.invalidated_by = null;
-    body.invocations.push({ id: req.invocation_id, obligation_id: ob!.id, node_id: ob!.node_id, round: ob!.round, subject_hash: body.subject_hash, scope_hash: scopeHash(body.workflow, body.subject, ob!), state: "active" });
+    body.invocations.push({ id: req.invocation_id, obligation_id: ob!.id, node_id: ob!.node_id, round: ob!.round, subject_hash: body.subject_hash, scope_hash: scopeHash(body.workflow, body.subject, ob!, body.epoch), state: "active" });
     return seal(body);
   });
 }
@@ -366,17 +400,17 @@ export function recordVerdict(ledger: AssuranceLedger, rawReceipt: VerdictReceip
     const errs: AssuranceViolation[] = [];
     const push = (rule: AssuranceRule, detail: string) => errs.push({ rule, detail });
     const src = body.subject.source_id;
-    if (r.source_id !== src) push("foreign-source", `receipt source ${String(r.source_id)} is not ${src}`);
+    if (r.source_id !== src) push("foreign-source", `receipt source ${show(r.source_id)} is not ${src}`);
     const ob = body.obligations.find((o) => o.id === r.obligation_id);
     const inv = body.invocations.find((i) => i.id === r.invocation_id);
-    if (!ob) push("unknown-obligation", `no obligation ${String(r.obligation_id)}`);
-    if (!inv) push("unknown-invocation", `no invocation ${String(r.invocation_id)}`);
+    if (!ob) push("unknown-obligation", `no obligation ${show(r.obligation_id)}`);
+    if (!inv) push("unknown-invocation", `no invocation ${show(r.invocation_id)}`);
     if (ob && inv) {
       if (inv.obligation_id !== ob.id) push("invocation-mismatch", `invocation ${inv.id} belongs to ${inv.obligation_id}, not ${ob.id}`);
       if (inv.state !== "active") push("stale-invocation", `invocation ${inv.id} is ${inv.state}; start a new round under the current subject`);
-      if (r.round !== inv.round) push("round-mismatch", `receipt round ${String(r.round)} is not invocation round ${inv.round}`);
-      if (r.subject_hash !== body.subject_hash || inv.subject_hash !== body.subject_hash) push("subject-mismatch", `receipt subject ${String(r.subject_hash)} is not the current subject ${body.subject_hash}`);
-      if (r.authority !== ob.authority) push("authority-mismatch", `receipt authority ${String(r.authority)} is not ${ob.authority}`);
+      if (r.round !== inv.round) push("round-mismatch", `receipt round ${show(r.round)} is not invocation round ${inv.round}`);
+      if (r.subject_hash !== body.subject_hash || inv.subject_hash !== body.subject_hash) push("subject-mismatch", `receipt subject ${show(r.subject_hash)} is not the current subject ${body.subject_hash}`);
+      if (r.authority !== ob.authority) push("authority-mismatch", `receipt authority ${show(r.authority)} is not ${ob.authority}`);
     }
     if (verdict === "accept") {
       if (!evidence.length || !evidence.every((e) => e.availability === "available" && e.source_id === src)) push("missing-evidence", `an accept needs available evidence owned by ${src}`);
@@ -401,11 +435,12 @@ export function recordVerdict(ledger: AssuranceLedger, rawReceipt: VerdictReceip
 
 function invalidate(body: Body, next: SubjectManifest, cause: InvalidationCause | "declared"): void {
   for (const i of body.invocations) if (i.state === "active") i.state = "superseded";
+  if (cause !== "declared") body.epoch += 1;
   for (const ob of body.obligations) {
     if (cause === "declared") {
       const latest = body.invocations.filter((i) => i.obligation_id === ob.id).sort((a, b) => b.round - a.round)[0];
       // Unchanged scope keeps its verdict: the declared input subset still matches exactly.
-      if (!latest || latest.scope_hash === scopeHash(body.workflow, next, ob)) continue;
+      if (!latest || latest.scope_hash === scopeHash(body.workflow, next, ob, body.epoch)) continue;
       ob.invalidated_by = "mutation";
     } else {
       ob.invalidated_by = cause;
@@ -427,6 +462,10 @@ export function applyMutation(ledger: AssuranceLedger, m: { subject: SubjectMani
     const next = readSubject(snapshot(m.subject, "invalid-ledger", "subject"), "invalid-ledger");
     if (next.source_id !== ledger.subject.source_id) bad("foreign-source", `mutation source ${next.source_id} is not ${ledger.subject.source_id}`);
     const body: Body = clone(ledger);
+    if (m.changed === "unknown") {
+      invalidate(body, next, "unknown-mutation");
+      return seal(body);
+    }
     if (subjectHash(body.workflow, next) === body.subject_hash) return ledger;
     const before = new Map(body.subject.artifacts.map((a) => [a.name, a.sha256]));
     const after = new Map(next.artifacts.map((a) => [a.name, a.sha256]));
@@ -439,16 +478,22 @@ export function applyMutation(ledger: AssuranceLedger, m: { subject: SubjectMani
 }
 
 /** Acceptance boundary: re-check every required obligation against the subject as it is NOW. */
-export function checkAcceptance(ledger: AssuranceLedger, current: SubjectManifest): AcceptanceResult {
+export function checkAcceptance(ledger: AssuranceLedger, current: SubjectManifest, definition: AssuranceDefinition): AcceptanceResult {
   const blockers: Array<{ obligation_id: string; reason: string }> = [];
   const accepted: string[] = [];
   let subject: SubjectManifest | null = null;
+  let def: ResolvedDefinition | null = null;
   try {
     subject = readSubject(snapshot(current, "invalid-ledger", "subject"), "invalid-ledger");
+    def = resolveDefinition(definition, null);
   } catch (err) {
     if (!(err instanceof Bad)) throw err;
   }
-  const required = ledger.obligations.filter((o) => o.required);
+  // Requiredness comes from the trusted definition, never from the ledger being judged.
+  const required = def ? def.specs.filter((o) => o.required) : ledger.obligations.filter((o) => o.required);
+  if (!def || !sameDefinition(ledger, def)) {
+    return { ok: false, blockers: required.map((o) => ({ obligation_id: o.id, reason: "definition-changed" })) };
+  }
   if (!subject || subject.source_id !== ledger.subject.source_id || subjectHash(ledger.workflow, subject) !== ledger.subject_hash) {
     return { ok: false, blockers: required.map((o) => ({ obligation_id: o.id, reason: "subject-changed" })) };
   }
@@ -459,7 +504,7 @@ export function checkAcceptance(ledger: AssuranceLedger, current: SubjectManifes
     if (ob.status !== "accepted" || !b) reason = `not-accepted:${ob.status}`;
     else if (!inv || inv.state !== "accepted" || inv.round !== b.round || b.round !== ob.round) reason = "round-mismatch";
     else if (b.authority !== ob.authority) reason = "authority-mismatch";
-    else if (b.scope_hash !== scopeHash(ledger.workflow, subject, ob) || inv.scope_hash !== b.scope_hash) reason = "subject-mismatch";
+    else if (b.scope_hash !== scopeHash(ledger.workflow, subject, ob, ledger.epoch) || inv.scope_hash !== b.scope_hash) reason = "subject-mismatch";
     else if (!b.evidence.length || !b.evidence.every((e) => e.availability === "available" && e.source_id === subject!.source_id)) reason = "missing-evidence";
     if (reason === null) accepted.push(ob.id);
     else if (ob.required) blockers.push({ obligation_id: ob.id, reason });
@@ -495,6 +540,7 @@ function verifyBody(body: Body): void {
       const inv = invs.get(b.invocation_id);
       if (!inv || inv.obligation_id !== ob.id || inv.state !== "accepted" || inv.round !== b.round || b.round !== ob.round) fail(`${ob.id} binding does not match an accepted invocation at its round`);
       if (b.authority !== ob.authority || b.subject_hash !== inv!.subject_hash || b.scope_hash !== inv!.scope_hash) fail(`${ob.id} binding fields differ from its invocation`);
+      if (b.scope_hash !== scopeHash(body.workflow, body.subject, ob, body.epoch)) fail(`${ob.id} binding does not match the current subject scope`);
       if (!b.evidence.length || !b.evidence.every((e) => e.availability === "available" && e.source_id === body.subject.source_id)) fail(`${ob.id} binding lacks available evidence`);
       for (const e of b.evidence) if (!body.spent_evidence.some((s) => s.sha256 === e.sha256 && s.scope_hash === b.scope_hash)) fail(`${ob.id} evidence is not indexed`);
     }
@@ -507,7 +553,7 @@ function verifyBody(body: Body): void {
 
 function readLedger(v: unknown): Body & { ledger_hash: string } {
   const R: AssuranceRule = "ledger-corrupt";
-  const o = exact(v, ["schema_version", "workflow", "subject", "subject_hash", "obligations", "invocations", "spent_evidence", "ledger_hash"], R, "ledger");
+  const o = exact(v, ["schema_version", "workflow", "subject", "subject_hash", "epoch", "obligations", "invocations", "spent_evidence", "ledger_hash"], R, "ledger");
   if (o.schema_version !== ASSURANCE_LEDGER_SCHEMA_VERSION) bad(R, `schema_version is not ${ASSURANCE_LEDGER_SCHEMA_VERSION}`);
   const w = exact(o.workflow, ["source_id", "id", "definition_hash", "compiler_hash", "policy_hash", "expanded_hash"], R, "workflow");
   const workflow: WorkflowBasis = {
@@ -561,6 +607,7 @@ function readLedger(v: unknown): Body & { ledger_hash: string } {
     workflow,
     subject: readSubject(o.subject, R),
     subject_hash: str(o.subject_hash, HASH, R, "subject_hash"),
+    epoch: int(o.epoch, 0, 1_000_000, R, "epoch"),
     obligations,
     invocations,
     spent_evidence,
@@ -573,7 +620,7 @@ function readLedger(v: unknown): Body & { ledger_hash: string } {
  * are re-validated (shape, hash, invariants). A subject that moved since the
  * last write is an unknown mutation: every obligation is invalidated.
  */
-export function restoreLedger(text: string, current: SubjectManifest): AssuranceResult<AssuranceLedger> {
+export function restoreLedger(text: string, current: SubjectManifest, definition: AssuranceDefinition): AssuranceResult<AssuranceLedger> {
   return run(() => {
     if (typeof text !== "string" || text.length > LIMITS.bytes) bad("ledger-corrupt", `ledger bytes exceed ${LIMITS.bytes}`);
     let parsed: unknown;
@@ -586,6 +633,7 @@ export function restoreLedger(text: string, current: SubjectManifest): Assurance
     const { ledger_hash, ...body } = full;
     if (assuranceLedgerHash(body) !== ledger_hash) bad("ledger-corrupt", "ledger_hash does not match the ledger body");
     verifyBody(body);
+    if (!sameDefinition(body, resolveDefinition(definition, null))) bad("definition-changed", "the ledger's workflow basis or obligation policy differs from the current definition; open a new ledger");
     const now = readSubject(snapshot(current, "invalid-ledger", "subject"), "invalid-ledger");
     if (now.source_id !== body.subject.source_id) bad("foreign-source", `current source ${now.source_id} is not ledger source ${body.subject.source_id}`);
     const working: Body = clone(body);

@@ -339,3 +339,25 @@ describe("AT06 compiler wiring — nested fragments and custom release effects",
     expect(crules(compile([root], "research"))).toContain("privileged-ungated");
   });
 });
+
+describe("AT06 codex r1 regressions", () => {
+  it("F1: an obligation whose invocation ran outside QA, or at another node, is rejected", () => {
+    const p: any = chain("product", PRODUCT_OK);
+    p.obligations = [{ id: "ob", kind: "security", node_id: "qa", invocation_id: "i1" }];
+    p.invocations = [{ id: "i1", node_id: "build" }];
+    const r = rules(verifyProtectedPaths(p));
+    expect(r).toContain("assurance-outside-gate");
+    expect(r).toContain("assurance-unbound");
+    p.invocations = [];
+    expect(rules(verifyProtectedPaths(p))).toContain("assurance-unbound");
+    p.invocations = [{ id: "i1", node_id: "qa" }];
+    expect(verifyProtectedPaths(p)).toEqual({ ok: true });
+  });
+
+  it("F5: coercion-hostile JSON fails closed without throwing", () => {
+    expect(rules(verifyProtectedPaths(JSON.parse('{"class":{"toString":0}}')))).toContain("invalid-projection");
+    const p: any = chain("product", PRODUCT_OK);
+    p.nodes[1].effect = { toString: 0 };
+    expect(rules(verifyProtectedPaths(p))).toContain("invalid-projection");
+  });
+});
