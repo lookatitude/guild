@@ -289,6 +289,18 @@ describe("AT21 · phase composition — two projects, distinct chains and QA pol
     expect(rules(r)).toContain("qa-obligation-unserved");
   });
 
+  it("negative: an optional review does not serve a required QA kind", () => {
+    const optional = component("impl-opt", ["write", "review", "gate"], seq("main", [
+      gate("d5", "d5"),
+      task("build"),
+      task("quality", { effect: "review", role: "qa-reviewer", capabilities: ["assurance:quality"], within_gate: "qa", required: false }),
+      gate("qa", "qa"),
+      gate("d8", "d8"),
+    ]));
+    const r = composePhase(registry([optional]), input({ class: "product", root: { id: "impl-opt", version: "1" }, proposal: proposal("build", TEAM_A_IMPL), qa_policy: qa(["quality"]) }));
+    expect(rules(r)).toContain("qa-obligation-unserved");
+  });
+
   it("negative: whoever performs a privileged operation cannot also be its independent reviewer", () => {
     const grant = component("impl-grant", ["write", "review", "gate", "privileged_operation"], seq("main", [
       gate("d5", "d5"),

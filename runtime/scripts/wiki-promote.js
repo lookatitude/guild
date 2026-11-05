@@ -46355,10 +46355,10 @@ function composeInner(registry, rawInput, bindingOnly) {
     });
   }
   const unbound = sortStr(team.participants.filter((p) => !boundRoles.has(p.role_ref)).map((p) => p.participant_id));
-  const qaNodes = projection.nodes.filter((n) => n.within_gate === "qa" && n.effect === "review");
+  const qaNodes = projection.nodes.filter((n) => n.within_gate === "qa" && n.effect === "review" && n.required);
   const qaObligations = qaPolicy.required.map((kind) => {
     const ids = sortStr(qaNodes.filter((n) => n.capabilities.includes(`assurance:${kind}`)).map((n) => n.id));
-    if (!ids.length) fail2("qa-obligation-unserved", `QA policy requires '${kind}' assurance, but no review node inside the QA gate carries capability assurance:${kind}`);
+    if (!ids.length) fail2("qa-obligation-unserved", `QA policy requires '${kind}' assurance, but no required review node inside the QA gate carries capability assurance:${kind}`);
     return { kind, node_ids: ids };
   });
   const AUTHOR_EFFECTS = /* @__PURE__ */ new Set(["write", "privileged_operation", "release"]);
