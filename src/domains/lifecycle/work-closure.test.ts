@@ -251,7 +251,7 @@ describe("AT14 · recordWorkClose", () => {
     const rev = openWorkDisposition(durableRoot, RUN, TASK);
     expect(() => runTransfer(
       { operation_id: "xfer-1", source_work: TASK, expected_disposition_revision: rev, destination_work: { source_id: "source-b", kind: "logical_task", id: "follow-1", revision: H("f") }, destination_policy_hash: H("1"), payload: { title: "follow up" } },
-      { controller: ctl, grant, sourceRoot: durableRoot, targetRoot: target, at: (p) => { if (p === "reserved_record") throw new Error("crash"); } },
+      { controller: ctl, grant, sourceRoot: durableRoot, targetRoot: target, controllerPrivateDir: privateDir, at: (p) => { if (p === "reserved_record") throw new Error("crash"); } },
     )).toThrow("crash");
     const d = evaluateTaskClose(input());
     if (!d.ok) throw new Error("fixture");
@@ -285,7 +285,7 @@ describe("AT14 · recordWorkClose", () => {
     fs.mkdirSync(target);
     const r = runTransfer(
       { operation_id: "xfer-1", source_work: TASK, expected_disposition_revision: rev, destination_work: { source_id: "source-b", kind: "logical_task", id: "follow-1", revision: H("f") }, destination_policy_hash: H("1"), payload: { title: "late" } },
-      { controller: ctl, grant, sourceRoot: durableRoot, targetRoot: target },
+      { controller: ctl, grant, sourceRoot: durableRoot, targetRoot: target, controllerPrivateDir: privateDir },
     );
     expect([r.state, r.refusal]).toEqual(["aborted", "disposition_conflict"]);
     expect(fs.existsSync(path.join(target, ".guild"))).toBe(false);

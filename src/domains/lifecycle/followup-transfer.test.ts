@@ -78,7 +78,7 @@ function req(operation_id: string, expected: string, destination = dest("follow-
   return { operation_id, source_work: WORK, expected_disposition_revision: expected, destination_work: destination, destination_policy_hash: H("1"), payload };
 }
 function ports(targetRoot: string, at?: (p: TransferPoint) => void) {
-  return { controller: ctl, grant, sourceRoot, targetRoot, now: () => (clock += 1), at };
+  return { controller: ctl, grant, sourceRoot, targetRoot, controllerPrivateDir: path.join(tmp, "state"), now: () => (clock += 1), at };
 }
 function code(fn: () => unknown): string {
   try { fn(); } catch (e) { return e instanceof TransferRefusal ? e.code : `other:${(e as Error).message}`; }
@@ -374,7 +374,7 @@ describe("AT16 · transfer crash matrix", () => {
     fs.mkdirSync(otherRoot);
     const other = openRunController({ privateDir: path.join(tmp, "other-state"), durableRoot: otherRoot, source_id: SRC, run_id: RUN, host_id: "host-b", now: () => clock });
     other.close();
-    expect(transferCloseBlocker(sourceRoot, RUN, WORK, path.join(tmp, "other-state"))).toEqual({ operation_id: "xfer-a", state: "acknowledged" });
+    expect(code(() => transferCloseBlocker(sourceRoot, RUN, WORK, path.join(tmp, "other-state")))).toBe("journal_corrupt");
     expect(transferCloseBlocker(sourceRoot, RUN, WORK, path.join(tmp, "state"))).toBeNull();
   });
 
@@ -409,6 +409,31 @@ describe("AT16 · transfer crash matrix", () => {
       operation_id: "close-forged", intent_hash: H("6"), destination_work: null, target_root_digest: null, prepared_sha256: null };
     fs.writeFileSync(path.join(dir, "000003.json"), `${canonicalJson(forged)}\n`);
     expect(code(() => transferCloseBlocker(sourceRoot, RUN, WORK, path.join(tmp, "state")))).toBe("journal_corrupt");
+  });
+
+  it("codex r3 F1: an unauthenticated release does not free the source", () => {
+    const rev = openWorkDisposition(sourceRoot, RUN, WORK);
+    expect(code(() => runTransfer(req("xfer-a", rev), ports(targetA, (p) => { if (p === "prepared_record") throw new Error("crash"); })))).toBe("other:crash");
+    const dir = path.join(sourceRoot, ".guild", "runs", RUN, "work", "logical_task", "task-1", "disposition");
+    const raw = fs.readFileSync(path.join(dir, "000001.json"), "utf8");
+    const forged = { ...JSON.parse(raw), seq: 2, prev_revision: hashOf(raw), state: "released" };
+    fs.writeFileSync(path.join(dir, "000002.json"), `${canonicalJson(forged)}\n`);
+    expect(code(() => transferCloseBlocker(sourceRoot, RUN, WORK, path.join(tmp, "state")))).toBe("journal_corrupt");
+    expect(code(() => runTransfer(req("xfer-b", hashOf(`${canonicalJson(forged)}\n`), dest("follow-b")), ports(targetB)))).toBe("journal_corrupt");
+  });
+
+  it("codex r3 F2: an unreadable target is reported recovery_needed, not committed", () => {
+    const rev = openWorkDisposition(sourceRoot, RUN, WORK);
+    expect(code(() => runTransfer(req("xfer-a", rev), ports(targetA, (p) => { if (p === "source_committed_record") throw new Error("crash"); })))).toBe("other:crash");
+    const inbound = path.join(targetA, ".guild", "transfers", "inbound", SRC, "xfer-a");
+    fs.chmodSync(inbound, 0o000);
+    try {
+      const v = reconcileTransfer({ sourceRoot, targetRoot: targetA, source_id: SRC, run_id: RUN, operation_id: "xfer-a" });
+      expect(v?.target_reachable).toBe(false);
+      expect(v?.record?.state).toBe("recovery_needed");
+    } finally {
+      fs.chmodSync(inbound, 0o755);
+    }
   });
 
   it("codex r2 F3: a reshaped activation is not executable", () => {

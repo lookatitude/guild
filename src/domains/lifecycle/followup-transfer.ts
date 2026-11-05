@@ -100,6 +100,8 @@ export interface TransferPorts {
   sourceRoot: string;
   /** Destination project root. */
   targetRoot: string;
+  /** The controller's private state dir; every disposition transition is checked against its keyed journal. */
+  controllerPrivateDir: string;
   now?: () => number;
   /** Fault-injection seam: called at each TRANSFER_POINTS step; a throw stops the protocol there. */
   at?: (point: TransferPoint) => void;
@@ -480,6 +482,7 @@ const NONE = { source_commit: null, target_activation: null, target_ack: null };
 function validateRequest(req: TransferRequest, ports: TransferPorts): { intent: TransferIntent; payload: unknown } {
   if (!isObj(req)) throw new TransferRefusal("request_invalid", "request must be an object");
   seg(req.operation_id, "operation_id");
+  if (typeof ports.controllerPrivateDir !== "string" || ports.controllerPrivateDir === "") throw new TransferRefusal("request_invalid", "controllerPrivateDir is required");
   const run_id = seg(ports.controller.run_id, "run_id");
   checkWork(run_id, req.source_work);
   if (req.source_work.source_id !== ports.controller.source_id) throw new TransferRefusal("request_invalid", "source work belongs to another source");
@@ -584,6 +587,7 @@ export function runTransfer(req: TransferRequest, ports: TransferPorts): Transfe
 
   // Reserve: CAS on the expected disposition revision.
   let view = readWorkDisposition(root, run_id, work);
+  verifyChainAuthority(view, run_id, intent.source_id, ports.controllerPrivateDir);
   const findMine = (v: DispositionView, state: DispositionState) => {
     const i = v.entries.findIndex((e) => e.state === state && e.operation_id === op);
     if (i >= 0 && v.entries[i]!.intent_hash !== ctx.intentHash) corrupt(`disposition names ${op} with another intent`);
@@ -758,7 +762,7 @@ export function reconcileTransfer(opts: { sourceRoot: string; targetRoot: string
   if (found.intent.source_id !== opts.source_id) corrupt(`${op} intent names another source`);
   const ctx: Ctx = { root, targetRoot, intent: found.intent, intentHash: found.hash, ports: undefined as unknown as TransferPorts, now: Date.now };
   const aborted = readStage(root, found.intent, "aborted");
-  const reachable = rootReachable(targetRoot);
+  let reachable = rootReachable(targetRoot);
   if (aborted) return { journal_state: "aborted", target_reachable: reachable, record: aborted };
 
   const view = readWorkDisposition(root, run_id, found.intent.source_work);
@@ -770,7 +774,8 @@ export function reconcileTransfer(opts: { sourceRoot: string; targetRoot: string
   const ti = view.entries.findIndex((e) => e.state === "transferred" && e.operation_id === op);
   const targetRaw = (f: string): string | null => {
     if (!reachable) return null;
-    try { return readOnce(targetRoot, path.join(inbound, f)); } catch { return null; }
+    // An unreadable or refused target file means the target cannot be reached, not that it is empty.
+    try { return readOnce(targetRoot, path.join(inbound, f)); } catch { reachable = false; return null; }
   };
   const preparedOk = (): boolean => {
     const raw = targetRaw("prepared.json");
@@ -800,6 +805,33 @@ export function reconcileTransfer(opts: { sourceRoot: string; targetRoot: string
 }
 
 /**
+ * Every transition after genesis must have the controller receipt that
+ * authorized it: reservation, commit and release for transfers, close for a
+ * work closure. A chain entry without its receipt is a forgery.
+ */
+function verifyChainAuthority(view: DispositionView, run_id: string, source_id: string, controllerPrivateDir: string): void {
+  let journal: ReturnType<typeof readControllerJournal>;
+  try {
+    journal = readControllerJournal({ privateDir: controllerPrivateDir });
+  } catch (e) {
+    if (e instanceof ControllerRefusal) throw new TransferRefusal("controller_refused", `${e.code}: ${e.message}`);
+    throw e;
+  }
+  if (journal.run_id !== run_id || journal.source_id !== source_id) corrupt("controller journal belongs to another run");
+  view.entries.forEach((e, i) => {
+    if (i === 0) return;
+    const xfer = `xfer.${e.intent_hash!.slice(7, 47)}`;
+    const [op, action, subject]: [string, ControlAction, string] =
+      e.state === "transfer_reserved" ? [`${e.operation_id}.reserve`, "schedule", xfer]
+      : e.state === "transferred" ? [`${e.operation_id}.commit`, "release", xfer]
+      : e.state === "released" ? [`${e.operation_id}.abort`, "close", xfer]
+      : [e.operation_id!, "close", `close.${e.intent_hash!.slice(7, 47)}`];
+    const r = journal.operations.get(op);
+    if (!r || r.action !== action || r.subject !== subject) corrupt(`disposition entry ${i} (${e.state}) is not authorized by the run controller`);
+  });
+}
+
+/**
  * What blocks a clean close of the source work: a reservation in flight, or a
  * committed transfer whose ack the source has not retained. An ack counts only
  * when the whole journal verifies and the run controller's keyed journal holds
@@ -810,16 +842,12 @@ export function transferCloseBlocker(sourceRoot: string, run_id: string, work: E
   const view = readWorkDisposition(root, run_id, work);
   const head = view.entries[view.entries.length - 1];
   if (!head) return null;
+  verifyChainAuthority(view, run_id, work.source_id, controllerPrivateDir);
   const journal = readControllerJournal({ privateDir: controllerPrivateDir });
-  const ours = journal.run_id === run_id && journal.source_id === work.source_id;
   const authorized = (op: string, action: ControlAction, subject: string) => {
-    const r = ours ? journal.operations.get(op) : undefined;
+    const r = journal.operations.get(op);
     return !!r && r.action === action && r.subject === subject;
   };
-  // A `closed` tail is a work-closure write; it must be the controller's.
-  if (head.state === "closed" && !authorized(head.operation_id!, "close", `close.${head.intent_hash!.slice(7, 47)}`)) {
-    corrupt(`closed disposition ${head.operation_id} is not bound by the run controller`);
-  }
   if (head.state === "transfer_reserved") return { operation_id: head.operation_id!, state: "reserved" };
   // Every committed transfer, even beneath a later entry, needs a verified, controller-authorized ack.
   for (const e of view.entries) {
