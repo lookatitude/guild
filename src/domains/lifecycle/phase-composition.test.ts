@@ -15,13 +15,15 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import { composeProposal, recordDecision } from "../teams";
+import { composeProposal, proposalHashOf, recordDecision } from "../teams";
 import { createComponentRegistry, type WorkflowComponentRegistry } from "./workflow-component-compiler";
 import {
   PHASE_COMPOSITION_SCHEMA_VERSION,
   QA_POLICY_SCHEMA_VERSION,
-  composePhase,
+  PHASE_BINDING_PREFIX,
+  composePhase as composeRaw,
   loadPhaseCompositionInputs,
+  phaseBinding,
   phaseDispatchGate,
   verifyPhaseComposition,
   type PhaseCompositionInput,
@@ -92,6 +94,20 @@ function registry(docs: unknown[]): WorkflowComponentRegistry {
   const r = createComponentRegistry(docs);
   if (!r.ok) throw new Error(JSON.stringify(r.violations));
   return r.registry;
+}
+
+/** Stamp the phase binding into the proposal, as the team-compose step does before approval. */
+function bound(reg: WorkflowComponentRegistry, i: PhaseCompositionInput): PhaseCompositionInput {
+  const b = phaseBinding(reg, i);
+  if (!b.ok) return i;
+  const p = JSON.parse(JSON.stringify(i.proposal));
+  p.plan_ref = b.plan_ref;
+  p.provenance = b.provenance;
+  p.proposal_hash = proposalHashOf(p);
+  return { ...i, proposal: p };
+}
+function composePhase(reg: WorkflowComponentRegistry, i: PhaseCompositionInput): PhaseCompositionResult {
+  return composeRaw(reg, bound(reg, i));
 }
 
 type Member = [id: string, role: string, caps: string[] | null, kind?: string];
@@ -260,6 +276,19 @@ describe("AT21 · phase composition — two projects, distinct chains and QA pol
     expect(rules(r)).toContain("review-not-independent");
   });
 
+  it("negative: an author-owned write node labelled as assurance does not serve QA", () => {
+    const fake = component("impl-fake", ["write", "gate"], seq("main", [
+      gate("d5", "d5"),
+      task("build"),
+      task("selfcheck", { capabilities: ["code", "assurance:quality"], within_gate: "qa", required: true }),
+      gate("qa", "qa"),
+      gate("d8", "d8"),
+    ]));
+    const team: Member[] = [["dev", "developer", ["code", "assurance:quality"]], ["lead", "owner", []]];
+    const r = composePhase(registry([fake]), input({ class: "product", root: { id: "impl-fake", version: "1" }, proposal: proposal("build", team), qa_policy: qa(["quality"]) }));
+    expect(rules(r)).toContain("qa-obligation-unserved");
+  });
+
   it("is deterministic: participant order and registry order do not change the bytes", () => {
     const base = ok(composePhase(registry(PROJECT_B_DOCS), B_IMPL())).composition;
     for (let i = 0; i < 3; i++) {
@@ -277,8 +306,8 @@ describe("AT21 · phase composition — two projects, distinct chains and QA pol
 
 describe("AT21 · approval — every participant stays behind the existing team approval", () => {
   it("dispatch is refused without a recorded approve decision", () => {
-    const i = A_IMPL();
     const reg = registry(PROJECT_A_DOCS);
+    const i = bound(reg, A_IMPL());
     const c = ok(composePhase(reg, i)).composition;
     expect(c.approval.required).toBe(true);
     expect(c.approval.participants).toEqual(["dev", "lead", "qar"]);
@@ -287,8 +316,8 @@ describe("AT21 · approval — every participant stays behind the existing team 
   });
 
   it("an approve decision over the exact proposal authorises dispatch", () => {
-    const i = A_IMPL();
     const reg = registry(PROJECT_A_DOCS);
+    const i = bound(reg, A_IMPL());
     const c = ok(composePhase(reg, i)).composition;
     expect(phaseDispatchGate(reg, i, c, approve(i.proposal)).allowed).toBe(true);
   });
@@ -306,7 +335,7 @@ describe("AT21 · approval — every participant stays behind the existing team 
     expect(rules(bypass).some((r) => r === "release-bypasses-gate" || r === "gate-order")).toBe(true);
     // An "approver" participant is not an approval.
     const approverTeam: Member[] = [...TEAM_A_IMPL, ["appr", "approver", ["review"]]];
-    const i = { ...A_IMPL(), proposal: proposal("build", approverTeam) };
+    const i = bound(registry(PROJECT_A_DOCS), { ...A_IMPL(), proposal: proposal("build", approverTeam) });
     const c = ok(composePhase(registry(PROJECT_A_DOCS), i)).composition;
     expect(phaseDispatchGate(registry(PROJECT_A_DOCS), i, c, null).allowed).toBe(false);
     expect(c.unbound_participants).toEqual(["appr"]);
@@ -327,6 +356,8 @@ describe("AT21 · approval — every participant stays behind the existing team 
       { schema_version: QA_POLICY_SCHEMA_VERSION, required: ["extra_gate"] },
       { schema_version: QA_POLICY_SCHEMA_VERSION, required: ["quality", "quality"] },
       { schema_version: "guild.qa_policy.v0", required: [] },
+      { schema_version: QA_POLICY_SCHEMA_VERSION, required: [{ toString: "not callable" }] },
+      { schema_version: QA_POLICY_SCHEMA_VERSION, required: [["quality"]] },
     ]) {
       expect(rules(composePhase(registry(PROJECT_A_DOCS), { ...A_IMPL(), qa_policy: bad as never }))).toContain("invalid-qa-policy");
     }
@@ -335,8 +366,8 @@ describe("AT21 · approval — every participant stays behind the existing team 
   });
 
   it("negative: a decision approving another proposal or phase does not carry over", () => {
-    const i = A_IMPL();
     const reg = registry(PROJECT_A_DOCS);
+    const i = bound(reg, A_IMPL());
     const c = ok(composePhase(reg, i)).composition;
     const other = proposal("build", [...TEAM_A_IMPL, ["x", "advisor", null, "advisor"]]);
     expect(phaseDispatchGate(reg, { ...i, proposal: other }, c, approve(other)).allowed).toBe(false);
@@ -348,8 +379,8 @@ describe("AT21 · approval — every participant stays behind the existing team 
   });
 
   it("negative: a tampered composition is refused", () => {
-    const i = A_IMPL();
     const reg = registry(PROJECT_A_DOCS);
+    const i = bound(reg, A_IMPL());
     const c = ok(composePhase(reg, i)).composition;
     const d = approve(i.proposal);
     const forged = JSON.parse(JSON.stringify(c));
@@ -370,28 +401,52 @@ describe("AT21 · approval — every participant stays behind the existing team 
 
 describe("AT21 · scope expansion recomposes", () => {
   it("a changed plan, team or component set requires recomposition", () => {
-    const i = A_IMPL();
     const reg = registry(PROJECT_A_DOCS);
+    const i = bound(reg, A_IMPL());
     const c = ok(composePhase(reg, i)).composition;
     expect(verifyPhaseComposition(reg, i, c)).toEqual({ current: true, changed: [] });
 
-    const plan = verifyPhaseComposition(reg, { ...i, plan: { ...PLAN, sha256: "b".repeat(64) } }, c);
-    expect(plan).toEqual({ current: false, changed: ["plan"] });
+    const d = approve(i.proposal);
+    expect(phaseDispatchGate(reg, i, c, d).allowed).toBe(true);
+    const bumped = component("impl-a", IMPL_A.effects, IMPL_A.body, "2");
+    const reg2 = registry([RESEARCH_SHORT, IMPL_A, bumped]);
+    const changes: Array<[string, WorkflowComponentRegistry, PhaseCompositionInput]> = [
+      ["plan", reg, { ...i, plan: { ...PLAN, sha256: "b".repeat(64) } }],
+      ["qa_policy", reg, { ...i, qa_policy: qa([]) }],
+      ["workflow", reg2, { ...i, root: { id: "impl-a", version: "2" } }],
+    ];
+    for (const [what, r, changed] of changes) {
+      // The old proposal no longer binds the new scope: composition refuses.
+      const stale = verifyPhaseComposition(r, changed, c);
+      expect(stale.current).toBe(false);
+      expect(stale.violations?.map((v) => v.rule)).toContain("team-not-bound");
+      expect(rules(composeRaw(r, changed))).toContain("team-not-bound");
+      expect(phaseDispatchGate(r, changed, c, d).allowed).toBe(false);
+      // Recomposed with a re-bound proposal: the old decision does not carry over.
+      const rebound = bound(r, changed);
+      const c2 = ok(composeRaw(r, rebound)).composition;
+      expect(c2.binding).not.toBe(c.binding);
+      expect(verifyPhaseComposition(r, rebound, c).changed).toEqual(expect.arrayContaining(["binding", "team", what]));
+      expect(phaseDispatchGate(r, rebound, c2, d).allowed).toBe(false);
+      expect(phaseDispatchGate(r, rebound, c2, approve(rebound.proposal)).allowed).toBe(true);
+    }
 
-    const widened = { ...i, proposal: proposal("build", [...TEAM_A_IMPL, ["sec", "security-reviewer", ["assurance:security"]]]) };
+    const widened = bound(reg, { ...i, proposal: proposal("build", [...TEAM_A_IMPL, ["sec", "security-reviewer", ["assurance:security"]]]) });
     const team = verifyPhaseComposition(reg, widened, c);
     expect(team.current).toBe(false);
     expect(team.changed).toContain("team");
     expect(phaseDispatchGate(reg, widened, c, approve(widened.proposal)).allowed).toBe(false);
+  });
 
-    const bumped = component("impl-a", IMPL_A.effects, IMPL_A.body, "2");
-    const reg2 = registry([RESEARCH_SHORT, IMPL_A, bumped]);
-    const wf = verifyPhaseComposition(reg2, { ...i, root: { id: "impl-a", version: "2" } }, c);
-    expect(wf.current).toBe(false);
-    expect(wf.changed).toContain("workflow");
-
-    const policy = verifyPhaseComposition(reg, { ...i, qa_policy: qa([]) }, c);
-    expect(policy).toEqual({ current: false, changed: ["qa_policy"] });
+  it("negative: a proposal without the binding, or with another plan_ref, is refused", () => {
+    const reg = registry(PROJECT_A_DOCS);
+    expect(rules(composeRaw(reg, A_IMPL()))).toContain("team-not-bound");
+    const i = bound(reg, A_IMPL());
+    expect((i.proposal as { provenance: string }).provenance.startsWith(PHASE_BINDING_PREFIX)).toBe(true);
+    const wrongPlan = JSON.parse(JSON.stringify(i.proposal));
+    wrongPlan.plan_ref = { path: PLAN.path, sha256: "c".repeat(64) };
+    wrongPlan.proposal_hash = proposalHashOf(wrongPlan);
+    expect(rules(composeRaw(reg, { ...i, proposal: wrongPlan }))).toContain("team-not-bound");
   });
 
   it("an expansion that the team cannot serve is refused, not silently narrowed", () => {

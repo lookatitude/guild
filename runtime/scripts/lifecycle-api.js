@@ -49650,6 +49650,11 @@ function exactKeys2(v, keys) {
   const missing = keys.filter((k) => !(k in v));
   return missing.length ? `missing key(s) ${missing.join(", ")}` : null;
 }
+function show6(v) {
+  if (typeof v === "string") return JSON.stringify(v.slice(0, 64));
+  if (v === null || typeof v === "number" || typeof v === "boolean") return String(v);
+  return Array.isArray(v) ? "a list" : `a ${typeof v}`;
+}
 function checkPlan(raw) {
   if (!isPlain2(raw) || exactKeys2(raw, ["path", "sha256"]) !== null) fail2("invalid-request", "plan must be exactly {path, sha256}");
   const p = raw.path;
@@ -49667,7 +49672,7 @@ function checkQaPolicy(raw) {
   const seen = /* @__PURE__ */ new Set();
   for (const k of req) {
     if (typeof k !== "string" || !QA_POLICY_KINDS.includes(k)) {
-      fail2("invalid-qa-policy", `'${String(k).slice(0, 64)}' is not an assurance kind (${QA_POLICY_KINDS.join(", ")})`);
+      fail2("invalid-qa-policy", `${show6(k)} is not an assurance kind (${QA_POLICY_KINDS.join(", ")})`);
     }
     if (seen.has(k)) fail2("invalid-qa-policy", `assurance kind '${k}' is listed twice`);
     seen.add(k);
@@ -49678,7 +49683,7 @@ function checkProposal(raw, phase) {
   const verdict = validateProposal(raw);
   if (!verdict.valid) fail2("invalid-team", `team proposal is not a valid guild.team_proposal.v2: ${verdict.reasons.slice(0, 5).join("; ")}`);
   const p = raw;
-  if (p.phase !== phase) fail2("team-phase-mismatch", `team was proposed for phase '${String(p.phase).slice(0, 64)}', not '${phase}'`);
+  if (p.phase !== phase) fail2("team-phase-mismatch", `team was proposed for phase ${show6(p.phase)}, not '${phase}'`);
   for (const part of p.participants) {
     for (const cap of part.capability_scope ?? []) {
       const tokens2 = cap.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
@@ -49690,7 +49695,7 @@ function checkProposal(raw, phase) {
   }
   return p;
 }
-function composeInner(registry, rawInput) {
+function composeInner(registry, rawInput, bindingOnly) {
   if (!isPlain2(rawInput)) fail2("invalid-request", "input is not a mapping");
   const proposal = detach2(rawInput.proposal, "proposal", "invalid-team");
   const qaRaw = detach2(rawInput.qa_policy, "qa_policy", "invalid-qa-policy");
@@ -49745,10 +49750,10 @@ function composeInner(registry, rawInput) {
     });
   }
   const unbound = sortStr(team.participants.filter((p) => !boundRoles.has(p.role_ref)).map((p) => p.participant_id));
-  const qaNodes = projection.nodes.filter((n) => n.within_gate === "qa");
+  const qaNodes = projection.nodes.filter((n) => n.within_gate === "qa" && n.effect === "review");
   const qaObligations = qaPolicy.required.map((kind) => {
     const ids = sortStr(qaNodes.filter((n) => n.capabilities.includes(`assurance:${kind}`)).map((n) => n.id));
-    if (!ids.length) fail2("qa-obligation-unserved", `QA policy requires '${kind}' assurance, but no node inside the QA gate carries capability assurance:${kind}`);
+    if (!ids.length) fail2("qa-obligation-unserved", `QA policy requires '${kind}' assurance, but no review node inside the QA gate carries capability assurance:${kind}`);
     return { kind, node_ids: ids };
   });
   const writeRoles = new Set(projection.nodes.filter((n) => n.effect === "write").map((n) => n.role));
@@ -49760,6 +49765,25 @@ function composeInner(registry, rawInput) {
   const dependent = independence.filter((r) => !r.independent);
   if (dependent.length) {
     fail2("review-not-independent", `review/gate node(s) ${dependent.map((r) => `${r.node_id} (role ${r.role})`).join(", ")} are served only by participants who also author the work`);
+  }
+  const qaPolicyHash = sha256Of3(qaPolicy);
+  const binding = PHASE_BINDING_PREFIX + sha256Of3({
+    phase,
+    class: projection.class,
+    workflow: { source_id: projection.workflow.source_id, id: projection.workflow.id },
+    definition_hash: projection.definition_hash,
+    compiler_hash: projection.compiler_hash,
+    expanded_hash: projection.expanded_hash,
+    qa_policy_hash: qaPolicyHash,
+    plan
+  }).slice("sha256:".length);
+  if (bindingOnly) return { ok: "binding", binding, plan };
+  const planRef = team.plan_ref;
+  if (!planRef || planRef.path !== plan.path || planRef.sha256 !== plan.sha256) {
+    fail2("team-not-bound", "team proposal plan_ref does not name this plan; recompose the proposal with the current plan and renew approval");
+  }
+  if (team.provenance !== binding) {
+    fail2("team-not-bound", "team proposal provenance does not carry this phase binding (workflow, QA policy, plan); recompose the proposal and renew approval");
   }
   const proposalHash = proposalHashOf(team);
   const participants = sortStr(team.participants.map((p) => p.participant_id));
@@ -49782,7 +49806,8 @@ function composeInner(registry, rawInput) {
     },
     team: { run_id: team.run_id, proposal_version: team.proposal_version, proposal_hash: proposalHash, participants },
     plan,
-    qa_policy_hash: sha256Of3(qaPolicy),
+    binding,
+    qa_policy_hash: qaPolicyHash,
     qa_obligations: qaObligations,
     role_obligations: roleObligations,
     unbound_participants: unbound,
@@ -49794,7 +49819,18 @@ function composeInner(registry, rawInput) {
 }
 function composePhase(registry, input) {
   try {
-    return composeInner(registry, input);
+    return composeInner(registry, input, false);
+  } catch (err) {
+    if (err instanceof Abort2) return { ok: false, violations: [err.violation] };
+    throw err;
+  }
+}
+function phaseBinding(registry, input) {
+  try {
+    const r = composeInner(registry, input, true);
+    if (r.ok === "binding") return { ok: true, plan_ref: r.plan, provenance: r.binding };
+    if (r.ok) throw new Error("phaseBinding: unreachable");
+    return r;
   } catch (err) {
     if (err instanceof Abort2) return { ok: false, violations: [err.violation] };
     throw err;
@@ -49873,7 +49909,7 @@ function loadPhaseCompositionInputs(paths) {
     throw err;
   }
 }
-var crypto27, fs77, path90, PHASE_COMPOSITION_SCHEMA_VERSION, QA_POLICY_SCHEMA_VERSION, QA_POLICY_KINDS, RESERVED_CAPABILITY_TOKENS, PHASE, SHA_HEX, MAX_INPUT_FILE_BYTES, DETACH_LIMITS, Abort2, FORBIDDEN_KEYS, sortStr, SECTIONS;
+var crypto27, fs77, path90, PHASE_COMPOSITION_SCHEMA_VERSION, QA_POLICY_SCHEMA_VERSION, PHASE_BINDING_PREFIX, QA_POLICY_KINDS, RESERVED_CAPABILITY_TOKENS, PHASE, SHA_HEX, MAX_INPUT_FILE_BYTES, DETACH_LIMITS, Abort2, FORBIDDEN_KEYS, sortStr, SECTIONS;
 var init_phase_composition = __esm({
   "src/domains/lifecycle/phase-composition.ts"() {
     crypto27 = __toESM(require("node:crypto"));
@@ -49884,6 +49920,7 @@ var init_phase_composition = __esm({
     init_workflow_component_compiler();
     PHASE_COMPOSITION_SCHEMA_VERSION = "guild.phase_composition.v1";
     QA_POLICY_SCHEMA_VERSION = "guild.qa_policy.v1";
+    PHASE_BINDING_PREFIX = "guild.phase_binding.v1:";
     QA_POLICY_KINDS = Object.freeze(["security", "adversarial_security", "ui", "ux", "quality", "project_specific"]);
     RESERVED_CAPABILITY_TOKENS = /* @__PURE__ */ new Set([
       "d5",
@@ -49917,6 +49954,7 @@ var init_phase_composition = __esm({
       ["workflow", ["schema_version", "phase", "class", "workflow", "role_obligations", "review_independence"]],
       ["team", ["team", "approval", "unbound_participants"]],
       ["plan", ["plan"]],
+      ["binding", ["binding"]],
       ["qa_policy", ["qa_policy_hash", "qa_obligations"]]
     ];
   }
@@ -64680,6 +64718,7 @@ __export(index_exports, {
   OWNER_ARCHITECT_LAYER: () => OWNER_ARCHITECT_LAYER,
   OWNER_ARCHITECT_SENTINEL: () => OWNER_ARCHITECT_SENTINEL,
   PENDING_SUBSTANTIVE_OPERATION_SCHEMA: () => PENDING_SUBSTANTIVE_OPERATION_SCHEMA,
+  PHASE_BINDING_PREFIX: () => PHASE_BINDING_PREFIX,
   PHASE_COMPOSITION_SCHEMA_VERSION: () => PHASE_COMPOSITION_SCHEMA_VERSION,
   PLAN_STEP_STATUSES: () => PLAN_STEP_STATUSES,
   PLUGIN_GRAPH_DIRS: () => PLUGIN_GRAPH_DIRS,
@@ -64925,6 +64964,7 @@ __export(index_exports, {
   payloadSidecarPath: () => payloadSidecarPath,
   pendingSubstantiveOperationPath: () => pendingSubstantiveOperationPath,
   persistTmuxTeamArgv: () => persistTmuxTeamArgv,
+  phaseBinding: () => phaseBinding,
   phaseDispatchGate: () => phaseDispatchGate,
   pluginGraphPath: () => pluginGraphPath,
   populateReleaseDocsWorkItems: () => populateReleaseDocsWorkItems,
@@ -65285,6 +65325,7 @@ init_index();
   OWNER_ARCHITECT_LAYER,
   OWNER_ARCHITECT_SENTINEL,
   PENDING_SUBSTANTIVE_OPERATION_SCHEMA,
+  PHASE_BINDING_PREFIX,
   PHASE_COMPOSITION_SCHEMA_VERSION,
   PLAN_STEP_STATUSES,
   PLUGIN_GRAPH_DIRS,
@@ -65530,6 +65571,7 @@ init_index();
   payloadSidecarPath,
   pendingSubstantiveOperationPath,
   persistTmuxTeamArgv,
+  phaseBinding,
   phaseDispatchGate,
   pluginGraphPath,
   populateReleaseDocsWorkItems,
