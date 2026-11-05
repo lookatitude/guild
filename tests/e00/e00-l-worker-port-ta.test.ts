@@ -189,8 +189,9 @@ describe.skipIf(!tmuxAvailable)("M6 / M4 / M3 · a spawned pane receives the exa
     const f = fixture({ mode: "exit" });
     expect(spawn(f).ok).toBe(true);
     await fixtureRecord(f);
-    await sleep(500);
-    const r = f.port.ready({ instance_id: "i1", run_id: RUN });
+    // The host exits ~1s after start; wait for the recorded pane to be gone.
+    let r = f.port.ready({ instance_id: "i1", run_id: RUN });
+    for (let i = 0; i < 100 && !/not present/.test(String(r.reason)); i++) { await sleep(100); r = f.port.ready({ instance_id: "i1", run_id: RUN }); }
     expect(r.ok).toBe(false);
     expect(String(r.reason)).toMatch(/not present/);
   });
