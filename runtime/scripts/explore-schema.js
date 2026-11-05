@@ -48989,7 +48989,6 @@ var init_managed_run = __esm({
     init_kernel();
     init_run_lifecycle();
     init_run_binding();
-    init_execution_identity();
     init_managed_segment();
   }
 });

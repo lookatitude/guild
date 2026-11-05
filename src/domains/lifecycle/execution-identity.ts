@@ -803,16 +803,60 @@ function assertSealShape(v: unknown): asserts v is ExecutionSegmentSeal {
   if (!ok) throw new ExecutionIdentityRefusal("record_invalid", "segment seal fields invalid");
 }
 
-/** Seal the exact recorded segment revision. Never touches the logical-run manifest. */
+export const EXECUTION_SEGMENT_RESERVATION_SCHEMA = "guild.stack.execution_segment_reservation.v1" as const;
+/** One operation/attempt owns a segment for its whole supervised life; immutable. */
+export interface ExecutionSegmentReservation {
+  schema_version: typeof EXECUTION_SEGMENT_RESERVATION_SCHEMA; source_id: string; run_id: string; execution_id: string;
+  segment_revision: Hash; operation_id: string; attempt_id: string; launch_hash: Hash;
+}
+const reservationPath = (root: string, runId: string, executionId: string) => {
+  if (!ID_RE.test(executionId)) throw new ExecutionIdentityRefusal("record_invalid", "execution id is not an id");
+  return path.join(runDir(root, runId), LINEAGE_DIR, "reservations", `${executionId}.json`);
+};
+function assertReservationShape(v: unknown): asserts v is ExecutionSegmentReservation {
+  const keys = ["schema_version", "source_id", "run_id", "execution_id", "segment_revision", "operation_id", "attempt_id", "launch_hash"];
+  const ok = isObj(v) && Object.keys(v).length === keys.length && keys.every((k) => own(v, k))
+    && v["schema_version"] === EXECUTION_SEGMENT_RESERVATION_SCHEMA
+    && ["source_id", "execution_id", "operation_id", "attempt_id"].every((k) => typeof v[k] === "string" && ID_RE.test(v[k] as string))
+    && typeof v["run_id"] === "string" && RUN_ID_RE.test(v["run_id"])
+    && ["segment_revision", "launch_hash"].every((k) => typeof v[k] === "string" && HASH_RE.test(v[k] as string));
+  if (!ok) throw new ExecutionIdentityRefusal("record_invalid", "segment reservation fields invalid");
+}
+function requireActiveSegmentRevision(root: string, sourceId: string, runId: string, executionId: string, revision: Hash): void {
+  const view = readLogicalRunView(root, runId);
+  if (view.kind !== "v2") throw new ExecutionIdentityRefusal("logical_run_unknown", `${runId} is not a logical v2 run`);
+  if (view.manifest.source_id !== sourceId) throw new ExecutionIdentityRefusal("record_invalid", "record source is not the run owner");
+  const e = view.executions.find((x) => x.segment.lineage.execution_id === executionId);
+  if (!e) throw new ExecutionIdentityRefusal("execution_unknown", `${runId} has no execution ${executionId}`);
+  if (e.revision !== revision) throw new ExecutionIdentityRefusal("record_invalid", "record names a different segment revision");
+  if (e.segment.admission !== "active") throw new ExecutionIdentityRefusal("record_invalid", `segment admission is ${e.segment.admission}`);
+}
+
+/** Reserve an unsealed segment for exactly one operation/attempt. A different reservation refuses record_immutable. */
+export function reserveExecutionSegment(root: string, r: ExecutionSegmentReservation): void {
+  assertReservationShape(r);
+  requireActiveSegmentRevision(root, r.source_id, r.run_id, r.execution_id, r.segment_revision);
+  if (readExecutionSegmentSeal(root, r.run_id, r.execution_id) !== null) throw new ExecutionIdentityRefusal("record_immutable", `${r.execution_id} is already sealed`);
+  publishOnce(root, reservationPath(root, r.run_id, r.execution_id), r);
+}
+
+export function readExecutionSegmentReservation(root: string, runId: string, executionId: string): ExecutionSegmentReservation | null {
+  const r = readJson<unknown>(root, reservationPath(root, runId, executionId), null);
+  if (r === null) return null;
+  assertReservationShape(r);
+  if (r.run_id !== runId || r.execution_id !== executionId) throw new ExecutionIdentityRefusal("record_location_mismatch", `reservation file ${runId}/${executionId} holds ${r.run_id}/${r.execution_id}`);
+  return r;
+}
+
+/** Seal the exact reserved segment revision. Idempotent for identical bytes; never touches the logical-run manifest. */
 export function sealExecutionSegment(root: string, seal: ExecutionSegmentSeal): void {
   assertSealShape(seal);
-  const view = readLogicalRunView(root, seal.run_id);
-  if (view.kind !== "v2") throw new ExecutionIdentityRefusal("logical_run_unknown", `${seal.run_id} is not a logical v2 run`);
-  if (view.manifest.source_id !== seal.source_id) throw new ExecutionIdentityRefusal("record_invalid", "seal source is not the run owner");
-  const e = view.executions.find((x) => x.segment.lineage.execution_id === seal.execution_id);
-  if (!e) throw new ExecutionIdentityRefusal("execution_unknown", `${seal.run_id} has no execution ${seal.execution_id}`);
-  if (e.revision !== seal.segment_revision) throw new ExecutionIdentityRefusal("record_invalid", "seal names a different segment revision");
-  if (e.segment.admission !== "active") throw new ExecutionIdentityRefusal("record_invalid", `segment admission is ${e.segment.admission}`);
+  requireActiveSegmentRevision(root, seal.source_id, seal.run_id, seal.execution_id, seal.segment_revision);
+  const r = readExecutionSegmentReservation(root, seal.run_id, seal.execution_id);
+  if (r === null || r.source_id !== seal.source_id || r.segment_revision !== seal.segment_revision || r.operation_id !== seal.sealed_by.operation_id
+    || r.attempt_id !== seal.sealed_by.attempt_id || r.launch_hash !== seal.sealed_by.launch_hash) {
+    throw new ExecutionIdentityRefusal("record_invalid", "seal does not match the segment reservation");
+  }
   publishOnce(root, sealPath(root, seal.run_id, seal.execution_id), seal);
 }
 

@@ -51073,15 +51073,40 @@ function assertSealShape(v) {
   const ok = isObj(v) && Object.keys(v).length === keys.length && keys.every((k) => own(v, k)) && v["schema_version"] === EXECUTION_SEGMENT_SEAL_SCHEMA && [v["source_id"], v["execution_id"]].every((x) => typeof x === "string" && ID_RE.test(x)) && typeof v["run_id"] === "string" && RUN_ID_RE2.test(v["run_id"]) && [v["segment_revision"], v["outcome_sha256"]].every((x) => typeof x === "string" && HASH_RE.test(x)) && ["exited", "cancelled", "timed_out"].includes(v["outcome_state"]) && typeof v["sealed_at"] === "string" && isRfc3339(v["sealed_at"]) && isObj(v["sealed_by"]) && Object.keys(v["sealed_by"]).length === 3 && typeof v["sealed_by"]["operation_id"] === "string" && ID_RE.test(v["sealed_by"]["operation_id"]) && typeof v["sealed_by"]["attempt_id"] === "string" && ID_RE.test(v["sealed_by"]["attempt_id"]) && typeof v["sealed_by"]["launch_hash"] === "string" && HASH_RE.test(v["sealed_by"]["launch_hash"]);
   if (!ok) throw new ExecutionIdentityRefusal("record_invalid", "segment seal fields invalid");
 }
+function assertReservationShape(v) {
+  const keys = ["schema_version", "source_id", "run_id", "execution_id", "segment_revision", "operation_id", "attempt_id", "launch_hash"];
+  const ok = isObj(v) && Object.keys(v).length === keys.length && keys.every((k) => own(v, k)) && v["schema_version"] === EXECUTION_SEGMENT_RESERVATION_SCHEMA && ["source_id", "execution_id", "operation_id", "attempt_id"].every((k) => typeof v[k] === "string" && ID_RE.test(v[k])) && typeof v["run_id"] === "string" && RUN_ID_RE2.test(v["run_id"]) && ["segment_revision", "launch_hash"].every((k) => typeof v[k] === "string" && HASH_RE.test(v[k]));
+  if (!ok) throw new ExecutionIdentityRefusal("record_invalid", "segment reservation fields invalid");
+}
+function requireActiveSegmentRevision(root, sourceId, runId, executionId, revision) {
+  const view = readLogicalRunView(root, runId);
+  if (view.kind !== "v2") throw new ExecutionIdentityRefusal("logical_run_unknown", `${runId} is not a logical v2 run`);
+  if (view.manifest.source_id !== sourceId) throw new ExecutionIdentityRefusal("record_invalid", "record source is not the run owner");
+  const e = view.executions.find((x) => x.segment.lineage.execution_id === executionId);
+  if (!e) throw new ExecutionIdentityRefusal("execution_unknown", `${runId} has no execution ${executionId}`);
+  if (e.revision !== revision) throw new ExecutionIdentityRefusal("record_invalid", "record names a different segment revision");
+  if (e.segment.admission !== "active") throw new ExecutionIdentityRefusal("record_invalid", `segment admission is ${e.segment.admission}`);
+}
+function reserveExecutionSegment(root, r) {
+  assertReservationShape(r);
+  requireActiveSegmentRevision(root, r.source_id, r.run_id, r.execution_id, r.segment_revision);
+  if (readExecutionSegmentSeal(root, r.run_id, r.execution_id) !== null) throw new ExecutionIdentityRefusal("record_immutable", `${r.execution_id} is already sealed`);
+  publishOnce(root, reservationPath(root, r.run_id, r.execution_id), r);
+}
+function readExecutionSegmentReservation(root, runId, executionId) {
+  const r = readJson3(root, reservationPath(root, runId, executionId), null);
+  if (r === null) return null;
+  assertReservationShape(r);
+  if (r.run_id !== runId || r.execution_id !== executionId) throw new ExecutionIdentityRefusal("record_location_mismatch", `reservation file ${runId}/${executionId} holds ${r.run_id}/${r.execution_id}`);
+  return r;
+}
 function sealExecutionSegment(root, seal) {
   assertSealShape(seal);
-  const view = readLogicalRunView(root, seal.run_id);
-  if (view.kind !== "v2") throw new ExecutionIdentityRefusal("logical_run_unknown", `${seal.run_id} is not a logical v2 run`);
-  if (view.manifest.source_id !== seal.source_id) throw new ExecutionIdentityRefusal("record_invalid", "seal source is not the run owner");
-  const e = view.executions.find((x) => x.segment.lineage.execution_id === seal.execution_id);
-  if (!e) throw new ExecutionIdentityRefusal("execution_unknown", `${seal.run_id} has no execution ${seal.execution_id}`);
-  if (e.revision !== seal.segment_revision) throw new ExecutionIdentityRefusal("record_invalid", "seal names a different segment revision");
-  if (e.segment.admission !== "active") throw new ExecutionIdentityRefusal("record_invalid", `segment admission is ${e.segment.admission}`);
+  requireActiveSegmentRevision(root, seal.source_id, seal.run_id, seal.execution_id, seal.segment_revision);
+  const r = readExecutionSegmentReservation(root, seal.run_id, seal.execution_id);
+  if (r === null || r.source_id !== seal.source_id || r.segment_revision !== seal.segment_revision || r.operation_id !== seal.sealed_by.operation_id || r.attempt_id !== seal.sealed_by.attempt_id || r.launch_hash !== seal.sealed_by.launch_hash) {
+    throw new ExecutionIdentityRefusal("record_invalid", "seal does not match the segment reservation");
+  }
   publishOnce(root, sealPath(root, seal.run_id, seal.execution_id), seal);
 }
 function readExecutionSegmentSeal(root, runId, executionId) {
@@ -51091,7 +51116,7 @@ function readExecutionSegmentSeal(root, runId, executionId) {
   if (seal.run_id !== runId || seal.execution_id !== executionId) throw new ExecutionIdentityRefusal("record_location_mismatch", `seal file ${runId}/${executionId} holds ${seal.run_id}/${seal.execution_id}`);
   return seal;
 }
-var crypto23, fs65, path78, LOGICAL_RUN_SCHEMA, EXECUTION_SEGMENT_SCHEMA, STACK_TASK_ASSIGNMENT_SCHEMA, STACK_TASK_ATTEMPT_SCHEMA, RUN_BINDING_V2_SCHEMA, EXECUTION_LINEAGE_SCHEMA, ExecutionIdentityRefusal, ID_RE, HASH_RE, TIME_RE, REL_PATH_RE, KINDS, own, isObj, fail, cpLength, id, hash, time, str2, int0, int1, num0, bool, konst, oneOf, nullable, relPath, array, object2, entity, evidence, lineage, pins, stateAxes, interval, authority, admission, SHAPES, hasKeys, RUN_ID_RE2, LINEAGE_DIR, ATTEMPT_INDEX, logicalRunPath, executionPath, assignmentPath, attemptOwnerPath, serialize, recordRevision, EXECUTION_SEGMENT_SEAL_SCHEMA, sealPath, EXECUTION_IDENTITY_CAPABILITY;
+var crypto23, fs65, path78, LOGICAL_RUN_SCHEMA, EXECUTION_SEGMENT_SCHEMA, STACK_TASK_ASSIGNMENT_SCHEMA, STACK_TASK_ATTEMPT_SCHEMA, RUN_BINDING_V2_SCHEMA, EXECUTION_LINEAGE_SCHEMA, ExecutionIdentityRefusal, ID_RE, HASH_RE, TIME_RE, REL_PATH_RE, KINDS, own, isObj, fail, cpLength, id, hash, time, str2, int0, int1, num0, bool, konst, oneOf, nullable, relPath, array, object2, entity, evidence, lineage, pins, stateAxes, interval, authority, admission, SHAPES, hasKeys, RUN_ID_RE2, LINEAGE_DIR, ATTEMPT_INDEX, logicalRunPath, executionPath, assignmentPath, attemptOwnerPath, serialize, recordRevision, EXECUTION_SEGMENT_SEAL_SCHEMA, sealPath, EXECUTION_SEGMENT_RESERVATION_SCHEMA, reservationPath, EXECUTION_IDENTITY_CAPABILITY;
 var init_execution_identity = __esm({
   "src/domains/lifecycle/execution-identity.ts"() {
     crypto23 = __toESM(require("node:crypto"));
@@ -51325,6 +51350,11 @@ var init_execution_identity = __esm({
       if (!ID_RE.test(executionId)) throw new ExecutionIdentityRefusal("record_invalid", "execution id is not an id");
       return path78.join(runDir3(root, runId), LINEAGE_DIR, "seals", `${executionId}.json`);
     };
+    EXECUTION_SEGMENT_RESERVATION_SCHEMA = "guild.stack.execution_segment_reservation.v1";
+    reservationPath = (root, runId, executionId) => {
+      if (!ID_RE.test(executionId)) throw new ExecutionIdentityRefusal("record_invalid", "execution id is not an id");
+      return path78.join(runDir3(root, runId), LINEAGE_DIR, "reservations", `${executionId}.json`);
+    };
     EXECUTION_IDENTITY_CAPABILITY = Object.freeze({
       id: "guild.execution_identity",
       version: 1,
@@ -51362,14 +51392,27 @@ function resolveManagedRunTarget(input, integration = MANAGED_SEGMENT_INTEGRATIO
   if (found.segment.admission !== "active") throw new StackError("segment_not_active", "Execution segment is not admitted for launch", 409);
   if (found.segment.original_host_id !== input.host_id) throw new StackError("original_host_changed", "Execution segment runs on another host", 409);
   if (readExecutionSegmentSeal(input.root, input.run_id, input.execution_id) !== null) throw new StackError("segment_sealed", "Execution segment is already sealed", 409);
+  const reserved = readExecutionSegmentReservation(input.root, input.run_id, input.execution_id);
+  if (reserved !== null && (reserved.attempt_id !== input.attempt_id || reserved.segment_revision !== found.revision)) throw new StackError("segment_reserved", "Execution segment belongs to another attempt", 409);
   return { kind: "v2", execution_id: input.execution_id, segment: found.segment, segment_revision: found.revision };
+}
+function reserveManagedSegment(root, identity, target) {
+  refusalToStack(() => reserveExecutionSegment(root, { schema_version: EXECUTION_SEGMENT_RESERVATION_SCHEMA, source_id: identity.source_id, run_id: identity.run_id, execution_id: target.execution_id, segment_revision: target.segment_revision, operation_id: identity.operation_id, attempt_id: identity.attempt_id, launch_hash: identity.launch_hash }));
+}
+function finalizeManagedSegmentSeal(root, identity, executionId, outcome) {
+  if (outcome.state === "recovery_needed") return false;
+  if (outcome.source_id !== identity.source_id || outcome.run_id !== identity.run_id || outcome.attempt_id !== identity.attempt_id) throw new StackError("invalid_state", "Outcome belongs to another attempt", 409);
+  const r = refusalToStack(() => readExecutionSegmentReservation(root, identity.run_id, executionId));
+  if (r === null || r.attempt_id !== identity.attempt_id || r.operation_id !== identity.operation_id || r.launch_hash !== identity.launch_hash) throw new StackError("segment_reserved", "Seal requires this attempt's segment reservation", 409);
+  refusalToStack(() => sealExecutionSegment(root, { schema_version: EXECUTION_SEGMENT_SEAL_SCHEMA, source_id: identity.source_id, run_id: identity.run_id, execution_id: executionId, segment_revision: r.segment_revision, sealed_by: { operation_id: identity.operation_id, attempt_id: identity.attempt_id, launch_hash: identity.launch_hash }, outcome_state: outcome.state, outcome_sha256: managedOutcomeHash(outcome), sealed_at: outcome.ended_at }));
+  return true;
 }
 function managedExitAction(kind, exit) {
   if (!exit.gone) return { action: "hold" };
   if (kind === "v2") return { action: "seal_segment" };
   return { action: "close_run", status: exit.state === "exited" && exit.exit_code === 0 && !exit.leave_resumable ? "closed" : "resumable" };
 }
-var MANAGED_SEGMENT_INTEGRATION, canonical, managedOutcomeHash;
+var MANAGED_SEGMENT_INTEGRATION, refusalToStack, canonical, managedOutcomeHash;
 var init_managed_segment = __esm({
   "src/domains/lifecycle/managed-segment.ts"() {
     init_state();
@@ -51378,6 +51421,14 @@ var init_managed_segment = __esm({
       qualified: false,
       reason: "Managed launch of a logical v2 run is not qualified; segment integration needs a real managed host launch (V01)"
     });
+    refusalToStack = (fn) => {
+      try {
+        return fn();
+      } catch (error) {
+        if (error instanceof ExecutionIdentityRefusal) throw new StackError(error.code === "record_immutable" ? "segment_reserved" : error.code, error.message, 409);
+        throw error;
+      }
+    };
     canonical = (v) => v === null || typeof v !== "object" ? JSON.stringify(v) : Array.isArray(v) ? "[" + v.map(canonical).join(",") + "]" : "{" + Object.keys(v).sort().map((k) => JSON.stringify(k) + ":" + canonical(v[k])).join(",") + "}";
     managedOutcomeHash = (outcome) => stackHash(canonical(outcome));
   }
@@ -51473,7 +51524,8 @@ async function runManagedWorker(input) {
   if (launch.classification !== "local_process_test") assertManagedBudgetAdmission({ max_usd: launch.max_usd, mode: launch.budget_mode ?? "strict", qualified: launch.budget_mode === "native_estimated_spend_threshold" ? launch.native_threshold_qualified === true : launch.strict_usd_qualified });
   if (new StackScope(sourceRoot).discover().root.source_id !== identity.source_id) throw new StackError("source_mismatch", "Managed attempt belongs to another source", 403);
   if (claim.state !== "claimed" || claim.admitted_at !== null) throw new StackError("already_admitted", "Managed attempt cannot launch twice", 409);
-  const target = resolveManagedRunTarget({ root: sourceRoot, run_id: identity.run_id, source_id: identity.source_id, host_id: launch.host_id, execution_id: launch.execution_id }, input.integration);
+  const target = resolveManagedRunTarget({ root: sourceRoot, run_id: identity.run_id, source_id: identity.source_id, host_id: launch.host_id, execution_id: launch.execution_id, attempt_id: identity.attempt_id }, input.integration);
+  if (target.kind === "v2") reserveManagedSegment(sourceRoot, identity, target);
   const owner = claimPath(runtimeDir, identity.attempt_id) + ".worker";
   try {
     const fd = fs66.openSync(owner, "wx", 384);
@@ -51553,7 +51605,7 @@ async function runManagedWorker(input) {
         throw new StackError("host_resolution_refused", "Managed run close never resolves a host", 500);
       }));
       lifecycle.closeRun(identity.run_id, { binding_ref: binding.binding_ref, status: exitAction.status });
-    } else if (exitAction.action === "seal_segment" && target.kind === "v2") sealExecutionSegment(sourceRoot, { schema_version: EXECUTION_SEGMENT_SEAL_SCHEMA, source_id: identity.source_id, run_id: identity.run_id, execution_id: target.execution_id, segment_revision: target.segment_revision, sealed_by: { operation_id: identity.operation_id, attempt_id: identity.attempt_id, launch_hash: identity.launch_hash }, outcome_state: state, outcome_sha256: managedOutcomeHash(outcome), sealed_at: outcome.ended_at });
+    } else if (exitAction.action === "seal_segment" && target.kind === "v2") finalizeManagedSegmentSeal(sourceRoot, identity, target.execution_id, outcome);
     return outcome;
   } catch (error) {
     claim = { ...claim, state: "recovery_needed" };
@@ -51583,7 +51635,6 @@ var init_managed_run = __esm({
     init_kernel();
     init_run_lifecycle();
     init_run_binding();
-    init_execution_identity();
     init_managed_segment();
   }
 });

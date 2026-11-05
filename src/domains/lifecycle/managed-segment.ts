@@ -1,6 +1,6 @@
 import { StackError, stackHash } from "../state";
-import { ExecutionIdentityRefusal, readExecutionSegmentSeal, readLogicalRunView, type ExecutionSegmentV1 } from "./execution-identity";
-import type { ManagedUsageObservation } from "./managed-run";
+import { EXECUTION_SEGMENT_RESERVATION_SCHEMA, EXECUTION_SEGMENT_SEAL_SCHEMA, ExecutionIdentityRefusal, readExecutionSegmentReservation, readExecutionSegmentSeal, readLogicalRunView, reserveExecutionSegment, sealExecutionSegment, type ExecutionSegmentV1 } from "./execution-identity";
+import type { ManagedAttemptIdentity, ManagedRunOutcome, ManagedUsageObservation } from "./managed-run";
 
 /**
  * R05 · P05 host supervision on execution segments.
@@ -20,7 +20,7 @@ export type ManagedRunTarget =
   | { kind: "v1" }
   | { kind: "v2"; execution_id: string; segment: ExecutionSegmentV1; segment_revision: string };
 
-export interface ManagedRunTargetInput { root: string; run_id: string; source_id: string; host_id: string; execution_id?: string }
+export interface ManagedRunTargetInput { root: string; run_id: string; source_id: string; host_id: string; execution_id?: string; attempt_id?: string }
 
 /** Resolve what a managed launch supervises. Refuses before any effect. */
 export function resolveManagedRunTarget(input: ManagedRunTargetInput, integration: ManagedSegmentIntegration = MANAGED_SEGMENT_INTEGRATION): ManagedRunTarget {
@@ -44,7 +44,35 @@ export function resolveManagedRunTarget(input: ManagedRunTargetInput, integratio
   if (found.segment.admission !== "active") throw new StackError("segment_not_active", "Execution segment is not admitted for launch", 409);
   if (found.segment.original_host_id !== input.host_id) throw new StackError("original_host_changed", "Execution segment runs on another host", 409);
   if (readExecutionSegmentSeal(input.root, input.run_id, input.execution_id) !== null) throw new StackError("segment_sealed", "Execution segment is already sealed", 409);
+  const reserved = readExecutionSegmentReservation(input.root, input.run_id, input.execution_id);
+  if (reserved !== null && (reserved.attempt_id !== input.attempt_id || reserved.segment_revision !== found.revision)) throw new StackError("segment_reserved", "Execution segment belongs to another attempt", 409);
   return { kind: "v2", execution_id: input.execution_id, segment: found.segment, segment_revision: found.revision };
+}
+
+const refusalToStack = <T>(fn: () => T): T => {
+  try { return fn(); } catch (error) {
+    if (error instanceof ExecutionIdentityRefusal) throw new StackError(error.code === "record_immutable" ? "segment_reserved" : error.code, error.message, 409);
+    throw error;
+  }
+};
+
+/** Synchronously reserve the exact segment revision for this operation/attempt before any asynchronous step. */
+export function reserveManagedSegment(root: string, identity: ManagedAttemptIdentity, target: Extract<ManagedRunTarget, { kind: "v2" }>): void {
+  refusalToStack(() => reserveExecutionSegment(root, { schema_version: EXECUTION_SEGMENT_RESERVATION_SCHEMA, source_id: identity.source_id, run_id: identity.run_id, execution_id: target.execution_id, segment_revision: target.segment_revision, operation_id: identity.operation_id, attempt_id: identity.attempt_id, launch_hash: identity.launch_hash }));
+}
+
+/**
+ * Publish the seal derived from the reservation and the persisted terminal outcome.
+ * Deterministic and idempotent, so recovery after a crash between outcome and seal
+ * converges on the same bytes. A recovery_needed outcome never seals.
+ */
+export function finalizeManagedSegmentSeal(root: string, identity: ManagedAttemptIdentity, executionId: string, outcome: ManagedRunOutcome): boolean {
+  if (outcome.state === "recovery_needed") return false;
+  if (outcome.source_id !== identity.source_id || outcome.run_id !== identity.run_id || outcome.attempt_id !== identity.attempt_id) throw new StackError("invalid_state", "Outcome belongs to another attempt", 409);
+  const r = refusalToStack(() => readExecutionSegmentReservation(root, identity.run_id, executionId));
+  if (r === null || r.attempt_id !== identity.attempt_id || r.operation_id !== identity.operation_id || r.launch_hash !== identity.launch_hash) throw new StackError("segment_reserved", "Seal requires this attempt's segment reservation", 409);
+  refusalToStack(() => sealExecutionSegment(root, { schema_version: EXECUTION_SEGMENT_SEAL_SCHEMA, source_id: identity.source_id, run_id: identity.run_id, execution_id: executionId, segment_revision: r.segment_revision, sealed_by: { operation_id: identity.operation_id, attempt_id: identity.attempt_id, launch_hash: identity.launch_hash }, outcome_state: outcome.state, outcome_sha256: managedOutcomeHash(outcome), sealed_at: outcome.ended_at }));
+  return true;
 }
 
 export type ManagedExitAction = { action: "close_run"; status: "closed" | "resumable" } | { action: "seal_segment" } | { action: "hold" };

@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import { StackScope } from "../state";
 import { createRunLifecycle, createRealEnv } from "./run-lifecycle";
 import { loadRunBinding } from "./run-binding";
-import { claimManagedAttempt, managedLaunchHash, readManagedAttempt, runManagedWorker, type ManagedLaunchSpec, type ManagedOwnedProcess, type ManagedProcessPort, type ManagedUsageObservation } from "./managed-run";
+import { claimManagedAttempt, managedLaunchHash, readManagedAttempt, recoverManagedSegmentSeal, runManagedWorker, type ManagedLaunchSpec, type ManagedOwnedProcess, type ManagedProcessPort, type ManagedUsageObservation } from "./managed-run";
 import { createLogicalRun, readExecutionSegmentSeal, readLogicalRunView, recordExecutionSegment } from "./execution-identity";
 import {
   MANAGED_SEGMENT_INTEGRATION,
@@ -162,6 +162,41 @@ describe("AT17 · P05 supervisor on execution segments", () => {
     expect(fs.existsSync(path.join(root, ".guild/runs", RUN_V2, "run-binding.json"))).toBe(false);
     // A sealed segment cannot be relaunched.
     expect(errorCode(() => resolveManagedRunTarget({ root, run_id: RUN_V2, source_id: sourceId, host_id: "local-test", execution_id: "exec-1" }, INTEGRATED))).toBe("segment_sealed");
+  });
+
+  it("a segment is reserved synchronously for one attempt; a concurrent attempt is refused before launch", async () => {
+    v2Run();
+    const spec = launch({ execution_id: "exec-1" });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const held = { open: async () => { await gate; return async () => {}; } };
+    const procA = fakeProcess();
+    const a = runManagedWorker({ runtimeDir: runtime, sourceRoot: root, identity: claim(RUN_V2, spec, "attempt-a"), launch: spec, process: procA, control: held, integration: INTEGRATED });
+    const procB = fakeProcess();
+    let startedB = false;
+    const b = runManagedWorker({ runtimeDir: runtime, sourceRoot: root, identity: claim(RUN_V2, spec, "attempt-b"), launch: spec, process: { start: async (...x: any[]) => { startedB = true; return (procB.start as any)(...x); } }, control, integration: INTEGRATED });
+    expect(await asyncCode(b)).toBe("segment_reserved");
+    expect(startedB).toBe(false);
+    release();
+    expect((await a).state).toBe("exited");
+    expect(readExecutionSegmentSeal(root, RUN_V2, "exec-1")?.sealed_by.attempt_id).toBe("attempt-a");
+  });
+
+  it("a crash between outcome and seal recovers to the same seal idempotently", async () => {
+    v2Run();
+    const spec = launch({ execution_id: "exec-1" });
+    const identity = claim(RUN_V2, spec);
+    const blocker = path.join(root, ".guild/runs", RUN_V2, "lineage/seals");
+    fs.writeFileSync(blocker, "not a directory");
+    expect(await asyncCode(runManagedWorker({ runtimeDir: runtime, sourceRoot: root, identity, launch: spec, process: fakeProcess(), control, integration: INTEGRATED }))).not.toBe("no-refusal");
+    expect(readManagedAttempt(runtime, identity.attempt_id).outcome?.state).toBe("exited");
+    fs.rmSync(blocker);
+    expect(readExecutionSegmentSeal(root, RUN_V2, "exec-1")).toBeNull();
+    expect(recoverManagedSegmentSeal(runtime, root, identity, "exec-1")).toBe(true);
+    const first = fs.readFileSync(path.join(blocker, "exec-1.json"), "utf8");
+    expect(recoverManagedSegmentSeal(runtime, root, identity, "exec-1")).toBe(true);
+    expect(fs.readFileSync(path.join(blocker, "exec-1.json"), "utf8")).toBe(first);
+    expect(readExecutionSegmentSeal(root, RUN_V2, "exec-1")?.outcome_state).toBe("exited");
   });
 
   it("integrated launch refuses a missing, inactive, foreign-host or foreign-source segment", () => {

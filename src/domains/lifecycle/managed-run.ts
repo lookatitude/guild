@@ -5,8 +5,7 @@ import { StackError, stackHash, stackId, stackContained, createGuildStorage, Sta
 import { canonicalizeRealPath } from "../kernel";
 import { createRunLifecycle, createRealEnv, assertCanonicalRunId } from "./run-lifecycle";
 import { loadRunBinding } from "./run-binding";
-import { sealExecutionSegment, EXECUTION_SEGMENT_SEAL_SCHEMA } from "./execution-identity";
-import { resolveManagedRunTarget, managedExitAction, managedOutcomeHash, type ManagedSegmentIntegration } from "./managed-segment";
+import { resolveManagedRunTarget, reserveManagedSegment, finalizeManagedSegmentSeal, managedExitAction, type ManagedSegmentIntegration } from "./managed-segment";
 
 export interface ManagedAttemptInput {
   source_id: string;
@@ -135,7 +134,8 @@ export async function runManagedWorker(input:{runtimeDir:string;sourceRoot:strin
   if(launch.classification!=='local_process_test')assertManagedBudgetAdmission({max_usd:launch.max_usd,mode:launch.budget_mode??'strict',qualified:launch.budget_mode==='native_estimated_spend_threshold'?launch.native_threshold_qualified===true:launch.strict_usd_qualified});
   if(new StackScope(sourceRoot).discover().root.source_id!==identity.source_id)throw new StackError('source_mismatch','Managed attempt belongs to another source',403);
   if(claim.state!=='claimed'||claim.admitted_at!==null)throw new StackError('already_admitted','Managed attempt cannot launch twice',409);
-  const target=resolveManagedRunTarget({root:sourceRoot,run_id:identity.run_id,source_id:identity.source_id,host_id:launch.host_id,execution_id:launch.execution_id},input.integration);
+  const target=resolveManagedRunTarget({root:sourceRoot,run_id:identity.run_id,source_id:identity.source_id,host_id:launch.host_id,execution_id:launch.execution_id,attempt_id:identity.attempt_id},input.integration);
+  if(target.kind==='v2')reserveManagedSegment(sourceRoot,identity,target);
   const owner=claimPath(runtimeDir,identity.attempt_id)+'.worker';
   try{const fd=fs.openSync(owner,'wx',0o600);fs.writeFileSync(fd,identity.nonce_hash);fs.fsyncSync(fd);fs.closeSync(fd);syncDirectory(path.dirname(owner));}catch(error){if((error as NodeJS.ErrnoException).code==='EEXIST')throw new StackError('already_admitted','Managed worker claim consumed',409);throw error;}
   const binding=loadRunBinding({root:sourceRoot,run_id:identity.run_id});
@@ -167,10 +167,18 @@ export async function runManagedWorker(input:{runtimeDir:string;sourceRoot:strin
     publish(path.join(dir,'outcome.json'),outcome,true);claim={...claim,state,outcome};updateClaim(runtimeDir,claim);event(state,{exit_code:exit.exit_code,signal:exit.signal});pointer(state);if(gone)hostProof('exited');
     const exitAction=managedExitAction(target.kind,{gone,state,exit_code:exit.exit_code,leave_resumable:launch.leave_resumable===true});
     if(exitAction.action==='close_run'){const lifecycle=createRunLifecycle(createRealEnv(sourceRoot,()=>{throw new StackError('host_resolution_refused','Managed run close never resolves a host',500);}));lifecycle.closeRun(identity.run_id,{binding_ref:binding!.binding_ref,status:exitAction.status});}
-    else if(exitAction.action==='seal_segment'&&target.kind==='v2')sealExecutionSegment(sourceRoot,{schema_version:EXECUTION_SEGMENT_SEAL_SCHEMA,source_id:identity.source_id,run_id:identity.run_id,execution_id:target.execution_id,segment_revision:target.segment_revision,sealed_by:{operation_id:identity.operation_id,attempt_id:identity.attempt_id,launch_hash:identity.launch_hash},outcome_state:state as 'exited'|'cancelled'|'timed_out',outcome_sha256:managedOutcomeHash(outcome),sealed_at:outcome.ended_at});
+    else if(exitAction.action==='seal_segment'&&target.kind==='v2')finalizeManagedSegmentSeal(sourceRoot,identity,target.execution_id,outcome);
     return outcome;
   }catch(error){claim={...claim,state:'recovery_needed'};updateClaim(runtimeDir,claim);event('recovery_needed');throw error;}
   finally{if(deadline)clearTimeout(deadline);if(killTimer)clearTimeout(killTimer);await closeControl();}
+}
+
+/** Recovery: re-derive a v2 segment seal from the persisted terminal outcome (crash between outcome and seal). */
+export function recoverManagedSegmentSeal(runtimeDir:string,sourceRoot:string,identity:ManagedAttemptIdentity,executionId:string):boolean {
+  const claim=readManagedAttempt(runtimeDir,identity.attempt_id);
+  if(canonical(claim.identity)!==canonical(identity))throw new StackError('invalid_state','Managed source/attempt mismatch');
+  if(!claim.outcome)return false;
+  return finalizeManagedSegmentSeal(sourceRoot,identity,executionId,claim.outcome);
 }
 
 export interface ManagedWorkerPackage { node_binary:string; node_sha256:string; entry:string; entry_sha256:string; }
