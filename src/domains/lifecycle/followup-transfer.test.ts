@@ -41,6 +41,8 @@ import {
 const PLUGIN_ROOT = path.resolve(__dirname, "../../..");
 const A02_ROOT = process.env["A02_CONTRACT_ROOT"] ?? path.resolve(PLUGIN_ROOT, "../contracts/guild-stack/v2");
 const A02_PRESENT = fs.existsSync(path.join(A02_ROOT, "contract-bundle.json"));
+// R04_REQUIRE_A02=1 makes the frozen-schema differential mandatory instead of silently skipped.
+if (process.env["R04_REQUIRE_A02"] === "1" && !A02_PRESENT) throw new Error(`A02 contract root not found at ${A02_ROOT}; set A02_CONTRACT_ROOT`);
 const VENDORED = JSON.parse(fs.readFileSync(path.join(__dirname, "followup-transfer.a02-cases.json"), "utf8")) as {
   cases: Array<{ id: string; valid: boolean; expected_errors: string[]; instance: Record<string, unknown> }>;
 };
