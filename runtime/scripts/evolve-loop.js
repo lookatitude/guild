@@ -41409,16 +41409,23 @@ var init_retry_lane = __esm({
   }
 });
 
-// src/domains/lifecycle/run-binding.ts
+// src/domains/lifecycle/run-binding-fields.ts
 var path76, LOGICAL_RUN_MANIFEST_RELPATH, RUN_BINDING_V1_FIELDS;
-var init_run_binding = __esm({
-  "src/domains/lifecycle/run-binding.ts"() {
+var init_run_binding_fields = __esm({
+  "src/domains/lifecycle/run-binding-fields.ts"() {
     path76 = __toESM(require("path"));
-    init_kernel();
-    init_stable_lock();
-    init_state();
     LOGICAL_RUN_MANIFEST_RELPATH = path76.join("lineage", "logical-run.json");
     RUN_BINDING_V1_FIELDS = Object.freeze(["schema_version", "run_id", "binding_ref", "state"]);
+  }
+});
+
+// src/domains/lifecycle/run-binding.ts
+var init_run_binding = __esm({
+  "src/domains/lifecycle/run-binding.ts"() {
+    init_kernel();
+    init_run_binding_fields();
+    init_stable_lock();
+    init_state();
   }
 });
 

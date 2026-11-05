@@ -2995,7 +2995,7 @@ function assertPublished(r, who) {
 function learnTarget(gp) {
   return { indexesDir: gp.indexesDir, repoRoot: gp.repoRoot, sourceRoot: gp.sourceRoot };
 }
-var PUBLICATION_WRITERS = Object.freeze([
+var PUBLICATION_WRITERS = deepFreeze([
   { file: "scripts/learn/extract-structural.ts", channels: ["structural_graph"], rebase: true },
   { file: "scripts/learn/resolve-calls.ts", channels: ["structural_graph"], rebase: true },
   { file: "scripts/learn/assign-layers.ts", channels: ["semantic_graph"], rebase: true },
@@ -3006,7 +3006,7 @@ var PUBLICATION_WRITERS = Object.freeze([
   { file: "scripts/learn/knowledge-orchestrator.ts", channels: ["semantic_graph", "recall"], rebase: false },
   { file: "scripts/learn/write-knowledge-links.ts", channels: ["recall"], rebase: false }
 ]);
-var NON_LAYER_WRITERS = Object.freeze([
+var NON_LAYER_WRITERS = deepFreeze([
   { file: "scripts/learn/lib/publish.ts", writes: "explicit --in/--out stage targets (not published)" },
   { file: "scripts/learn/lib/paths.ts", writes: "writeJson helper; no artifact path of its own" },
   { file: "src/domains/knowledge/publication.ts", writes: "the generation store and legacy exports" },

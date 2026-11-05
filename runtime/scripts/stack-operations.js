@@ -102,8 +102,8 @@ function hex8(value) {
   return out;
 }
 function neutralFingerprint(value) {
-  const canonical2 = neutralCanonicalJson(value);
-  return `nfp1:${hex8(fnv1a32(canonical2, 2166136261))}${hex8(fnv1a32(canonical2, 16777619))}`;
+  const canonical3 = neutralCanonicalJson(value);
+  return `nfp1:${hex8(fnv1a32(canonical3, 2166136261))}${hex8(fnv1a32(canonical3, 16777619))}`;
 }
 function rotr32(value, bits) {
   return (value >>> bits | value << 32 - bits) >>> 0;
@@ -1649,19 +1649,19 @@ function unrecognizedNeutralHostFields(identity) {
   return offenders;
 }
 function neutralJournalGenesis(authority) {
-  const canonical2 = {
+  const canonical3 = {
     schema: NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA,
     anchor: "journal_genesis",
     journal: authority.receipt_journal_id,
     first_sequence: authority.receipt_sequence_range?.first ?? null
   };
   for (const field of NEUTRAL_EVIDENCE_IDENTITY_FIELDS) {
-    canonical2[field] = authority.identity[field] ?? null;
+    canonical3[field] = authority.identity[field] ?? null;
   }
-  return `nec1:${neutralFingerprint(canonical2).slice("nfp1:".length)}`;
+  return `nec1:${neutralFingerprint(canonical3).slice("nfp1:".length)}`;
 }
 function neutralJournalEntryCommitment(authority, previous, entry) {
-  const canonical2 = {
+  const canonical3 = {
     schema: NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA,
     anchor: "journal_entry",
     journal: authority.receipt_journal_id,
@@ -1673,12 +1673,12 @@ function neutralJournalEntryCommitment(authority, previous, entry) {
     reason_code: entry.reason_code ?? null
   };
   for (const field of NEUTRAL_EVIDENCE_IDENTITY_FIELDS) {
-    canonical2[field] = authority.identity[field] ?? null;
+    canonical3[field] = authority.identity[field] ?? null;
   }
-  return `nec1:${neutralFingerprint(canonical2).slice("nfp1:".length)}`;
+  return `nec1:${neutralFingerprint(canonical3).slice("nfp1:".length)}`;
 }
 function neutralAttestationDigest(authority, attestation) {
-  const canonical2 = {
+  const canonical3 = {
     schema: NEUTRAL_ATTESTATION_REF_SCHEMA,
     attestor: attestation.attestor_id,
     journal: authority.receipt_journal_id,
@@ -1688,9 +1688,9 @@ function neutralAttestationDigest(authority, attestation) {
     last_sequence: authority.receipt_sequence_range?.last ?? null
   };
   for (const field of NEUTRAL_EVIDENCE_IDENTITY_FIELDS) {
-    canonical2[field] = authority.identity[field] ?? null;
+    canonical3[field] = authority.identity[field] ?? null;
   }
-  return `nad1:${neutralCanonicalDigest(canonical2)}`;
+  return `nad1:${neutralCanonicalDigest(canonical3)}`;
 }
 function neutralAttestationReference(authority, attestation) {
   return `${NEUTRAL_ATTESTATION_REF_SCHEMA}:${attestation.attestor_id}@${neutralAttestationDigest(authority, attestation)}`;
@@ -5498,7 +5498,7 @@ var init_neutral_conformance_assembly = __esm({
           for (const candidate of nonText) {
             if (!refusesRawWith(implementation, candidate, CONTROL_REQUEST_NOT_TEXT)) return false;
           }
-          const canonical2 = controlRequestText(controlPackets(), CONTROL_CLAIM);
+          const canonical3 = controlRequestText(controlPackets(), CONTROL_CLAIM);
           const malformed = [
             "",
             "{",
@@ -5510,7 +5510,7 @@ var init_neutral_conformance_assembly = __esm({
             `{"packets":[],"claim":{}}`,
             // The canonical text with insignificant padding — same decode, different
             // bytes.
-            ` ${canonical2}`,
+            ` ${canonical3}`,
             // An undeclared top-level member is a channel this contract does not have.
             neutralCanonicalJson({ packets: controlPackets(), claim: CONTROL_CLAIM, mode: "lenient" }),
             // The packet set must be a JSON array, not an object holding packets.
@@ -11090,10 +11090,10 @@ function assertBoundedComparisonComplexity(text, label) {
 function parseCanonicalComparisonText(text, label) {
   assertBoundedComparisonComplexity(text, label);
   let parsed;
-  let canonical2;
+  let canonical3;
   try {
     parsed = JSON.parse(text);
-    canonical2 = neutralCanonicalJson(parsed);
+    canonical3 = neutralCanonicalJson(parsed);
   } catch (error) {
     if (error instanceof RangeError) {
       throw new Error(
@@ -11102,7 +11102,7 @@ function parseCanonicalComparisonText(text, label) {
     }
     throw new Error(`compareMigrationOutcomes: ${label} is not valid JSON (malformed comparison text refused)`);
   }
-  if (canonical2 !== text) {
+  if (canonical3 !== text) {
     throw new Error(
       `compareMigrationOutcomes: ${label} is not canonical JSON text (must exact-round-trip through the neutral canonical encoder)`
     );
@@ -11655,12 +11655,12 @@ function safeArrayLength(value) {
 function isObjectLike(value) {
   return typeof value === "object" && value !== null && !safeIsArray(value);
 }
-function issue(path88, code, message) {
-  return { path: path88, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
+function issue(path89, code, message) {
+  return { path: path89, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
 }
-function pushIssue(issues, path88, code, message) {
+function pushIssue(issues, path89, code, message) {
   if (issues.length >= MAX_ISSUES) return;
-  issues.push(issue(path88, code, message));
+  issues.push(issue(path89, code, message));
 }
 function sortIssues(issues) {
   return [...issues].sort(
@@ -11671,15 +11671,15 @@ function canonicalDocumentJson(value) {
   const errors = [];
   const active = /* @__PURE__ */ new Set();
   let nodes = 0;
-  const walk = (node, path88, depth) => {
+  const walk = (node, path89, depth) => {
     if (errors.length >= MAX_ISSUES) return null;
     if (depth > MAX_CANONICAL_DEPTH) {
-      pushIssue(errors, path88, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
+      pushIssue(errors, path89, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
       return null;
     }
     nodes += 1;
     if (nodes > MAX_CANONICAL_NODES) {
-      pushIssue(errors, path88, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
+      pushIssue(errors, path89, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
       return null;
     }
     if (node === null) return "null";
@@ -11688,7 +11688,7 @@ function canonicalDocumentJson(value) {
     if (kind === "string") {
       const text = node;
       if (text.length > MAX_STRING_LENGTH) {
-        pushIssue(errors, path88, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
+        pushIssue(errors, path89, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
         return null;
       }
       return JSON.stringify(text);
@@ -11696,17 +11696,17 @@ function canonicalDocumentJson(value) {
     if (kind === "number") {
       const num = node;
       if (!Number.isFinite(num)) {
-        pushIssue(errors, path88, "non_finite_number", "numbers must be finite");
+        pushIssue(errors, path89, "non_finite_number", "numbers must be finite");
         return null;
       }
       return Object.is(num, -0) ? "0" : String(num);
     }
     if (kind !== "object") {
-      pushIssue(errors, path88, "unsupported_type", `${kind} has no canonical JSON form`);
+      pushIssue(errors, path89, "unsupported_type", `${kind} has no canonical JSON form`);
       return null;
     }
     if (active.has(node)) {
-      pushIssue(errors, path88, "cycle_detected", "value contains a cycle");
+      pushIssue(errors, path89, "cycle_detected", "value contains a cycle");
       return null;
     }
     active.add(node);
@@ -11714,26 +11714,26 @@ function canonicalDocumentJson(value) {
       if (safeIsArray(node)) {
         const length = safeArrayLength(node);
         if (length.ok === false) {
-          pushIssue(errors, path88, "array_length_unreadable", length.reason);
+          pushIssue(errors, path89, "array_length_unreadable", length.reason);
           return null;
         }
         if (length.length > MAX_ARRAY_ITEMS) {
-          pushIssue(errors, path88, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
+          pushIssue(errors, path89, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
           return null;
         }
         const parts2 = [];
         for (let index = 0; index < length.length; index += 1) {
           const key = String(index);
           if (!safeHasOwn(node, key)) {
-            pushIssue(errors, `${path88}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
+            pushIssue(errors, `${path89}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
             return null;
           }
           const read = safeGet(node, key);
           if (read.ok === false) {
-            pushIssue(errors, `${path88}[${index}]`, "property_read_threw", read.reason);
+            pushIssue(errors, `${path89}[${index}]`, "property_read_threw", read.reason);
             return null;
           }
-          const encoded = walk(read.value, `${path88}[${index}]`, depth + 1);
+          const encoded = walk(read.value, `${path89}[${index}]`, depth + 1);
           if (encoded === null) return null;
           parts2.push(encoded);
         }
@@ -11741,11 +11741,11 @@ function canonicalDocumentJson(value) {
       }
       const keys = safeOwnKeys(node);
       if (keys.ok === false) {
-        pushIssue(errors, path88, "own_keys_threw", keys.reason);
+        pushIssue(errors, path89, "own_keys_threw", keys.reason);
         return null;
       }
       if (keys.keys.length > MAX_OBJECT_KEYS) {
-        pushIssue(errors, path88, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
+        pushIssue(errors, path89, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
         return null;
       }
       const sorted = [...keys.keys].sort();
@@ -11753,14 +11753,14 @@ function canonicalDocumentJson(value) {
       for (const key of sorted) {
         const read = safeGet(node, key);
         if (read.ok === false) {
-          pushIssue(errors, `${path88}.${key}`, "property_read_threw", read.reason);
+          pushIssue(errors, `${path89}.${key}`, "property_read_threw", read.reason);
           return null;
         }
         if (read.value === void 0) {
-          pushIssue(errors, `${path88}.${key}`, "undefined_value", "undefined has no canonical JSON form");
+          pushIssue(errors, `${path89}.${key}`, "undefined_value", "undefined has no canonical JSON form");
           return null;
         }
-        const encoded = walk(read.value, `${path88}.${key}`, depth + 1);
+        const encoded = walk(read.value, `${path89}.${key}`, depth + 1);
         if (encoded === null) return null;
         parts.push(`${JSON.stringify(key)}:${encoded}`);
       }
@@ -11788,9 +11788,9 @@ function sha256Of(text) {
   return `sha256:${(0, import_node_crypto.createHash)("sha256").update(text, "utf8").digest("hex")}`;
 }
 function hashCanonicalValue(value) {
-  const canonical2 = canonicalDocumentJson(value);
-  if (canonical2.ok === false) return { ok: false, errors: canonical2.errors };
-  return { ok: true, hash: sha256Of(canonical2.json) };
+  const canonical3 = canonicalDocumentJson(value);
+  if (canonical3.ok === false) return { ok: false, errors: canonical3.errors };
+  return { ok: true, hash: sha256Of(canonical3.json) };
 }
 function deepFreeze2(value) {
   if (typeof value !== "object" || value === null) return value;
@@ -11816,38 +11816,38 @@ var init_document_safe = __esm({
 });
 
 // src/domains/lifecycle/document-records.ts
-function readShape(issues, value, path88, allowed) {
+function readShape(issues, value, path89, allowed) {
   if (value === null || typeof value !== "object") {
-    pushIssue(issues, path88, "not_an_object", `${path88} must be an object`);
+    pushIssue(issues, path89, "not_an_object", `${path89} must be an object`);
     return false;
   }
   if (safeIsArray(value)) {
-    pushIssue(issues, path88, "not_an_object", `${path88} must be an object, not an array`);
+    pushIssue(issues, path89, "not_an_object", `${path89} must be an object, not an array`);
     return false;
   }
   const keys = safeOwnKeys(value);
   if (keys.ok === false) {
-    pushIssue(issues, path88, "own_keys_threw", `${path88}: ${keys.reason}`);
+    pushIssue(issues, path89, "own_keys_threw", `${path89}: ${keys.reason}`);
     return false;
   }
   const allowedSet = new Set(allowed);
   let ok = true;
   for (const key of [...keys.keys].sort()) {
     if (!allowedSet.has(key)) {
-      pushIssue(issues, `${path88}.${key}`, "unexpected_key", `${path88}.${key} is not part of the closed schema`);
+      pushIssue(issues, `${path89}.${key}`, "unexpected_key", `${path89}.${key} is not part of the closed schema`);
       ok = false;
     }
   }
   for (const key of allowed) {
     if (!safeHasOwn(value, key)) {
-      pushIssue(issues, `${path88}.${key}`, "missing_field", `${path88}.${key} is required`);
+      pushIssue(issues, `${path89}.${key}`, "missing_field", `${path89}.${key} is required`);
       ok = false;
     }
   }
   return ok;
 }
-function readString(issues, parent, path88, key, options = {}) {
-  const fieldPath = `${path88}.${key}`;
+function readString(issues, parent, path89, key, options = {}) {
+  const fieldPath = `${path89}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -11882,8 +11882,8 @@ function readString(issues, parent, path88, key, options = {}) {
   }
   return value;
 }
-function readArray(issues, parent, path88, key, options = {}) {
-  const fieldPath = `${path88}.${key}`;
+function readArray(issues, parent, path89, key, options = {}) {
+  const fieldPath = `${path89}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -11926,10 +11926,10 @@ function readArray(issues, parent, path88, key, options = {}) {
   }
   return ok ? items : null;
 }
-function readStringArray(issues, parent, path88, key, options = {}) {
-  const items = readArray(issues, parent, path88, key, options);
+function readStringArray(issues, parent, path89, key, options = {}) {
+  const items = readArray(issues, parent, path89, key, options);
   if (items === null) return null;
-  const fieldPath = `${path88}.${key}`;
+  const fieldPath = `${path89}.${key}`;
   const out = [];
   let ok = true;
   for (let index = 0; index < items.length; index += 1) {
@@ -11955,10 +11955,10 @@ function readStringArray(issues, parent, path88, key, options = {}) {
   }
   return ok ? out : null;
 }
-function readItemArray(issues, parent, path88, key, options, readItem) {
-  const items = readArray(issues, parent, path88, key, options);
+function readItemArray(issues, parent, path89, key, options, readItem) {
+  const items = readArray(issues, parent, path89, key, options);
   if (items === null) return null;
-  const fieldPath = `${path88}.${key}`;
+  const fieldPath = `${path89}.${key}`;
   const out = [];
   const firstIndexById = /* @__PURE__ */ new Map();
   let ok = true;
@@ -11985,13 +11985,13 @@ function readItemArray(issues, parent, path88, key, options, readItem) {
   }
   return ok ? out : null;
 }
-function readProvenance(issues, parent, path88) {
+function readProvenance(issues, parent, path89) {
   const read = safeGet(parent, "provenance");
   if (read.ok === false) {
-    pushIssue(issues, `${path88}.provenance`, "property_read_threw", `${path88}.provenance: property read threw`);
+    pushIssue(issues, `${path89}.provenance`, "property_read_threw", `${path89}.provenance: property read threw`);
     return null;
   }
-  const provenancePath2 = `${path88}.provenance`;
+  const provenancePath2 = `${path89}.provenance`;
   if (!readShape(issues, read.value, provenancePath2, PROVENANCE_KEYS)) return null;
   const source = read.value;
   const authorId = readString(issues, source, provenancePath2, "author_id", {
@@ -12032,10 +12032,10 @@ function readProvenance(issues, parent, path88) {
     source: provenanceSource
   };
 }
-function readPlanBody(issues, body, path88) {
-  if (!readShape(issues, body, path88, ["objectives", "steps"])) return null;
-  const objectives = readStringArray(issues, body, path88, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
-  const steps = readItemArray(issues, body, path88, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
+function readPlanBody(issues, body, path89) {
+  if (!readShape(issues, body, path89, ["objectives", "steps"])) return null;
+  const objectives = readStringArray(issues, body, path89, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
+  const steps = readItemArray(issues, body, path89, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
     if (!readShape(itemIssues, item, itemPath, ["id", "title", "status"])) return null;
     const id2 = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
     const title = readString(itemIssues, item, itemPath, "title", { maxLength: 500 });
@@ -12046,12 +12046,12 @@ function readPlanBody(issues, body, path88) {
   if (objectives === null || steps === null) return null;
   return { objectives, steps };
 }
-function readSpecBody(issues, body, path88) {
-  if (!readShape(issues, body, path88, ["requirements"])) return null;
+function readSpecBody(issues, body, path89) {
+  if (!readShape(issues, body, path89, ["requirements"])) return null;
   const requirements = readItemArray(
     issues,
     body,
-    path88,
+    path89,
     "requirements",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
@@ -12068,22 +12068,22 @@ function readSpecBody(issues, body, path88) {
   if (requirements === null) return null;
   return { requirements };
 }
-function readHandoffBody(issues, body, path88) {
-  if (!readShape(issues, body, path88, ["task_id", "status", "artifacts", "issues"])) return null;
-  const taskId = readString(issues, body, path88, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
-  const status = readString(issues, body, path88, "status", { enumOf: HANDOFF_STATUSES });
-  const artifacts = readStringArray(issues, body, path88, "artifacts", { max: 256, itemMaxLength: 1e3 });
-  const handoffIssues = readStringArray(issues, body, path88, "issues", { max: 256, itemMaxLength: 1e3 });
+function readHandoffBody(issues, body, path89) {
+  if (!readShape(issues, body, path89, ["task_id", "status", "artifacts", "issues"])) return null;
+  const taskId = readString(issues, body, path89, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
+  const status = readString(issues, body, path89, "status", { enumOf: HANDOFF_STATUSES });
+  const artifacts = readStringArray(issues, body, path89, "artifacts", { max: 256, itemMaxLength: 1e3 });
+  const handoffIssues = readStringArray(issues, body, path89, "issues", { max: 256, itemMaxLength: 1e3 });
   if (taskId === null || status === null || artifacts === null || handoffIssues === null) return null;
   return { task_id: taskId, status, artifacts, issues: handoffIssues };
 }
-function readReviewBody(issues, body, path88) {
-  if (!readShape(issues, body, path88, ["verdict", "findings"])) return null;
-  const verdict = readString(issues, body, path88, "verdict", { enumOf: REVIEW_VERDICTS });
+function readReviewBody(issues, body, path89) {
+  if (!readShape(issues, body, path89, ["verdict", "findings"])) return null;
+  const verdict = readString(issues, body, path89, "verdict", { enumOf: REVIEW_VERDICTS });
   const findings = readItemArray(
     issues,
     body,
-    path88,
+    path89,
     "findings",
     { max: 256 },
     (itemIssues, item, itemPath) => {
@@ -12098,13 +12098,13 @@ function readReviewBody(issues, body, path88) {
   if (verdict === null || findings === null) return null;
   return { verdict, findings };
 }
-function readVerifyBody(issues, body, path88) {
-  if (!readShape(issues, body, path88, ["outcome", "checks"])) return null;
-  const outcome = readString(issues, body, path88, "outcome", { enumOf: VERIFY_OUTCOMES });
+function readVerifyBody(issues, body, path89) {
+  if (!readShape(issues, body, path89, ["outcome", "checks"])) return null;
+  const outcome = readString(issues, body, path89, "outcome", { enumOf: VERIFY_OUTCOMES });
   const checks = readItemArray(
     issues,
     body,
-    path88,
+    path89,
     "checks",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
@@ -12614,10 +12614,10 @@ function requiredRecord(errors, parent, key) {
   }
   return value;
 }
-function requiredString(errors, parent, path88, key) {
+function requiredString(errors, parent, path89, key) {
   const value = parent[key];
   if (typeof value !== "string" || value.length === 0) {
-    pushIssue(errors, `${path88}.${key}`, "missing_field", `${key} must be a non-empty string`);
+    pushIssue(errors, `${path89}.${key}`, "missing_field", `${key} must be a non-empty string`);
     return null;
   }
   return value;
@@ -12630,23 +12630,23 @@ function requiredArray(errors, parent, key) {
   }
   return value;
 }
-function validateStringArray(errors, values, path88) {
+function validateStringArray(errors, values, path89) {
   if (values === null) return;
   values.forEach((value, index) => {
     if (typeof value !== "string" || value.length === 0) {
-      pushIssue(errors, `${path88}[${index}]`, "wrong_type", `${path88} entries must be non-empty strings`);
+      pushIssue(errors, `${path89}[${index}]`, "wrong_type", `${path89} entries must be non-empty strings`);
     }
   });
 }
-function canonicalReceiptInstant(errors, value, path88) {
+function canonicalReceiptInstant(errors, value, path89) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) {
-    pushIssue(errors, path88, "invalid_timestamp", `${path88} must be an ISO-8601 timestamp`);
+    pushIssue(errors, path89, "invalid_timestamp", `${path89} must be an ISO-8601 timestamp`);
     return null;
   }
   const parsed = Date.parse(value);
   const expectedCanonical = value.includes(".") ? value : value.replace(/Z$/, ".000Z");
   if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== expectedCanonical) {
-    pushIssue(errors, path88, "invalid_timestamp", `${path88} must name a real UTC calendar instant`);
+    pushIssue(errors, path89, "invalid_timestamp", `${path89} must name a real UTC calendar instant`);
     return null;
   }
   return expectedCanonical;
@@ -15437,16 +15437,16 @@ var init_upgrade_steps = __esm({
         const policy = {};
         let dropped = 0;
         for (const [key, value] of Object.entries(flat)) {
-          const canonical2 = cfg.canonicalPolicyKey(key);
-          if (!cfg.isPolicyKey(canonical2)) {
+          const canonical3 = cfg.canonicalPolicyKey(key);
+          if (!cfg.isPolicyKey(canonical3)) {
             dropped += 1;
             continue;
           }
-          if (cfg.findHostIdentity(canonical2, value) !== null) {
+          if (cfg.findHostIdentity(canonical3, value) !== null) {
             dropped += 1;
             continue;
           }
-          setByPath(policy, canonical2, value);
+          setByPath(policy, canonical3, value);
         }
         const targets = [];
         if (ctx.storage.project) targets.push(ctx.storage.project.config());
@@ -17061,11 +17061,11 @@ function exclusionSentinelPath(runDir3) {
   return (0, import_node_path.join)(runDir3, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir3) {
-  const path88 = stableLockPath(runDir3);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path88), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path88)) return;
+  const path89 = stableLockPath(runDir3);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path89), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path89)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path88, "wx");
+    const fd = (0, import_node_fs.openSync)(path89, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -17163,9 +17163,9 @@ function appendEvent(runDir3, event, opts = {}) {
   const line = JSON.stringify(withV2) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId2 = opts.laneId ?? "global";
-    const path88 = laneFallbackPath(runDir3, laneId2);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path88), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path88, "a");
+    const path89 = laneFallbackPath(runDir3, laneId2);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path89), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path89, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -20605,13 +20605,13 @@ function parseScalarToken(c) {
   while (!c.eof() && !/[\s,\]}#]/.test(c.peek())) tok += c.next();
   if (tok === "true") return true;
   if (tok === "false") return false;
-  const dt = DATETIME_RE.exec(tok);
-  if (dt) {
+  const dt2 = DATETIME_RE.exec(tok);
+  if (dt2) {
     const [y, mo, d] = tok.slice(0, 10).split("-").map(Number);
     const leap = y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
     const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     const dateOk = mo >= 1 && mo <= 12 && d >= 1 && d <= daysInMonth[mo - 1];
-    const time2 = dt[1] ? tok.slice(11, 19).split(":").map(Number) : null;
+    const time2 = dt2[1] ? tok.slice(11, 19).split(":").map(Number) : null;
     const timeOk = !time2 || time2[0] < 24 && time2[1] < 60 && time2[2] <= 60;
     const offset = /[+-](\d{2}):(\d{2})$/.exec(tok.slice(10));
     const offsetOk = !offset || Number(offset[1]) < 24 && Number(offset[2]) < 60;
@@ -20814,17 +20814,17 @@ function parseNativeToml(raw) {
   }
 }
 function claudeConfigRoots(opts) {
-  const join79 = opts.joiner ?? ((...parts) => parts.join("/"));
+  const join80 = opts.joiner ?? ((...parts) => parts.join("/"));
   const roots = [];
   const override = opts.claudeConfigDir?.trim();
   if (override) roots.push(override);
-  roots.push(join79(opts.homedir, ".claude"), join79(opts.homedir, ".config", "claude"));
+  roots.push(join80(opts.homedir, ".claude"), join80(opts.homedir, ".config", "claude"));
   return roots;
 }
 function codexConfigHome(opts) {
-  const join79 = opts.joiner ?? ((...parts) => parts.join("/"));
+  const join80 = opts.joiner ?? ((...parts) => parts.join("/"));
   const override = opts.codexHome?.trim();
-  return override ? override : join79(opts.homedir, ".codex");
+  return override ? override : join80(opts.homedir, ".codex");
 }
 function classifyEntry(alias, entry) {
   let present2 = 0;
@@ -21326,8 +21326,8 @@ function assertPolicyWrite(key, value, opts = {}) {
   const where = opts.where ?? "config set";
   const hit = findHostIdentity(key, value, opts.knownHostIds ?? []);
   if (hit) throw new PolicyRejectedError(hit.kind, key, identityMessage(hit, where));
-  const canonical2 = canonicalPolicyKey(key);
-  const spec = BY_KEY.get(canonical2);
+  const canonical3 = canonicalPolicyKey(key);
+  const spec = BY_KEY.get(canonical3);
   if (!spec) {
     throw new PolicyRejectedError(
       "not-policy",
@@ -21337,7 +21337,7 @@ function assertPolicyWrite(key, value, opts = {}) {
   }
   const valueErr = validatePolicyValue(spec, value);
   if (valueErr) throw new PolicyRejectedError("not-policy", key, `${where}: ${valueErr}`);
-  return canonical2;
+  return canonical3;
 }
 function validatePolicyValue(spec, value) {
   if (value === null) {
@@ -21620,13 +21620,13 @@ function readLayer(file, layer, knownHostIds) {
   const out = /* @__PURE__ */ new Map();
   const aliases = [];
   for (const spec of POLICY_KEYS) {
-    const canonical2 = getByPath2(parsed, spec.key);
-    if (canonical2 !== void 0) {
-      const err = validatePolicyValue(spec, canonical2);
+    const canonical3 = getByPath2(parsed, spec.key);
+    if (canonical3 !== void 0) {
+      const err = validatePolicyValue(spec, canonical3);
       if (err) {
         throw new PolicyRejectedError("not-policy", spec.key, `policy config (${layer}, ${file}): ${err}`);
       }
-      out.set(spec.key, canonical2);
+      out.set(spec.key, canonical3);
     }
     for (const legacy of aliasesFor(spec.key)) {
       const v = getByPath2(parsed, legacy);
@@ -21664,8 +21664,8 @@ function readLayer(file, layer, knownHostIds) {
   }
   return { values: out, aliases };
 }
-function aliasesFor(canonical2) {
-  return ALIASES_BY_CANONICAL.get(canonical2) ?? [];
+function aliasesFor(canonical3) {
+  return ALIASES_BY_CANONICAL.get(canonical3) ?? [];
 }
 function leafPaths(obj, prefix = "", out = []) {
   if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
@@ -21738,11 +21738,11 @@ function resolvePolicy(opts) {
   }
   for (const [key, value] of Object.entries(opts.flags ?? {})) {
     if (value === void 0) continue;
-    const canonical2 = canonicalPolicyKey(key);
-    const spec = policyKeySpec(canonical2);
+    const canonical3 = canonicalPolicyKey(key);
+    const spec = policyKeySpec(canonical3);
     if (!spec) continue;
     const err = validatePolicyValue(spec, value);
-    if (err) throw new PolicyRejectedError("not-policy", canonical2, `policy config (cli): ${err}`);
+    if (err) throw new PolicyRejectedError("not-policy", canonical3, `policy config (cli): ${err}`);
     setByPath2(policy, spec.key, value);
     sources[spec.key] = "cli";
   }
@@ -21752,11 +21752,11 @@ function policyValue(resolved, dotted) {
   return getByPath2(resolved.policy, canonicalPolicyKey(dotted));
 }
 function writePolicyOverlay(overlayFile, key, value, knownHostIds = []) {
-  const canonical2 = assertPolicyWrite(key, value, { where: "policy overlay", knownHostIds });
+  const canonical3 = assertPolicyWrite(key, value, { where: "policy overlay", knownHostIds });
   let existing = {};
   const parsed = readJsonFile(overlayFile);
   if (parsed !== null) existing = parsed;
-  setByPath2(existing, canonical2, value);
+  setByPath2(existing, canonical3, value);
   fs28.mkdirSync(path34.dirname(overlayFile), { recursive: true });
   const tmp = `${overlayFile}.tmp`;
   fs28.writeFileSync(tmp, `${JSON.stringify(existing, null, 2)}
@@ -22003,21 +22003,21 @@ function validateModels(models) {
         continue;
       }
       if (!object(rawHosts)) continue;
-      const canonical2 = /* @__PURE__ */ new Map();
+      const canonical3 = /* @__PURE__ */ new Map();
       for (const [host, value] of Object.entries(rawHosts)) {
         const hostId = normalizeHostId(host);
         if (!hostId) {
           rejects.push(`unknown models.tiers.${tier} host key "${host}" (closed key set)`);
           continue;
         }
-        const prior = canonical2.get(hostId);
+        const prior = canonical3.get(hostId);
         if (prior && prior !== host) {
           rejects.push(
             `duplicate models.tiers.${tier} host keys "${prior}" and "${host}" both normalize to "${hostId}"`
           );
           continue;
         }
-        canonical2.set(hostId, host);
+        canonical3.set(hostId, host);
         if (value === null || typeof value === "string") continue;
         if (!object(value)) {
           rejects.push(
@@ -22309,10 +22309,10 @@ function parseSelector(raw) {
     if (!body) throw new Error(`selector_malformed: "expr:" needs conjuncts (got "${raw}")`);
     const out = {};
     for (const conjunct of body.split(";")) {
-      const eq = conjunct.indexOf("=");
-      if (eq <= 0) throw new Error(`selector_malformed: bad conjunct "${conjunct}" in "${raw}"`);
-      const key = conjunct.slice(0, eq);
-      const value = conjunct.slice(eq + 1);
+      const eq2 = conjunct.indexOf("=");
+      if (eq2 <= 0) throw new Error(`selector_malformed: bad conjunct "${conjunct}" in "${raw}"`);
+      const key = conjunct.slice(0, eq2);
+      const value = conjunct.slice(eq2 + 1);
       if (key === "model_family") {
         if (out.model_family !== void 0)
           throw new Error(`selector_malformed: duplicate conjunct key "model_family" in "${raw}"`);
@@ -23651,8 +23651,8 @@ function resolveTierModel(tiers, tier, host) {
   if (typeof entry === "string") return normalizeTierValue(entry);
   if (typeof entry !== "object" || Array.isArray(entry)) return { model: null };
   const hostMap = entry;
-  const canonical2 = normalizeHostId(host);
-  if (canonical2 && canonical2 in hostMap) return normalizeTierValue(hostMap[canonical2]);
+  const canonical3 = normalizeHostId(host);
+  if (canonical3 && canonical3 in hostMap) return normalizeTierValue(hostMap[canonical3]);
   return normalizeTierValue(hostMap[host]);
 }
 var init_tier_model = __esm({
@@ -23829,8 +23829,8 @@ async function singleflightDiscover(store, key, discover, opts = {}) {
     const snap = store.read(hash2);
     return snap && isFresh(snap) ? snap : null;
   };
-  const cached = fresh();
-  if (cached) return { snapshot: cached, role: "cached", discovery_ran: false };
+  const cached2 = fresh();
+  if (cached2) return { snapshot: cached2, role: "cached", discovery_ran: false };
   const deadline = now() + lockWaitMs;
   let locked = store.tryLock(hash2);
   while (!locked) {
@@ -23857,8 +23857,8 @@ async function singleflightDiscover(store, key, discover, opts = {}) {
   }
 }
 function degradedRead(store, hash2) {
-  const cached = store.read(hash2);
-  if (cached) return { ...cached, degraded: true, probe_issued: false };
+  const cached2 = store.read(hash2);
+  if (cached2) return { ...cached2, degraded: true, probe_issued: false };
   return { degraded: true, probe_issued: false, evidence_state: "unknown" };
 }
 function readUnderLockTimeout(store, key) {
@@ -30162,38 +30162,38 @@ function resolveJournalIdentity(journalPath2) {
     identity: null,
     failure: { code, message }
   });
-  const canonical2 = canonicalJournalPath(journalPath2);
-  if (canonicalJournalPath(canonical2) !== canonical2) {
+  const canonical3 = canonicalJournalPath(journalPath2);
+  if (canonicalJournalPath(canonical3) !== canonical3) {
     return refuse5(
       "journal_identity_unstable",
-      `journal path "${journalPath2}" canonicalizes to "${canonical2}", which itself resolves further \u2014 the name is moving and cannot be bound to a lock`
+      `journal path "${journalPath2}" canonicalizes to "${canonical3}", which itself resolves further \u2014 the name is moving and cannot be bound to a lock`
     );
   }
-  const stat = lstatOrNull2(canonical2);
+  const stat = lstatOrNull2(canonical3);
   if (stat === null) {
-    return { ok: true, identity: { path: canonical2, lock: `${canonical2}.lock`, device: null, inode: null, links: null }, failure: null };
+    return { ok: true, identity: { path: canonical3, lock: `${canonical3}.lock`, device: null, inode: null, links: null }, failure: null };
   }
   if (stat.isSymbolicLink()) {
     return refuse5(
       "journal_identity_unstable",
-      `a symlink appeared at the canonical journal name "${canonical2}" after it was resolved`
+      `a symlink appeared at the canonical journal name "${canonical3}" after it was resolved`
     );
   }
   if (!stat.isFile()) {
     return refuse5(
       "journal_identity_unstable",
-      `canonical journal name "${canonical2}" does not name a regular file`
+      `canonical journal name "${canonical3}" does not name a regular file`
     );
   }
   if (stat.nlink > 1) {
     return refuse5(
       "journal_identity_ambiguous",
-      `journal at "${canonical2}" is one physical file with ${stat.nlink} names (hard links) \u2014 a path-keyed lock cannot serialise writers that name it differently, so this operation is refused (remove the extra link, or give each producer its own journal)`
+      `journal at "${canonical3}" is one physical file with ${stat.nlink} names (hard links) \u2014 a path-keyed lock cannot serialise writers that name it differently, so this operation is refused (remove the extra link, or give each producer its own journal)`
     );
   }
   return {
     ok: true,
-    identity: { path: canonical2, lock: `${canonical2}.lock`, device: stat.dev, inode: stat.ino, links: stat.nlink },
+    identity: { path: canonical3, lock: `${canonical3}.lock`, device: stat.dev, inode: stat.ino, links: stat.nlink },
     failure: null
   };
 }
@@ -34775,29 +34775,29 @@ function evaluateTransportedReleaseConformance(evidence2, authority) {
   }
   const required = ownField(evidence2, "required_scenario_ids");
   const results = ownField(evidence2, "results");
-  const canonical2 = NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS;
-  if (!Array.isArray(required) || required.length !== canonical2.length) {
+  const canonical3 = NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS;
+  if (!Array.isArray(required) || required.length !== canonical3.length) {
     return transportedRefusal(
       "coverage",
       "the evidence does not cover the full frozen suite: the required tuple is not the 31-id canonical tuple"
     );
   }
-  for (let index = 0; index < canonical2.length; index += 1) {
-    if (required[index] !== canonical2[index]) {
+  for (let index = 0; index < canonical3.length; index += 1) {
+    if (required[index] !== canonical3[index]) {
       return transportedRefusal(
         "coverage",
         "the evidence does not cover the full frozen suite: the required tuple is not the 31-id canonical tuple"
       );
     }
   }
-  if (!Array.isArray(results) || results.length !== canonical2.length) {
+  if (!Array.isArray(results) || results.length !== canonical3.length) {
     return transportedRefusal(
       "coverage",
       "the evidence does not carry exactly one result per required scenario"
     );
   }
-  for (let index = 0; index < canonical2.length; index += 1) {
-    if (ownField(results[index], "stable_id") !== canonical2[index]) {
+  for (let index = 0; index < canonical3.length; index += 1) {
+    if (ownField(results[index], "stable_id") !== canonical3[index]) {
       return transportedRefusal(
         "coverage",
         "the evidence results are not ordered against the canonical required tuple"
@@ -34817,7 +34817,7 @@ function evaluateTransportedReleaseConformance(evidence2, authority) {
     const ownerIds = NEUTRAL_OWNER_SCENARIO_IDS[ownerKey];
     const ownerResults = [];
     for (const stableId of ownerIds) {
-      const at = canonical2.indexOf(stableId);
+      const at = canonical3.indexOf(stableId);
       ownerResults.push(copyTransportedResult(results[at]));
     }
     packets.push({
@@ -35161,8 +35161,8 @@ function batteryRecomputedPackets() {
   return packets;
 }
 function evaluateOnce(cache, implementation) {
-  const cached = cache.get("valid");
-  if (cached !== void 0) return cached.result;
+  const cached2 = cache.get("valid");
+  if (cached2 !== void 0) return cached2.result;
   let result2;
   try {
     const produced = implementation(batteryRequestText());
@@ -35393,7 +35393,7 @@ var init_release_conformance_integration = __esm({
           ]);
           if (!refusesWithControl(implementation, trapProxy, CONTROL_NOT_TEXT)) return false;
           if (trapCount !== 0) return false;
-          const canonical2 = batteryRequestText();
+          const canonical3 = batteryRequestText();
           const nonText = [
             { claim: BATTERY_CLAIM, owner_inputs: batteryOwnerInputs() },
             [BATTERY_CLAIM],
@@ -35411,7 +35411,7 @@ var init_release_conformance_integration = __esm({
             "not json",
             "[]",
             '"a JSON string is not a request"',
-            ` ${canonical2}`,
+            ` ${canonical3}`,
             neutralCanonicalJson({ claim: BATTERY_CLAIM, owner_inputs: batteryOwnerInputs(), mode: "lenient" }),
             neutralCanonicalJson({ claim: BATTERY_CLAIM })
           ];
@@ -37164,9 +37164,9 @@ function loadWorkingSet(input) {
     storage,
     open_question_ids: input.open_question_ids ?? []
   });
-  const cached = readWorkingSet(storage, input.phase);
-  if (cached && fingerprintsMatch(cached.fingerprint, fingerprint2)) {
-    return { card: cached, fresh: true, path: workingSetCardPath(storage, input.phase) };
+  const cached2 = readWorkingSet(storage, input.phase);
+  if (cached2 && fingerprintsMatch(cached2.fingerprint, fingerprint2)) {
+    return { card: cached2, fresh: true, path: workingSetCardPath(storage, input.phase) };
   }
   const card = buildWorkingSetCard({ ...input, fingerprint: fingerprint2 });
   const p = writeWorkingSet(storage, card);
@@ -41756,6 +41756,16 @@ var init_retry_lane = __esm({
   }
 });
 
+// src/domains/lifecycle/run-binding-fields.ts
+var path76, LOGICAL_RUN_MANIFEST_RELPATH, RUN_BINDING_V1_FIELDS;
+var init_run_binding_fields = __esm({
+  "src/domains/lifecycle/run-binding-fields.ts"() {
+    path76 = __toESM(require("path"));
+    LOGICAL_RUN_MANIFEST_RELPATH = path76.join("lineage", "logical-run.json");
+    RUN_BINDING_V1_FIELDS = Object.freeze(["schema_version", "run_id", "binding_ref", "state"]);
+  }
+});
+
 // src/domains/lifecycle/run-binding.ts
 function realBindingFs() {
   return {
@@ -41771,7 +41781,7 @@ function realBindingFs() {
       }
     },
     writeFileExclusive: (p, c) => {
-      fsReal2.mkdirSync(path76.dirname(p), { recursive: true });
+      fsReal2.mkdirSync(path77.dirname(p), { recursive: true });
       try {
         fsReal2.writeFileSync(p, c, { encoding: "utf8", flag: "wx", mode: PRIVATE_BINDING_MODE });
         fsReal2.chmodSync(p, PRIVATE_BINDING_MODE);
@@ -41786,10 +41796,10 @@ function realBindingFs() {
   };
 }
 function runBindingPath(root, runId) {
-  return path76.join(durableGuildDir(root), "runs", runId, "binding.json");
+  return path77.join(durableGuildDir(root), "runs", runId, "binding.json");
 }
 function pendingSubstantiveOperationPath(root, runId) {
-  return path76.join(durableGuildDir(root), "runs", runId, "capability", "pending-substantive-operation.json");
+  return path77.join(durableGuildDir(root), "runs", runId, "capability", "pending-substantive-operation.json");
 }
 function readPendingSubstantiveOperation(root, runId, fs74 = realBindingFs()) {
   const raw = fs74.readFile(pendingSubstantiveOperationPath(root, runId));
@@ -41820,13 +41830,13 @@ function withRunBindingExclusion(root, runId, fn) {
   const persisted = readRunBindingRecord({ root, run_id: runId });
   if (persisted.status === "absent") throw new BindingRejectedError("binding_not_minted", runId);
   if (persisted.status === "malformed") throw new BindingRejectedError("binding_malformed", runId);
-  return withStableLock(path76.join(durableGuildDir(root), "runs", runId), fn);
+  return withStableLock(path77.join(durableGuildDir(root), "runs", runId), fn);
 }
 function initializeRunBindingExclusion(root, runId) {
   if (!/^run-[A-Za-z0-9][A-Za-z0-9._-]{0,191}$/.test(runId)) {
     throw new Error(`run-binding exclusion: invalid run id ${JSON.stringify(runId)}`);
   }
-  initStableLockfile(path76.join(durableGuildDir(root), "runs", runId));
+  initStableLockfile(path77.join(durableGuildDir(root), "runs", runId));
 }
 function mintRunBinding(opts) {
   if (opts.reserved_binding_ref !== void 0 && !/^rb-[a-f0-9]{32}$/.test(opts.reserved_binding_ref)) throw new Error("run-binding: invalid private reserved binding");
@@ -41843,9 +41853,9 @@ function mintRunBinding(opts) {
     binding_ref: opts.reserved_binding_ref ?? `rb-${crypto23.randomBytes(16).toString("hex")}`,
     state: "open"
   };
-  fs74.mkdirp(path76.dirname(p));
-  if (opts.fs === void 0) claimRunKind(path76.dirname(p), "v1");
-  else assertRunKindAllows(path76.dirname(p), "v1", { readFile: (f) => fs74.readFile(f), exists: (f) => fs74.exists(f) });
+  fs74.mkdirp(path77.dirname(p));
+  if (opts.fs === void 0) claimRunKind(path77.dirname(p), "v1");
+  else assertRunKindAllows(path77.dirname(p), "v1", { readFile: (f) => fs74.readFile(f), exists: (f) => fs74.exists(f) });
   const contents = JSON.stringify(record, null, 2) + "\n";
   const created = fs74.writeFileExclusive ? fs74.writeFileExclusive(p, contents, PRIVATE_BINDING_MODE) : !fs74.exists(p) && (fs74.writeFile(p, contents), true);
   if (!created) {
@@ -41875,7 +41885,7 @@ function readRunBindingRecord(opts) {
   const fs74 = opts.fs ?? realBindingFs();
   const raw = fs74.readFile(runBindingPath(opts.root, opts.run_id));
   if (raw === null) return { status: "absent" };
-  const kindRaw = fs74.readFile(path76.join(path76.dirname(runBindingPath(opts.root, opts.run_id)), RUN_KIND_FILE));
+  const kindRaw = fs74.readFile(path77.join(path77.dirname(runBindingPath(opts.root, opts.run_id)), RUN_KIND_FILE));
   const kind = parseRunKind(kindRaw);
   if (kind !== null && kind !== "v1") return { status: "malformed" };
   let parsed;
@@ -41924,13 +41934,14 @@ function assertWritableBinding(input) {
   if (verdict.ok === false) throw new BindingRejectedError(verdict.reason, input.run_id);
   return verdict.binding;
 }
-var crypto23, fsReal2, path76, BindingRejectedError, PRIVATE_BINDING_MODE, PENDING_SUBSTANTIVE_OPERATION_SCHEMA, LOGICAL_RUN_MANIFEST_RELPATH, RUN_BINDING_V1_FIELDS;
+var crypto23, fsReal2, path77, BindingRejectedError, PRIVATE_BINDING_MODE, PENDING_SUBSTANTIVE_OPERATION_SCHEMA;
 var init_run_binding = __esm({
   "src/domains/lifecycle/run-binding.ts"() {
     crypto23 = __toESM(require("crypto"));
     fsReal2 = __toESM(require("fs"));
-    path76 = __toESM(require("path"));
+    path77 = __toESM(require("path"));
     init_kernel();
+    init_run_binding_fields();
     init_stable_lock();
     init_state();
     BindingRejectedError = class extends Error {
@@ -41946,8 +41957,6 @@ var init_run_binding = __esm({
     };
     PRIVATE_BINDING_MODE = 384;
     PENDING_SUBSTANTIVE_OPERATION_SCHEMA = "guild.pending_substantive_operation.v1";
-    LOGICAL_RUN_MANIFEST_RELPATH = path76.join("lineage", "logical-run.json");
-    RUN_BINDING_V1_FIELDS = Object.freeze(["schema_version", "run_id", "binding_ref", "state"]);
   }
 });
 
@@ -41973,8 +41982,8 @@ function captureRunStart(env, opts, identity, createdAt, detached) {
   const writes = /* @__PURE__ */ new Map(), reads = /* @__PURE__ */ new Map(), dirs = /* @__PURE__ */ new Set();
   const own2 = runDir2(opts.root, identity.run_id);
   const contained2 = (abs) => {
-    const rel2 = path77.relative(opts.root, abs);
-    if (path77.isAbsolute(rel2) || rel2 === ".." || rel2.startsWith(".." + path77.sep)) throw new Error("staged start escaped source");
+    const rel2 = path78.relative(opts.root, abs);
+    if (path78.isAbsolute(rel2) || rel2 === ".." || rel2.startsWith(".." + path78.sep)) throw new Error("staged start escaped source");
     if (fsNode.existsSync(opts.root) && isRefused(checkContained(opts.root, abs, { policy: "physical" }))) throw new Error("staged start physical path refused");
     return rel2;
   };
@@ -41987,7 +41996,7 @@ function captureRunStart(env, opts, identity, createdAt, detached) {
   };
   const write = (abs, bytes) => {
     contained2(abs);
-    if (detached && abs !== own2 && !abs.startsWith(own2 + path77.sep)) return;
+    if (detached && abs !== own2 && !abs.startsWith(own2 + path78.sep)) return;
     writes.set(abs, bytes);
   };
   const fs74 = {
@@ -42004,7 +42013,7 @@ function captureRunStart(env, opts, identity, createdAt, detached) {
     },
     exists: (abs) => writes.has(abs) || dirs.has(abs) || env.fs.exists(abs),
     removeTree: (abs) => {
-      for (const key of writes.keys()) if (key === abs || key.startsWith(abs + path77.sep)) writes.delete(key);
+      for (const key of writes.keys()) if (key === abs || key.startsWith(abs + path78.sep)) writes.delete(key);
     },
     scrubbedWriteDurable: (abs, bytes) => {
       write(abs, bytes);
@@ -42013,36 +42022,36 @@ function captureRunStart(env, opts, identity, createdAt, detached) {
   };
   const stagedEnv = { ...env, now: () => createdAt, fs: fs74, reservedStart: identity, initializeRunBindingExclusion: void 0, emitAnalysisEvent: void 0 };
   const runId = createRunLifecycle(stagedEnv).startRun(opts);
-  const plan = { schema_version: "guild.run_start_plan.v1", root: opts.root, run_id: runId, created_at: createdAt, detached, options: JSON.parse(JSON.stringify(opts)), private_binding_ref: identity.binding_ref, files: [...writes].map(([abs, bytes]) => ({ path: contained2(abs), bytes })), directories: [...dirs].filter((abs) => !detached || abs === own2 || abs.startsWith(own2 + path77.sep)).map(contained2), read_set: [...reads].map(([abs, bytes]) => ({ path: contained2(abs), bytes })), digest: "" };
+  const plan = { schema_version: "guild.run_start_plan.v1", root: opts.root, run_id: runId, created_at: createdAt, detached, options: JSON.parse(JSON.stringify(opts)), private_binding_ref: identity.binding_ref, files: [...writes].map(([abs, bytes]) => ({ path: contained2(abs), bytes })), directories: [...dirs].filter((abs) => !detached || abs === own2 || abs.startsWith(own2 + path78.sep)).map(contained2), read_set: [...reads].map(([abs, bytes]) => ({ path: contained2(abs), bytes })), digest: "" };
   plan.digest = stagedStartDigest(plan);
   return plan;
 }
 function runDir2(root, runId) {
-  return path77.join(durableGuildDir(root), "runs", runId);
+  return path78.join(durableGuildDir(root), "runs", runId);
 }
 function runYamlPath(root, runId) {
-  return path77.join(runDir2(root, runId), "run.yaml");
+  return path78.join(runDir2(root, runId), "run.yaml");
 }
 function provenancePath(root, runId) {
-  return path77.join(runDir2(root, runId), "provenance.json");
+  return path78.join(runDir2(root, runId), "provenance.json");
 }
 function logsDir(root, runId) {
-  return path77.join(runDir2(root, runId), "logs");
+  return path78.join(runDir2(root, runId), "logs");
 }
 function resolvedSettingsPath(root, runId) {
-  return path77.join(runDir2(root, runId), "resolved-settings.json");
+  return path78.join(runDir2(root, runId), "resolved-settings.json");
 }
 function resolvedSettingsDigestPath(root, runId) {
-  return path77.join(runDir2(root, runId), RESOLVED_SETTINGS_DIGEST_FILE);
+  return path78.join(runDir2(root, runId), RESOLVED_SETTINGS_DIGEST_FILE);
 }
 function pluginConfigSnapshotPath(root, runId) {
-  return path77.join(runDir2(root, runId), "plugin-config-snapshot.json");
+  return path78.join(runDir2(root, runId), "plugin-config-snapshot.json");
 }
 function capabilityRunStartSnapshotPath(root, runId) {
-  return path77.join(runDir2(root, runId), "capability", "run-start-snapshot.json");
+  return path78.join(runDir2(root, runId), "capability", "run-start-snapshot.json");
 }
 function sentinelPath(root) {
-  return path77.join(durableGuildDir(root), "runs", "current-run-id");
+  return path78.join(durableGuildDir(root), "runs", "current-run-id");
 }
 function logRefFor(runId) {
   return `.guild/runs/${runId}/logs/v1.4-events.jsonl`;
@@ -42146,7 +42155,7 @@ function serializeRunYaml(rec) {
 }
 function bindRunSession(env, root, runId) {
   const dir = runDir2(root, runId);
-  const errorPath = path77.join(dir, "session-binding.error");
+  const errorPath = path78.join(dir, "session-binding.error");
   const fail2 = (message, cause) => {
     const detail = cause instanceof Error ? `
 ${cause.message}` : "";
@@ -42521,29 +42530,29 @@ function createRunLifecycle(env) {
     },
     materializeRunStart(plan) {
       const rootHint = env.__rootHint;
-      if (!path77.isAbsolute(plan.root) || rootHint !== void 0 && plan.root !== rootHint) throw new Error("staged start belongs to another source");
+      if (!path78.isAbsolute(plan.root) || rootHint !== void 0 && plan.root !== rootHint) throw new Error("staged start belongs to another source");
       const safeRelative = (relative22) => {
-        if (typeof relative22 !== "string" || !relative22 || path77.isAbsolute(relative22) || /[\\%\x00-\x1f]/.test(relative22) || relative22.split("/").some((v) => !v || v === "." || v === "..")) throw new Error("staged start path escaped source");
-        const abs = path77.join(plan.root, relative22);
+        if (typeof relative22 !== "string" || !relative22 || path78.isAbsolute(relative22) || /[\\%\x00-\x1f]/.test(relative22) || relative22.split("/").some((v) => !v || v === "." || v === "..")) throw new Error("staged start path escaped source");
+        const abs = path78.join(plan.root, relative22);
         if (fsNode.existsSync(plan.root) && isRefused(checkContained(plan.root, abs, { policy: "physical" }))) throw new Error("staged start physical path refused");
         return abs;
       };
       for (const file of [...plan.files, ...plan.read_set]) safeRelative(file.path);
       for (const dir of plan.directories) safeRelative(dir);
-      const ownPrefix = path77.relative(plan.root, runDir2(plan.root, assertCanonicalRunId(plan.run_id))) + "/";
+      const ownPrefix = path78.relative(plan.root, runDir2(plan.root, assertCanonicalRunId(plan.run_id))) + "/";
       if (plan.detached && plan.files.some((file) => !file.path.startsWith(ownPrefix))) throw new Error("detached start writes outside owned run");
       if (plan.schema_version !== "guild.run_start_plan.v1" || plan.root !== plan.options.root || plan.digest !== stagedStartDigest(plan)) throw new Error("staged start digest invalid");
-      for (const input of plan.read_set) if (env.fs.readFile(path77.join(plan.root, input.path)) !== input.bytes) throw new Error("staged start input changed");
+      for (const input of plan.read_set) if (env.fs.readFile(path78.join(plan.root, input.path)) !== input.bytes) throw new Error("staged start input changed");
       const replay = captureRunStart(env, plan.options, { run_id: plan.run_id, binding_ref: plan.private_binding_ref }, plan.created_at, plan.detached);
       if (JSON.stringify(replay) !== JSON.stringify(plan)) throw new Error("staged start differs from lifecycle replay");
       const own2 = runDir2(plan.root, plan.run_id);
       if (env.fs.exists(own2)) throw new Error("reserved run identity is occupied");
-      env.fs.mkdirp(path77.dirname(own2));
+      env.fs.mkdirp(path78.dirname(own2));
       if (env.fs.mkdirExclusive ? !env.fs.mkdirExclusive(own2) : env.fs.exists(own2)) throw new Error("reserved run identity is occupied");
       if (!env.fs.mkdirExclusive) env.fs.mkdirp(own2);
-      for (const dir of plan.directories) env.fs.mkdirp(path77.join(plan.root, dir));
+      for (const dir of plan.directories) env.fs.mkdirp(path78.join(plan.root, dir));
       for (const file of plan.files) {
-        const abs = path77.join(plan.root, file.path);
+        const abs = path78.join(plan.root, file.path);
         if (env.fs.exists(abs)) throw new Error("staged target is occupied");
         if (env.fs.writeFileExclusive) {
           if (!env.fs.writeFileExclusive(abs, file.bytes, abs === runBindingPath(plan.root, plan.run_id) ? 384 : void 0)) throw new Error("staged target is occupied");
@@ -42588,7 +42597,7 @@ function createRunLifecycle(env) {
         const provPath = provenancePath(root, runId);
         const provenanceContent = JSON.stringify(provenance, null, 2) + "\n";
         if (env.fs.scrubbedWriteDurable) {
-          const runDir3 = path77.join(durableGuildDir(root), "runs", runId);
+          const runDir3 = path78.join(durableGuildDir(root), "runs", runId);
           const result2 = env.fs.scrubbedWriteDurable(provPath, provenanceContent, "provenance", runDir3, runId);
           if (result2.blocked) {
             process.stderr.write(
@@ -42660,11 +42669,11 @@ function createRealEnv(root, resolveHost, captureCapabilityBaseline, recordCapab
         }
       },
       writeFile(absPath, contents) {
-        fsNode.mkdirSync(path77.dirname(absPath), { recursive: true });
+        fsNode.mkdirSync(path78.dirname(absPath), { recursive: true });
         fsNode.writeFileSync(absPath, contents, "utf8");
       },
       writeFileExclusive(absPath, contents, mode) {
-        fsNode.mkdirSync(path77.dirname(absPath), { recursive: true });
+        fsNode.mkdirSync(path78.dirname(absPath), { recursive: true });
         try {
           fsNode.writeFileSync(absPath, contents, { encoding: "utf8", flag: "wx", ...mode === void 0 ? {} : { mode } });
           if (mode !== void 0) fsNode.chmodSync(absPath, mode);
@@ -42716,11 +42725,11 @@ function assertContained(target, cwd, label) {
   const r = checkContained(cwd, target, { policy: "physical" });
   if (isRefused(r)) {
     throw new Error(
-      `[run-lifecycle] ${label}: resolved path "${path77.resolve(target)}" escapes the project root "${path77.resolve(cwd)}" [${r.code}] \u2014 ${r.detail}`
+      `[run-lifecycle] ${label}: resolved path "${path78.resolve(target)}" escapes the project root "${path78.resolve(cwd)}" [${r.code}] \u2014 ${r.detail}`
     );
   }
-  const runsBase = path77.resolve(durableGuildDir(cwd), "runs");
-  const resolvedTarget = path77.resolve(target);
+  const runsBase = path78.resolve(durableGuildDir(cwd), "runs");
+  const resolvedTarget = path78.resolve(target);
   if (resolvedTarget === runsBase || !isWithin(resolvedTarget, runsBase)) {
     throw new Error(
       `[run-lifecycle] ${label}: resolved path "${resolvedTarget}" is not a strict subdirectory of the runs base "${runsBase}"`
@@ -42730,7 +42739,7 @@ function assertContained(target, cwd, label) {
 function realProvenanceFsSeam() {
   return {
     writeFile(absPath, contents) {
-      fsNode.mkdirSync(path77.dirname(absPath), { recursive: true });
+      fsNode.mkdirSync(path78.dirname(absPath), { recursive: true });
       fsNode.writeFileSync(absPath, contents, "utf8");
     },
     readFile(absPath) {
@@ -42755,7 +42764,7 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
   const { cwd, fs: fsSeam, resolvedAtRef } = opts;
   const fs74 = fsSeam ?? realProvenanceFsSeam();
   const outPath = resolvedSettingsPath(cwd, runId);
-  const runsBase = path77.resolve(durableGuildDir(cwd), "runs");
+  const runsBase = path78.resolve(durableGuildDir(cwd), "runs");
   assertContained(outPath, cwd, "writeResolvedSettingsSnapshot");
   const onDisk = {
     ...snapshot,
@@ -42763,7 +42772,7 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
   };
   const serialized = JSON.stringify(onDisk, null, 2) + "\n";
   if (fs74.scrubbedWriteDurable) {
-    const runDir3 = path77.join(durableGuildDir(cwd), "runs", runId);
+    const runDir3 = path78.join(durableGuildDir(cwd), "runs", runId);
     const result2 = fs74.scrubbedWriteDurable(outPath, serialized, "config", runDir3, runId);
     if (result2.blocked) {
       process.stderr.write(
@@ -42787,7 +42796,7 @@ function hashOptionalFile(env, file) {
   return raw === null ? null : crypto24.createHash("sha256").update(raw).digest("hex");
 }
 function derivePluginIdentity(start, env) {
-  const pluginManifestPath = path77.join(start.root, ".claude-plugin", "plugin.json");
+  const pluginManifestPath = path78.join(start.root, ".claude-plugin", "plugin.json");
   const pluginManifest = env.fs.readFile(pluginManifestPath);
   let manifestVersion = null;
   if (pluginManifest !== null) {
@@ -42798,7 +42807,7 @@ function derivePluginIdentity(start, env) {
     }
   }
   const manifestHash = pluginManifest === null ? null : crypto24.createHash("sha256").update(pluginManifest).digest("hex");
-  const commandSurfaceHash = hashOptionalFile(env, path77.join(start.root, "command-src", "command-registry.json"));
+  const commandSurfaceHash = hashOptionalFile(env, path78.join(start.root, "command-src", "command-registry.json"));
   return {
     version: start.plugin_identity?.version ?? manifestVersion ?? "unknown",
     ref: start.plugin_identity?.ref ?? (manifestHash ? `sha256:${manifestHash}` : "unknown"),
@@ -42835,8 +42844,8 @@ function writePluginConfigSnapshot(runId, snapshot, start, env) {
       capabilities_ref: host.capabilities_ref ?? null
     },
     registry_hashes: {
-      skills: hashOptionalFile(env, path77.join(durableGuildDir(start.root), "skills", "registry.yaml")),
-      agents: hashOptionalFile(env, path77.join(durableGuildDir(start.root), "agents", "registry.yaml"))
+      skills: hashOptionalFile(env, path78.join(durableGuildDir(start.root), "skills", "registry.yaml")),
+      agents: hashOptionalFile(env, path78.join(durableGuildDir(start.root), "agents", "registry.yaml"))
     },
     command_surface_version: pluginIdentity.commandSurfaceVersion,
     redaction_policy: "scrubbed-config-v1",
@@ -42897,7 +42906,7 @@ function updateRunAttachment(manifest, provenance, initiativeId) {
     provenance: provenance === null ? null : { ...provenance, initiative: initiativeId, run_scope: scope }
   };
 }
-var crypto24, fsNode, path77, CAPABILITY_RUN_START_SNAPSHOT_SCHEMA, CANONICAL_RUN_ID_RE, HOST_FAMILY_TO_KIND, CANONICAL_PHASES, ResolvedSettingsIntegrityError;
+var crypto24, fsNode, path78, CAPABILITY_RUN_START_SNAPSHOT_SCHEMA, CANONICAL_RUN_ID_RE, HOST_FAMILY_TO_KIND, CANONICAL_PHASES, ResolvedSettingsIntegrityError;
 var init_run_lifecycle = __esm({
   "src/domains/lifecycle/run-lifecycle.ts"() {
     crypto24 = __toESM(require("crypto"));
@@ -42905,7 +42914,7 @@ var init_run_lifecycle = __esm({
     init_config2();
     init_config2();
     fsNode = __toESM(require("fs"));
-    path77 = __toESM(require("path"));
+    path78 = __toESM(require("path"));
     init_kernel();
     init_config2();
     init_config2();
@@ -42938,7 +42947,7 @@ var init_run_lifecycle = __esm({
 
 // src/domains/lifecycle/write-run-manifest.ts
 function manifestPathFor(cwd, slug) {
-  return path78.join(durableGuildDir(cwd), "programs", slug, "manifest.json");
+  return path79.join(durableGuildDir(cwd), "programs", slug, "manifest.json");
 }
 function readRunManifest(cwd, slug) {
   try {
@@ -43096,11 +43105,11 @@ function runWriteRunManifestCli(argv = process.argv.slice(2)) {
     process.exit(2);
   }
 }
-var fs67, path78, WAVE_STATUSES, PROGRAM_STATUSES;
+var fs67, path79, WAVE_STATUSES, PROGRAM_STATUSES;
 var init_write_run_manifest = __esm({
   "src/domains/lifecycle/write-run-manifest.ts"() {
     fs67 = __toESM(require("fs"));
-    path78 = __toESM(require("path"));
+    path79 = __toESM(require("path"));
     init_state();
     init_state();
     WAVE_STATUSES = /* @__PURE__ */ new Set(["pending", "active", "completed", "failed"]);
@@ -43315,7 +43324,7 @@ var init_runstart_preflight = __esm({
 
 // src/domains/lifecycle/write-task-run.ts
 function taskRunPath(cwd, runId, taskId) {
-  return path79.join(durableGuildDir(cwd), "runs", runId, "task-runs", `${taskId}.yaml`);
+  return path80.join(durableGuildDir(cwd), "runs", runId, "task-runs", `${taskId}.yaml`);
 }
 function writeTaskRun(cwd, runId, taskId, params) {
   const {
@@ -43389,7 +43398,7 @@ function writeTaskRun(cwd, runId, taskId, params) {
   });
   atomicWrite(outPath, yamlStr);
   try {
-    const _traceRunDir = path79.join(durableGuildDir(cwd), "runs", runId);
+    const _traceRunDir = path80.join(durableGuildDir(cwd), "runs", runId);
     const _traceTs = (/* @__PURE__ */ new Date()).toISOString();
     const _traceBackend = "unknown";
     emitTraceEvent(
@@ -43567,10 +43576,10 @@ function runWriteTaskRunCli(argv = process.argv.slice(2)) {
     process.exit(2);
   }
 }
-var path79;
+var path80;
 var init_write_task_run = __esm({
   "src/domains/lifecycle/write-task-run.ts"() {
-    path79 = __toESM(require("path"));
+    path80 = __toESM(require("path"));
     init_telemetry();
     init_kernel();
     init_state();
@@ -44033,15 +44042,15 @@ var init_learning_checkpoint_5 = __esm({
 });
 
 // src/domains/lifecycle/workflow-graph-load.ts
-var path80, PLUGIN_GRAPH_DIRS;
+var path81, PLUGIN_GRAPH_DIRS;
 var init_workflow_graph_load = __esm({
   "src/domains/lifecycle/workflow-graph-load.ts"() {
-    path80 = __toESM(require("node:path"));
+    path81 = __toESM(require("node:path"));
     init_kernel();
     init_state();
     init_workflow_graph_overlay();
     PLUGIN_GRAPH_DIRS = Object.freeze([
-      path80.join("src", "surfaces", "graphs"),
+      path81.join("src", "surfaces", "graphs"),
       "graphs"
     ]);
   }
@@ -44197,10 +44206,10 @@ function classifyProposal(input) {
   return { verdict: systemic ? "systemic" : "specific", outputs };
 }
 function parseFlag(argv, name) {
-  const eq = `--${name}=`;
+  const eq2 = `--${name}=`;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === `--${name}` && argv[i + 1] && !argv[i + 1].startsWith("--")) return argv[i + 1];
-    if (argv[i].startsWith(eq)) return argv[i].slice(eq.length);
+    if (argv[i].startsWith(eq2)) return argv[i].slice(eq2.length);
   }
   return void 0;
 }
@@ -52382,11 +52391,11 @@ var init_stack_contracts_generated = __esm({
 });
 
 // src/domains/lifecycle/initiative-evidence.ts
-function mapStatus(field, raw, canonical2, aliases) {
+function mapStatus(field, raw, canonical3, aliases) {
   if (typeof raw !== "string" || raw.length === 0) {
     return { value: null, warning: `${field}: missing \u2014 leg treated as unresolved` };
   }
-  if (canonical2.includes(raw)) return { value: raw };
+  if (canonical3.includes(raw)) return { value: raw };
   const aliased = aliases[raw];
   if (aliased !== void 0) {
     return {
@@ -52396,7 +52405,7 @@ function mapStatus(field, raw, canonical2, aliases) {
   }
   return {
     value: null,
-    warning: `${field}: unrecognized value "${raw}" (not in ${canonical2.join("|")}) \u2014 leg treated as unresolved`
+    warning: `${field}: unrecognized value "${raw}" (not in ${canonical3.join("|")}) \u2014 leg treated as unresolved`
   };
 }
 function buildD8Input(raw, execVerified) {
@@ -52419,7 +52428,7 @@ function buildD8Input(raw, execVerified) {
   return { input, warnings };
 }
 function isPathContained(rootPath, candidatePath) {
-  return candidatePath === rootPath || candidatePath.startsWith(rootPath + path81.sep);
+  return candidatePath === rootPath || candidatePath.startsWith(rootPath + path82.sep);
 }
 function evidencePathToken(rawRef) {
   if (/[\u0000-\u001f\u007f]/.test(rawRef)) return null;
@@ -52436,15 +52445,15 @@ function classifyEvidenceRef(root, source, rawRef) {
     return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref must be a path, not prose/control text" } };
   }
   const fileRef = normalizedRef.split("#", 1)[0];
-  if (!fileRef || path81.isAbsolute(fileRef)) {
+  if (!fileRef || path82.isAbsolute(fileRef)) {
     return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref must be repository-relative" } };
   }
   const segments = fileRef.split(/[\\/]/);
   if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
     return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref must be a canonical contained path" } };
   }
-  const rootAbs = path81.resolve(root);
-  const resolved = path81.resolve(rootAbs, fileRef);
+  const rootAbs = path82.resolve(root);
+  const resolved = path82.resolve(rootAbs, fileRef);
   if (!isPathContained(rootAbs, resolved)) {
     return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref escapes repository root" } };
   }
@@ -52475,7 +52484,7 @@ function checkInitiativeEvidenceRefs(root, initiativeDir, manifest) {
         continue;
       }
       try {
-        const rootReal = fs68.realpathSync.native(path81.resolve(root));
+        const rootReal = fs68.realpathSync.native(path82.resolve(root));
         const evidenceReal = fs68.realpathSync.native(classified.record.resolved_path);
         if (!isPathContained(rootReal, evidenceReal)) {
           invalid.push({
@@ -52512,7 +52521,7 @@ function checkInitiativeEvidenceRefs(root, initiativeDir, manifest) {
       consume("initiative.yaml#close_gate.evidence", closeGate["evidence"]);
     }
   }
-  const workItemsDir = path81.join(initiativeDir, "work-items");
+  const workItemsDir = path82.join(initiativeDir, "work-items");
   if (fs68.existsSync(workItemsDir)) {
     let names;
     try {
@@ -52544,7 +52553,7 @@ function checkInitiativeEvidenceRefs(root, initiativeDir, manifest) {
       const source = `work-items/${name}`;
       let parsed;
       try {
-        parsed = parseYaml(fs68.readFileSync(path81.join(workItemsDir, name), "utf8"));
+        parsed = parseYaml(fs68.readFileSync(path82.join(workItemsDir, name), "utf8"));
       } catch {
         invalid.push({ ref: name, source, reason: "work item is unreadable or malformed YAML" });
         continue;
@@ -52558,11 +52567,11 @@ function checkInitiativeEvidenceRefs(root, initiativeDir, manifest) {
   }
   return { valid: missing.length === 0 && invalid.length === 0, checked, missing, invalid };
 }
-var fs68, path81, EXECUTION_STATUS_ALIASES, DOCUMENTATION_STATUS_ALIASES, RELEASE_STATUS_ALIASES;
+var fs68, path82, EXECUTION_STATUS_ALIASES, DOCUMENTATION_STATUS_ALIASES, RELEASE_STATUS_ALIASES;
 var init_initiative_evidence = __esm({
   "src/domains/lifecycle/initiative-evidence.ts"() {
     fs68 = __toESM(require("node:fs"));
-    path81 = __toESM(require("node:path"));
+    path82 = __toESM(require("node:path"));
     init_state();
     init_state();
     init_initiative();
@@ -52645,11 +52654,11 @@ function p05ArtifactText(bytes, relative22) {
     return null;
   }
 }
-var fs69, path82, import_node_crypto4, P05_READS, P05_WRITES, EMPTY2, json, issue2, StackP05;
+var fs69, path83, import_node_crypto4, P05_READS, P05_WRITES, EMPTY2, json, issue2, StackP05;
 var init_stack_p05 = __esm({
   "src/domains/lifecycle/stack-p05.ts"() {
     fs69 = __toESM(require("node:fs"));
-    path82 = __toESM(require("node:path"));
+    path83 = __toESM(require("node:path"));
     import_node_crypto4 = require("node:crypto");
     init_state();
     init_security();
@@ -52664,9 +52673,9 @@ var init_stack_p05 = __esm({
     json = (v) => JSON.stringify(v, null, 2) + "\n";
     issue2 = (code, message) => ({ code, message, evidence: [] });
     StackP05 = class _StackP05 {
-      constructor(source, canonical2, now, overlays = /* @__PURE__ */ new Map(), snapshotOnly = false, validateSchema) {
+      constructor(source, canonical3, now, overlays = /* @__PURE__ */ new Map(), snapshotOnly = false, validateSchema) {
         this.source = source;
-        this.canonical = canonical2;
+        this.canonical = canonical3;
         this.now = now;
         this.overlays = overlays;
         this.snapshotOnly = snapshotOnly;
@@ -52897,9 +52906,9 @@ var init_stack_p05 = __esm({
         const files = this.canonicalInitiativeFiles(rel2);
         const evidencePaths = /* @__PURE__ */ new Set();
         const closeErrors = [];
-        const evidenceResult = checkInitiativeEvidenceRefs(this.source.realpath, path82.join(this.source.realpath, rel2), m ?? {});
+        const evidenceResult = checkInitiativeEvidenceRefs(this.source.realpath, path83.join(this.source.realpath, rel2), m ?? {});
         for (const rec of evidenceResult.checked) {
-          const p = path82.relative(this.source.realpath, rec.resolved_path);
+          const p = path83.relative(this.source.realpath, rec.resolved_path);
           try {
             stackContained(this.source.realpath, p);
             if (this.read(p) !== null)
@@ -52915,7 +52924,7 @@ var init_stack_p05 = __esm({
         for (const w of [...defs, ...works])
           for (const ref2 of w.evidence_refs ?? []) {
             try {
-              if (typeof ref2 !== "string" || path82.isAbsolute(ref2))
+              if (typeof ref2 !== "string" || path83.isAbsolute(ref2))
                 throw Error();
               const p = ref2.split("#")[0];
               stackContained(this.source.realpath, p);
@@ -53133,7 +53142,7 @@ var init_stack_p05 = __esm({
             if (changed && (!body.close_gate || !Array.isArray(body.close_gate.evidence) || body.close_gate.evidence.length === 0))
               throw new StackError("evidence_required", "Axis changes require cited evidence");
             for (const p of body.close_gate.evidence ?? []) {
-              if (typeof p !== "string" || path82.isAbsolute(p))
+              if (typeof p !== "string" || path83.isAbsolute(p))
                 throw new StackError("invalid_evidence", "Evidence must be repository-relative");
               stackContained(this.source.realpath, p.split("#")[0]);
               if (this.read(p.split("#")[0]) === null)
@@ -53341,7 +53350,7 @@ var init_stack_p05 = __esm({
         }
         if (op === "run.artifacts") {
           const r = items[0], rel2 = ".guild/" + r.data.path;
-          const files = this.files(rel2).filter((p) => !["binding.json", "session-context.json"].includes(path82.basename(p).toLowerCase()) && !/(?:^|[\/._-])(?:secret|secrets|credential|credentials|auth|token|env)(?:[\/._-]|$)/i.test(p));
+          const files = this.files(rel2).filter((p) => !["binding.json", "session-context.json"].includes(path83.basename(p).toLowerCase()) && !/(?:^|[\/._-])(?:secret|secrets|credential|credentials|auth|token|env)(?:[\/._-]|$)/i.test(p));
           const entries = [], issues = [];
           if (a.query && !files.some((p) => p.slice(7) === a.query))
             throw new StackError("invalid_artifact", "Artifact selector must be exact listed run path");
@@ -53456,7 +53465,7 @@ function managedLaunchHash(spec) {
   return stackHash(canonical(spec));
 }
 function runtimeRoot(root) {
-  if (!path83.isAbsolute(root)) throw new StackError("invalid_runtime", "Absolute managed runtime required");
+  if (!path84.isAbsolute(root)) throw new StackError("invalid_runtime", "Absolute managed runtime required");
   fs70.mkdirSync(root, { recursive: true, mode: 448 });
   if (fs70.lstatSync(root).isSymbolicLink()) throw new StackError("unsafe_runtime", "Linked managed runtime refused");
   fs70.chmodSync(root, 448);
@@ -53488,7 +53497,7 @@ function publish2(file, value, exclusive = false) {
       fs70.linkSync(temp, file);
       fs70.unlinkSync(temp);
     } else fs70.renameSync(temp, file);
-    syncDirectory(path83.dirname(file));
+    syncDirectory(path84.dirname(file));
   } finally {
     fs70.rmSync(temp, { force: true });
   }
@@ -53541,7 +53550,7 @@ function updateClaim(root, claim) {
 function prepareManagedWorker(runtime, input) {
   const claim = readManagedAttempt(runtime, input.identity.attempt_id);
   if (canonical(claim.identity) !== canonical(input.identity) || claim.state !== "claimed" || managedLaunchHash(input.launch) !== input.identity.launch_hash || new StackScope(input.sourceRoot).discover().root.source_id !== input.identity.source_id) throw new StackError("invalid_intent", "Managed worker request does not own this claim");
-  for (const file of [input.worker.node_binary, input.worker.entry]) if (!path83.isAbsolute(file) || fs70.realpathSync(file) !== file) throw new StackError("invalid_worker", "Fixed worker package path required");
+  for (const file of [input.worker.node_binary, input.worker.entry]) if (!path84.isAbsolute(file) || fs70.realpathSync(file) !== file) throw new StackError("invalid_worker", "Fixed worker package path required");
   if (stackHash(fs70.readFileSync(input.worker.node_binary)) !== input.worker.node_sha256 || stackHash(fs70.readFileSync(input.worker.entry)) !== input.worker.entry_sha256) throw new StackError("invalid_worker", "Worker executable pin changed");
   const target = claimPath(runtime, input.identity.attempt_id) + ".request";
   const request = { schema_version: "guild.stack.managed_private_request.v1", ...input };
@@ -53576,11 +53585,11 @@ function markManagedAttemptUncertain(runtime, identity) {
   if (canonical(claim.identity) !== canonical(identity)) throw new StackError("invalid_worker", "Uncertain worker identity differs");
   if (!claim.outcome && claim.state !== "recovery_needed") updateClaim(runtime, { ...claim, state: "recovery_needed" });
 }
-var fs70, path83, import_node_crypto5;
+var fs70, path84, import_node_crypto5;
 var init_managed_run = __esm({
   "src/domains/lifecycle/managed-run.ts"() {
     fs70 = __toESM(require("node:fs"));
-    path83 = __toESM(require("node:path"));
+    path84 = __toESM(require("node:path"));
     import_node_crypto5 = require("node:crypto");
     init_state();
     init_kernel();
@@ -53630,11 +53639,11 @@ function plain(value) {
 function stackManagedReview(record, reason) {
   return { native_session_id: record.native_session_id, budget_mode: record.launch.budget_mode ?? (record.launch.classification === "local_process_test" ? "no_model_test" : "strict"), cost_basis: record.launch.budget_mode === "native_estimated_spend_threshold" ? "api_equivalent_native_estimate" : "unknown", policy_sha256: record.launch.policy_sha256 ?? null, stage_hash: stackHash(stackCanonical(record.stage)), launch_hash: managedLaunchHash(record.launch), worker: record.worker, attempt_id: record.attempt_id, parent: record.parent, parent_attempt_id: record.parent_attempt_id ?? null, deadline_derivation: "admitted_at + max_duration_ms", budget_reason: reason };
 }
-var fs71, path84, import_node_crypto6, PREFIX, readOps, writeOps, stackPreviewHash, StackFacade;
+var fs71, path85, import_node_crypto6, PREFIX, readOps, writeOps, stackPreviewHash, StackFacade;
 var init_stack_operations = __esm({
   "src/domains/lifecycle/stack-operations.ts"() {
     fs71 = __toESM(require("node:fs"));
-    path84 = __toESM(require("node:path"));
+    path85 = __toESM(require("node:path"));
     import_node_crypto6 = require("node:crypto");
     init_state();
     init_config2();
@@ -53724,7 +53733,7 @@ var init_stack_operations = __esm({
       }
       saveRuntime(relative22, value, source) {
         const target = this.runtime(relative22, source);
-        fs71.mkdirSync(path84.dirname(target), { recursive: true, mode: 448 });
+        fs71.mkdirSync(path85.dirname(target), { recursive: true, mode: 448 });
         const temp = target + ".tmp-" + (0, import_node_crypto6.randomUUID)();
         const fd = fs71.openSync(temp, "wx", 384);
         try {
@@ -53735,7 +53744,7 @@ var init_stack_operations = __esm({
         }
         try {
           fs71.renameSync(temp, target);
-          const parent = fs71.openSync(path84.dirname(target), "r");
+          const parent = fs71.openSync(path85.dirname(target), "r");
           try {
             fs71.fsyncSync(parent);
           } finally {
@@ -54040,7 +54049,7 @@ var init_stack_operations = __esm({
                   data: redacted(data)
                 });
               } else walk(rel2, depth + 1);
-            } else if (st.isFile() && [".md", ".json", ".yaml", ".yml"].includes(path84.extname(name)) && name !== "registry.yaml") {
+            } else if (st.isFile() && [".md", ".json", ".yaml", ".yml"].includes(path85.extname(name)) && name !== "registry.yaml") {
               const text = stackRead(source.realpath, rel2);
               const id2 = (collection === "component" ? "component:" : "") + stackHash(rel2).slice(7, 39);
               const kind = collection === "component" ? rel2.includes("/agents/") ? "agent" : rel2.includes("/teams/") ? "team" : "skill" : collection;
@@ -54163,7 +54172,7 @@ var init_stack_operations = __esm({
       }
       lock(source, fn) {
         const p = this.runtime("writer.lock", source);
-        fs71.mkdirSync(path84.dirname(p), { recursive: true, mode: 448 });
+        fs71.mkdirSync(path85.dirname(p), { recursive: true, mode: 448 });
         try {
           fs71.mkdirSync(p, { mode: 448 });
         } catch (e) {
@@ -54182,7 +54191,7 @@ var init_stack_operations = __esm({
             let dead = false;
             try {
               const owner = JSON.parse(
-                fs71.readFileSync(path84.join(p, "owner.json"), "utf8")
+                fs71.readFileSync(path85.join(p, "owner.json"), "utf8")
               );
               if (Number.isInteger(owner.pid) && owner.pid > 0) {
                 try {
@@ -54217,7 +54226,7 @@ var init_stack_operations = __esm({
         }
         try {
           atomicWriteDurable(
-            path84.join(p, "owner.json"),
+            path85.join(p, "owner.json"),
             JSON.stringify({ pid: process.pid })
           );
           return fn();
@@ -54248,7 +54257,7 @@ var init_stack_operations = __esm({
           "staging/" + stackId(id2) + "-" + (0, import_node_crypto6.randomUUID)() + ".json",
           source
         );
-        fs71.mkdirSync(path84.dirname(staged), { recursive: true, mode: 448 });
+        fs71.mkdirSync(path85.dirname(staged), { recursive: true, mode: 448 });
         try {
           const screened = typed ? this.screenP05Bytes(source, bytes) : bytes;
           const result2 = scrubbedWrite(staged, screened, {
@@ -54264,8 +54273,8 @@ var init_stack_operations = __esm({
             );
           const checked = relativeToRoot ? stackContained(source.realpath, target, true) : target;
           atomicWriteDurable(checked, bytes);
-          let directory = path84.dirname(checked);
-          while (directory.startsWith(source.realpath + path84.sep) || directory === source.realpath) {
+          let directory = path85.dirname(checked);
+          while (directory.startsWith(source.realpath + path85.sep) || directory === source.realpath) {
             const fd = fs71.openSync(directory, "r");
             try {
               fs71.fsyncSync(fd);
@@ -54273,7 +54282,7 @@ var init_stack_operations = __esm({
               fs71.closeSync(fd);
             }
             if (directory === source.realpath) break;
-            directory = path84.dirname(directory);
+            directory = path85.dirname(directory);
           }
         } finally {
           try {
@@ -54855,7 +54864,7 @@ var init_stack_operations = __esm({
           if (!Array.isArray(items)) throw new StackError("invalid_evidence", "Evidence references must be arrays");
           for (let n = 0; n < items.length; n++) {
             const rel2 = items[n];
-            if (typeof rel2 !== "string" || path84.isAbsolute(rel2)) throw new StackError("invalid_evidence", "Evidence path must be relative");
+            if (typeof rel2 !== "string" || path85.isAbsolute(rel2)) throw new StackError("invalid_evidence", "Evidence path must be relative");
             stackContained(source.realpath, rel2.split("#")[0]);
             if (stackRead(source.realpath, rel2.split("#")[0]) === null) throw new StackError("missing_evidence", "Evidence is missing");
             items[n] = "path-" + ++seq;
@@ -54967,7 +54976,7 @@ var init_stack_operations = __esm({
           const operations = this.runtime("operations", source);
           if (fs71.existsSync(operations))
             for (const name of fs71.readdirSync(operations)) {
-              const old = JSON.parse(fs71.readFileSync(path84.join(operations, name), "utf8"));
+              const old = JSON.parse(fs71.readFileSync(path85.join(operations, name), "utf8"));
               if (["running", "recovery_needed"].includes(old.state))
                 throw new StackError("recovery_required", "Source has an unresolved writer", 409);
             }
@@ -55034,7 +55043,7 @@ var init_stack_operations = __esm({
         for (const w of record.writes)
           if (w.after_exists) {
             const staged = this.runtime("staging/" + (0, import_node_crypto6.randomUUID)() + ".json", source);
-            fs71.mkdirSync(path84.dirname(staged), { recursive: true, mode: 448 });
+            fs71.mkdirSync(path85.dirname(staged), { recursive: true, mode: 448 });
             try {
               const result2 = scrubbedWrite(staged, this.screenP05Bytes(source, w.after_bytes), { surface: "config", runDir: (this.storage(source).project ?? this.storage(source).workspace).artifact("operations"), runId: id2 });
               if (!result2.written || result2.blocked || fs71.readFileSync(staged, "utf8") !== this.screenP05Bytes(source, w.after_bytes))
@@ -55053,9 +55062,9 @@ var init_stack_operations = __esm({
           const from = stackContained(source.realpath, move.from), to = stackContained(source.realpath, move.to, true);
           if (fs71.existsSync(to))
             throw new StackError("destination_collision", "Move destination exists", 409);
-          fs71.mkdirSync(path84.dirname(to), { recursive: true });
+          fs71.mkdirSync(path85.dirname(to), { recursive: true });
           fs71.renameSync(from, to);
-          for (const dir of /* @__PURE__ */ new Set([path84.dirname(from), path84.dirname(to)])) {
+          for (const dir of /* @__PURE__ */ new Set([path85.dirname(from), path85.dirname(to)])) {
             const fd = fs71.openSync(dir, "r");
             try {
               fs71.fsyncSync(fd);
@@ -55155,7 +55164,7 @@ var init_stack_operations = __esm({
           if (resolved.launch.cwd !== source.realpath || resolved.launch.max_duration_ms !== args.max_duration_ms || resolved.launch.max_usd !== args.max_usd || resolved.launch.host_id !== args.host_id || resolved.launch.model !== args.model) throw new StackError("invalid_host_plan", "Host plan differs from reviewed arguments", 409);
           const env = createRealEnv(source.realpath, (requested) => ({ requested, resolved: resolved.launch.host_id.startsWith("claude") ? "claude" : "codex" }));
           env.now = () => this.now().toISOString();
-          const stage = createRunLifecycle(env).stageRunStart({ command: "/guild:build", arguments: { brief: args.brief, workflow: args.workflow.id }, cwd: source.realpath, root: source.realpath, target_kind: "existing_guild_project", workspace: { is_workspace: source.kind === "workspace", root: source.realpath }, project: path84.basename(source.realpath), host_requested: resolved.launch.host_id.startsWith("claude") ? "claude" : "codex", model_tier_policy: "explicit", ignore_policy: "project", scan_policy: "none", initiative: initiative?.ref.id ?? null, session_identity: { envelope_host: resolved.launch.host_id.startsWith("claude") ? "claude" : "codex", active_model: resolved.launch.model } }, { detached: true });
+          const stage = createRunLifecycle(env).stageRunStart({ command: "/guild:build", arguments: { brief: args.brief, workflow: args.workflow.id }, cwd: source.realpath, root: source.realpath, target_kind: "existing_guild_project", workspace: { is_workspace: source.kind === "workspace", root: source.realpath }, project: path85.basename(source.realpath), host_requested: resolved.launch.host_id.startsWith("claude") ? "claude" : "codex", model_tier_policy: "explicit", ignore_policy: "project", scan_policy: "none", initiative: initiative?.ref.id ?? null, session_identity: { envelope_host: resolved.launch.host_id.startsWith("claude") ? "claude" : "codex", active_model: resolved.launch.model } }, { detached: true });
           const id2 = "op-" + (0, import_node_crypto6.randomUUID)(), record = { schema_version: "guild.stack.managed_operation_journal.v1", native_session_id, stage, launch: resolved.launch, worker: resolved.worker, attempt_id: "attempt-" + (0, import_node_crypto6.randomUUID)(), parent: parent?.ref ?? null, parent_attempt_id: parent?.data.attempt?.attempt_id ?? null, state: "previewed", pid: null, apply_key: null, identity: null };
           const target = { source_id: source.source_id, kind: "run", id: stage.run_id, revision: stackHash("") }, review = this.managedReview(record);
           const p = { schema_version: "guild.stack.operation-preview.v1", operation_id: id2, operation: request.operation, session_id: session.session_id, source_id: source.source_id, targets: parent ? [parent.ref] : [target], dependencies: [workflow.ref, config.ref, ...initiative ? [initiative.ref] : []], arguments: args, diff: [{ target, before_hash: stackHash(""), after_hash: stackHash(stackCanonical(review)), patch: JSON.stringify(review) }], policy: { decision: "allowed", revision: this.policy(source).revision, reason: this.managed.policy_reason }, approval_required: true, preview_hash: "", scope_revision: source.revision, capability_revision: stackHash(stackCanonical(this.capabilities())), expires_at: new Date(Math.min(this.now().getTime() + 6e5, Date.parse(session.expires_at))).toISOString(), rollback: "handoff", budget: { max_usd: args.max_usd, max_duration_ms: args.max_duration_ms } };
@@ -59968,8 +59977,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path88) {
-      let input = path88;
+    function removeDotSegments(path89) {
+      let input = path89;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -60043,11 +60052,11 @@ var require_utils = __commonJS({
       }
       return output.join("");
     }
-    function removeDotSegmentsRelative(path88) {
-      if (path88 === "" || path88[0] === "/") {
-        return removeDotSegments(path88);
+    function removeDotSegmentsRelative(path89) {
+      if (path89 === "" || path89[0] === "/") {
+        return removeDotSegments(path89);
       }
-      const segments = path88.split("/");
+      const segments = path89.split("/");
       const last = segments.length - 1;
       const output = [];
       let trailingDirectory = false;
@@ -60410,8 +60419,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path88 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path88 && path88 !== "/" ? path88 : void 0;
+        const path89 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path89 && path89 !== "/" ? path89 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -64379,9 +64388,9 @@ var require_formats = __commonJS({
       return res || compareTime(t1, t2);
     }
     var NOT_URI_FRAGMENT = /\/|:/;
-    var URI = /^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:){0,1}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)|[Vv][0-9a-f]+\.[a-z0-9\-._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)|(?:[a-z0-9\-._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)(?:\?(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i;
+    var URI2 = /^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:){0,1}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)|[Vv][0-9a-f]+\.[a-z0-9\-._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)|(?:[a-z0-9\-._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)(?:\?(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i;
     function uri(str3) {
-      return NOT_URI_FRAGMENT.test(str3) && URI.test(str3);
+      return NOT_URI_FRAGMENT.test(str3) && URI2.test(str3);
     }
     var BYTE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/gm;
     function byte(str3) {
@@ -64779,11 +64788,8166 @@ var require_dist = __commonJS({
 // scripts/stack-operations.ts
 var stack_operations_exports = {};
 __export(stack_operations_exports, {
-  main: () => main6
+  main: () => main6,
+  readContractAction: () => readContractAction
 });
 module.exports = __toCommonJS(stack_operations_exports);
-var path87 = __toESM(require("node:path"));
+var path88 = __toESM(require("node:path"));
 init_lifecycle();
+
+// src/domains/lifecycle/stack-contract-reader.ts
+var import_node_crypto7 = require("node:crypto");
+init_stack_contracts_generated();
+
+// src/domains/lifecycle/stack-contracts.v2.generated.json
+var stack_contracts_v2_generated_default = {
+  contract_bundle: {
+    schema_version: "guild.stack.contract_bundle.v2",
+    protocol_major: 2,
+    status: "schema_contract_only_no_runtime_capability",
+    hash_algorithm: "SHA-256 over file bytes",
+    wire_canonicalization: "RFC8785",
+    schema_registry: "schema-registry.json",
+    metric_catalog: "metric-catalog.json",
+    semantic_validator: "verify_contracts.py",
+    fixture_version: "guild.stack.fixtures.v2.1",
+    types: "types.generated.ts",
+    files: [
+      {
+        file: "build_schemas.py",
+        sha256: "sha256:5521dc111d64b2f0da69cf345aec338d3e1fcfd36e51f25f8d7547190879a65e",
+        bytes: 40813
+      },
+      {
+        file: "build_test_fixtures.py",
+        sha256: "sha256:908168ebf3f1919e24e7b75dec6f246707a7bb38dfb9699660896a9111d283c0",
+        bytes: 76658
+      },
+      {
+        file: "distribute_contracts.py",
+        sha256: "sha256:c0e87af0c6b0053cd73fdfe3031bd02aa7f37a7b775ae5a5353d91785b3aac5a",
+        bytes: 1675
+      },
+      {
+        file: "fixtures/cases.json",
+        sha256: "sha256:6bcdb72135d90e9e18dfed1ed720bc80c50c344428a3046a594a9501a72c7763",
+        bytes: 446941
+      },
+      {
+        file: "fixtures/examples.json",
+        sha256: "sha256:65d31e50c7d8afea211952877fa9e345c57a3072634d65ccd22498d9b2c6c201",
+        bytes: 60776
+      },
+      {
+        file: "fixtures/golden.json",
+        sha256: "sha256:ae61c5e89e8a2ae104a99871edc13f64229152f020ff4bc4ed7bc9f29ba6020d",
+        bytes: 2440191
+      },
+      {
+        file: "fixtures/regressions.json",
+        sha256: "sha256:18ef72473b5101bddb3f1263ad086b951509dfbf8d57e9807ee55d0f1374b69c",
+        bytes: 771210
+      },
+      {
+        file: "generate_bundle.py",
+        sha256: "sha256:d6e31ef653219be55d1aa226bc807dcdc3e53c3695e4d679b7f0a339a2b9f837",
+        bytes: 4347
+      },
+      {
+        file: "metric-catalog.json",
+        sha256: "sha256:08a3f43bf735d4a29b5fb4a00556a50a4a66a6ddc52d18b2b9407e9241e452cb",
+        bytes: 80949
+      },
+      {
+        file: "operation-catalog.json",
+        sha256: "sha256:33b9b77925020b02faa8722bb8c6c1431007de66298b18daa4a6b71f44f52a47",
+        bytes: 7243
+      },
+      {
+        file: "requirements-test.txt",
+        sha256: "sha256:61b1d634b50150b323b6e8d430cbe00041db5fe2d01209ccad71abf568ef492f",
+        bytes: 42
+      },
+      {
+        file: "schema-registry.json",
+        sha256: "sha256:f7ddc08a5169309354f50d11f8da8ef5e5b332a745d4d37ce3a4dfc70a3db705",
+        bytes: 8156
+      },
+      {
+        file: "schemas/approval-record.schema.json",
+        sha256: "sha256:8324d63e56847104ea78a51da6785d30a46226c003253b48d81a6ff9e8c627a2",
+        bytes: 1702
+      },
+      {
+        file: "schemas/capability-manifest.schema.json",
+        sha256: "sha256:ca5f6d72cf6a2d0c14b8f867ee31d77c2ca01d10b80b596d61da0f151a45102a",
+        bytes: 4032
+      },
+      {
+        file: "schemas/common.schema.json",
+        sha256: "sha256:5a1ae49eb04044d4fd7098d3375d20fc42a7300d079b2fa3b71a038879e97e19",
+        bytes: 27360
+      },
+      {
+        file: "schemas/entity-evidence.schema.json",
+        sha256: "sha256:3b1abf59295818d0864eca87c4020344c4a40f3288be355e88167c77fe5c8d70",
+        bytes: 891
+      },
+      {
+        file: "schemas/evaluation-manifest.schema.json",
+        sha256: "sha256:320a64047687769a7be78bfd16fca5727f03c57c092c9cb2daf1e41dbbde0b89",
+        bytes: 5001
+      },
+      {
+        file: "schemas/execution-lineage.schema.json",
+        sha256: "sha256:0f14dce9efa64821594b5d5bf5f7c8b481a98ad88e52fc4bc031263f3d7e0d3e",
+        bytes: 3840
+      },
+      {
+        file: "schemas/execution-segment.schema.json",
+        sha256: "sha256:67d41fbafb07e6ba451a75bd260200cce334c4e082dd10653462f31e721bf0c3",
+        bytes: 2022
+      },
+      {
+        file: "schemas/followup-transfer.schema.json",
+        sha256: "sha256:df570c40b95da1f8e647c1c595fb51a0e51335a33a86a726afe612954a8bee1d",
+        bytes: 2706
+      },
+      {
+        file: "schemas/knowledge-publication.schema.json",
+        sha256: "sha256:6e420e6d57b413bb5bb245e04f00776a0d51d1dba693854ae1603adef63948a5",
+        bytes: 4382
+      },
+      {
+        file: "schemas/logical-run.schema.json",
+        sha256: "sha256:1747fe8b3871cf0e1eb02df3629640162a7275c82251f6eaf4a5f93db960aa97",
+        bytes: 3485
+      },
+      {
+        file: "schemas/metric-drilldown.schema.json",
+        sha256: "sha256:256a89ca64e333219c46b22457e2ecf77c07672a48d3706629cd5c5bfcd7c0db",
+        bytes: 4867
+      },
+      {
+        file: "schemas/metric-series.schema.json",
+        sha256: "sha256:58ce3e2fefda0b768595b54184e8534ad5ea380cb4d4a2e8cfe0fcefb8c5cf77",
+        bytes: 12801
+      },
+      {
+        file: "schemas/negotiation.schema.json",
+        sha256: "sha256:0bb05547c81d0f8a9c49cb023b6e967d2e636eaccd018e6fb829060b94b85e3c",
+        bytes: 1812
+      },
+      {
+        file: "schemas/operation-arguments.schema.json",
+        sha256: "sha256:96bd898e0a6395164010bd5d928da38a0b17bc836cfe23a14a75b0e6eab637cb",
+        bytes: 3203
+      },
+      {
+        file: "schemas/operation-preview.schema.json",
+        sha256: "sha256:7160f68dc8b41977c52fcfb3bda90fc6397abf0b6d7360ca5e8aba858a6b2629",
+        bytes: 4097
+      },
+      {
+        file: "schemas/operation-receipt.schema.json",
+        sha256: "sha256:7a79fc3b2ae7965287c4187ffd01d825541098b1df6b42102c7dd5d439a26149",
+        bytes: 2517
+      },
+      {
+        file: "schemas/read-projection.schema.json",
+        sha256: "sha256:80799f2e58880934012584d6caca577902a4432eef3629b97182346e98adc689",
+        bytes: 2406
+      },
+      {
+        file: "schemas/read-request.schema.json",
+        sha256: "sha256:4ee9a2dd75223924bb1a67a954bda2b69277d2b7b542784c5ee97f8bf18fada1",
+        bytes: 1584
+      },
+      {
+        file: "schemas/refusal.schema.json",
+        sha256: "sha256:3de4be3d6c7b8c74d66d0e68d7ac1c99a18a7c57364320c0fe0792a62298d962",
+        bytes: 1515
+      },
+      {
+        file: "schemas/report-manifest.schema.json",
+        sha256: "sha256:49926f42f0ae26d84cf8c91f0c3a30f5c99e094d8fbe95dc8cc816f349f47050",
+        bytes: 3017
+      },
+      {
+        file: "schemas/run-analysis.schema.json",
+        sha256: "sha256:dbeae40e2af97c456a792c6cad43d283aec101f9be4baac79fac6bec3e14fcff",
+        bytes: 2693
+      },
+      {
+        file: "schemas/run-binding.schema.json",
+        sha256: "sha256:238478375eee4041a46f0694602deb7195c1d36a9605723643cbe4c9fbd89f54",
+        bytes: 1674
+      },
+      {
+        file: "schemas/run-comparison.schema.json",
+        sha256: "sha256:3f892a1089ae0c63c1616e02b2138511e3116eb5b259d6f93871c610810dfc0d",
+        bytes: 2097
+      },
+      {
+        file: "schemas/scope-session.schema.json",
+        sha256: "sha256:2347d57e04e39a40342b63152a274d7654ae96668357d8eb64a5d6295cba0fb6",
+        bytes: 4241
+      },
+      {
+        file: "schemas/task-assignment.schema.json",
+        sha256: "sha256:592d5929a1dfa8dc45e683ead4ff42ba2979ecfde588d5c75e60478740dd27f1",
+        bytes: 2015
+      },
+      {
+        file: "schemas/task-attempt.schema.json",
+        sha256: "sha256:db00d4ff122b397cc152148e64b7668f3f0dce3f0aaa1266dead1528e92b3476",
+        bytes: 1777
+      },
+      {
+        file: "schemas/trace-analysis.schema.json",
+        sha256: "sha256:f515c8e5e2f35313eda48ecd497754dc1abf65ff95929b4cee39d5d8274e391c",
+        bytes: 3511
+      },
+      {
+        file: "schemas/workflow-projection.schema.json",
+        sha256: "sha256:08b2a3383292a88bcb89c87631f6631b61359b311e9f026ef5895496b07142da",
+        bytes: 10220
+      },
+      {
+        file: "storage-contract.json",
+        sha256: "sha256:560254e3b4c97474b6a4a0b5881c59d3599d3008f7a0920f25dd43fad667a29e",
+        bytes: 1741
+      },
+      {
+        file: "test_contracts.py",
+        sha256: "sha256:9affe30a3fb8302864b9765934c4db7101f93adf83c48911c399b02ead852e08",
+        bytes: 10406
+      },
+      {
+        file: "test_golden_fixtures.py",
+        sha256: "sha256:9dc359d0fb467f9c6161ec0118b3bac9f627a340e9535774fbf4f10e5f79821e",
+        bytes: 23449
+      },
+      {
+        file: "types.generated.ts",
+        sha256: "sha256:2ed2f25b74797eda14ee1499279617d791cde0954c0e28af108c633592a6bd3b",
+        bytes: 34629
+      },
+      {
+        file: "verify_contracts.py",
+        sha256: "sha256:a4713989e9e4e6ce6dfeac593778b274c1c43cffaae2359484e9dfe33e0dec04",
+        bytes: 34475
+      }
+    ],
+    v1_immutable_bundle_sha256: "sha256:5ab984d07370dc18e226c3d74ab5ac2250426fed26e79e68f258a8fe2415ad04",
+    migration: "A04 installed reader-only compatibility before new writer activation; no v1 identity rewrite or cache reuse",
+    required_gates: [
+      "A02 mutually verified freeze",
+      "A04 installed readers",
+      "R04/R05 for logical-run launch/close",
+      "K05 capable retrieval instrumentation before T04/U03/U04 claims"
+    ]
+  },
+  schemas: {
+    "approval-record.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/approval-record.schema.json",
+      title: "C5 ApprovalRecord v2",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.stack.approval-record.v2"
+        },
+        decision_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        operation_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        source_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        session_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        preview_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        authority: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/authority"
+        },
+        decision: {
+          enum: [
+            "approved",
+            "rejected",
+            "revise"
+          ]
+        },
+        actor_label: {
+          type: "string",
+          minLength: 1,
+          maxLength: 4096
+        },
+        at: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/time"
+        },
+        rationale: {
+          type: "string",
+          minLength: 1,
+          maxLength: 4096
+        }
+      },
+      required: [
+        "schema_version",
+        "decision_id",
+        "operation_id",
+        "source_id",
+        "session_id",
+        "preview_hash",
+        "authority",
+        "decision",
+        "actor_label",
+        "at",
+        "rationale"
+      ],
+      additionalProperties: false
+    },
+    "capability-manifest.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/capability-manifest.schema.json",
+      title: "C7 CapabilityManifest v2",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.stack.capability-manifest.v2"
+        },
+        source_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        package_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        revision: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        supported_contracts: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              schema_id: {
+                type: "string",
+                format: "uri"
+              },
+              schema_version: {
+                type: "string",
+                minLength: 1,
+                maxLength: 4096
+              },
+              mode: {
+                enum: [
+                  "read",
+                  "write",
+                  "read_write"
+                ]
+              }
+            },
+            required: [
+              "schema_id",
+              "schema_version",
+              "mode"
+            ],
+            additionalProperties: false
+          },
+          minItems: 1,
+          maxItems: 100
+        },
+        operations: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              operation: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              input_schema_id: {
+                type: "string",
+                format: "uri"
+              },
+              output_schema_id: {
+                type: "string",
+                format: "uri"
+              },
+              availability: {
+                enum: [
+                  "available",
+                  "unavailable"
+                ]
+              },
+              reason: {
+                anyOf: [
+                  {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 4096
+                  },
+                  {
+                    type: "null"
+                  }
+                ]
+              },
+              qualification: {
+                anyOf: [
+                  {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+                  },
+                  {
+                    type: "null"
+                  }
+                ]
+              }
+            },
+            required: [
+              "operation",
+              "input_schema_id",
+              "output_schema_id",
+              "availability",
+              "reason",
+              "qualification"
+            ],
+            additionalProperties: false
+          },
+          minItems: 0,
+          maxItems: 200
+        },
+        host_observations: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              host_id: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              capabilities_hash: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+              },
+              observed_at: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/time"
+              },
+              losses: {
+                type: "array",
+                items: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                },
+                minItems: 0,
+                maxItems: 50
+              }
+            },
+            required: [
+              "host_id",
+              "capabilities_hash",
+              "observed_at",
+              "losses"
+            ],
+            additionalProperties: false
+          },
+          minItems: 0,
+          maxItems: 100
+        }
+      },
+      required: [
+        "schema_version",
+        "source_id",
+        "package_hash",
+        "revision",
+        "supported_contracts",
+        "operations",
+        "host_observations"
+      ],
+      additionalProperties: false
+    },
+    "common.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json",
+      $defs: {
+        id: {
+          type: "string",
+          pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        hash: {
+          type: "string",
+          pattern: "^sha256:[a-f0-9]{64}$"
+        },
+        time: {
+          type: "string",
+          format: "date-time"
+        },
+        relative_path: {
+          type: "string",
+          maxLength: 1024,
+          pattern: "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[\\\\%\\x00-\\x1f])[^:]+$",
+          minLength: 1
+        },
+        kind: {
+          enum: [
+            "initiative",
+            "run",
+            "execution",
+            "host_session",
+            "goal",
+            "logical_task",
+            "task_attempt",
+            "agent_instance",
+            "request",
+            "operation",
+            "decision",
+            "workflow",
+            "component",
+            "invocation",
+            "obligation",
+            "memory",
+            "knowledge",
+            "candidate",
+            "agent",
+            "skill",
+            "tool",
+            "team",
+            "loop",
+            "config",
+            "evaluation",
+            "report",
+            "benchmark_case",
+            "transfer",
+            "query"
+          ]
+        },
+        entity: {
+          type: "object",
+          properties: {
+            source_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            kind: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/kind"
+            },
+            id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            revision: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            }
+          },
+          required: [
+            "source_id",
+            "kind",
+            "id",
+            "revision"
+          ],
+          additionalProperties: false
+        },
+        evidence: {
+          type: "object",
+          properties: {
+            source_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            path: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/relative_path"
+            },
+            sha256: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            schema_version: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            observed_at: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/time"
+            },
+            availability: {
+              enum: [
+                "available",
+                "expired",
+                "redacted",
+                "missing",
+                "unsupported"
+              ]
+            },
+            reason: {
+              anyOf: [
+                {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                },
+                {
+                  type: "null"
+                }
+              ]
+            }
+          },
+          required: [
+            "source_id",
+            "path",
+            "sha256",
+            "schema_version",
+            "observed_at",
+            "availability",
+            "reason"
+          ],
+          additionalProperties: false
+        },
+        version_set: {
+          type: "object",
+          properties: {
+            schema: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            analyzer: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            normalizer: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            formula: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            usage_semantics: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            pricing: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            aggregation: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            }
+          },
+          required: [
+            "schema",
+            "analyzer",
+            "normalizer",
+            "formula",
+            "usage_semantics",
+            "pricing",
+            "aggregation"
+          ],
+          additionalProperties: false
+        },
+        snapshot: {
+          type: "object",
+          properties: {
+            input_manifest_digest: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            source_ids: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              minItems: 1,
+              maxItems: 100,
+              uniqueItems: true
+            },
+            source_generations: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  source_id: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+                  },
+                  generation: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+                  }
+                },
+                required: [
+                  "source_id",
+                  "generation"
+                ],
+                additionalProperties: false
+              },
+              minItems: 1,
+              maxItems: 100
+            },
+            as_of: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/time"
+            }
+          },
+          required: [
+            "input_manifest_digest",
+            "source_ids",
+            "source_generations",
+            "as_of"
+          ],
+          additionalProperties: false
+        },
+        coverage: {
+          type: "object",
+          properties: {
+            eligible: {
+              anyOf: [
+                {
+                  type: "integer",
+                  minimum: 0
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            covered: {
+              type: "integer",
+              minimum: 0
+            },
+            excluded: {
+              type: "integer",
+              minimum: 0
+            },
+            missing: {
+              anyOf: [
+                {
+                  type: "integer",
+                  minimum: 0
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            state: {
+              enum: [
+                "complete",
+                "partial",
+                "unavailable"
+              ]
+            },
+            reason: {
+              anyOf: [
+                {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            exclusion_reasons: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  code: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+                  },
+                  count: {
+                    type: "integer",
+                    minimum: 0
+                  }
+                },
+                required: [
+                  "code",
+                  "count"
+                ],
+                additionalProperties: false
+              },
+              minItems: 0,
+              maxItems: 100
+            }
+          },
+          required: [
+            "eligible",
+            "covered",
+            "excluded",
+            "missing",
+            "state",
+            "reason",
+            "exclusion_reasons"
+          ],
+          additionalProperties: false
+        },
+        lineage: {
+          type: "object",
+          properties: {
+            source_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            run_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            execution_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            host_session_id: {
+              anyOf: [
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            initiative_id: {
+              anyOf: [
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            goal_id: {
+              anyOf: [
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            logical_task_id: {
+              anyOf: [
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            attempt_id: {
+              anyOf: [
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            agent_instance_id: {
+              anyOf: [
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            request_id: {
+              anyOf: [
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            }
+          },
+          required: [
+            "source_id",
+            "run_id",
+            "execution_id",
+            "host_session_id",
+            "initiative_id",
+            "goal_id",
+            "logical_task_id",
+            "attempt_id",
+            "agent_instance_id",
+            "request_id"
+          ],
+          additionalProperties: false
+        },
+        observed_identity: {
+          type: "object",
+          properties: {
+            provider: {
+              anyOf: [
+                {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            model: {
+              anyOf: [
+                {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            status: {
+              enum: [
+                "observed",
+                "unavailable"
+              ]
+            },
+            reason: {
+              anyOf: [
+                {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                },
+                {
+                  type: "null"
+                }
+              ]
+            }
+          },
+          required: [
+            "provider",
+            "model",
+            "status",
+            "reason"
+          ],
+          additionalProperties: false
+        },
+        pins: {
+          type: "object",
+          properties: {
+            assignment: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            definition: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            configuration: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            workflow: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            policy: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            }
+          },
+          required: [
+            "assignment",
+            "definition",
+            "configuration",
+            "workflow",
+            "policy"
+          ],
+          additionalProperties: false
+        },
+        clock: {
+          type: "object",
+          properties: {
+            domain: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            basis: {
+              enum: [
+                "controller",
+                "local_monotonic",
+                "provider",
+                "unknown"
+              ]
+            },
+            comparable: {
+              type: "boolean"
+            },
+            skew_bound_ms: {
+              anyOf: [
+                {
+                  type: "number",
+                  minimum: 0
+                },
+                {
+                  type: "null"
+                }
+              ]
+            }
+          },
+          required: [
+            "domain",
+            "basis",
+            "comparable",
+            "skew_bound_ms"
+          ],
+          additionalProperties: false
+        },
+        interval: {
+          type: "object",
+          properties: {
+            start: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/time"
+            },
+            end: {
+              anyOf: [
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/time"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            duration_ms: {
+              anyOf: [
+                {
+                  type: "number",
+                  minimum: 0
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            clock: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/clock"
+            }
+          },
+          required: [
+            "start",
+            "end",
+            "duration_ms",
+            "clock"
+          ],
+          additionalProperties: false
+        },
+        state_axes: {
+          type: "object",
+          properties: {
+            lifecycle: {
+              enum: [
+                "created",
+                "active",
+                "suspended",
+                "closed",
+                "unknown"
+              ]
+            },
+            outcome: {
+              enum: [
+                "pending",
+                "succeeded",
+                "failed",
+                "cancelled",
+                "partial",
+                "unknown"
+              ]
+            },
+            acceptance: {
+              enum: [
+                "pending",
+                "verified",
+                "rejected",
+                "not_required",
+                "unknown"
+              ]
+            },
+            observability: {
+              enum: [
+                "complete",
+                "partial",
+                "unavailable"
+              ]
+            }
+          },
+          required: [
+            "lifecycle",
+            "outcome",
+            "acceptance",
+            "observability"
+          ],
+          additionalProperties: false
+        },
+        usage: {
+          type: "object",
+          properties: {
+            granularity: {
+              enum: [
+                "leaf_request",
+                "native_session"
+              ]
+            },
+            observation_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            revision: {
+              type: "integer",
+              minimum: 0
+            },
+            final: {
+              type: "boolean"
+            },
+            accounting_identity: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            parent_accounting_identity: {
+              anyOf: [
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            inclusion: {
+              enum: [
+                "leaf_exclusive",
+                "parent_inclusive",
+                "session_cumulative"
+              ]
+            },
+            input_inclusive: {
+              anyOf: [
+                {
+                  type: "integer",
+                  minimum: 0
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            output: {
+              anyOf: [
+                {
+                  type: "integer",
+                  minimum: 0
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            cache_read_subset: {
+              anyOf: [
+                {
+                  type: "integer",
+                  minimum: 0
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            cache_write_subset: {
+              anyOf: [
+                {
+                  type: "integer",
+                  minimum: 0
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            total: {
+              anyOf: [
+                {
+                  type: "integer",
+                  minimum: 0
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            cost_usd: {
+              anyOf: [
+                {
+                  type: "number",
+                  minimum: 0
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            cost_basis: {
+              enum: [
+                "measured",
+                "derived_estimate",
+                "native_estimate",
+                "unavailable"
+              ]
+            },
+            currency: {
+              const: "USD"
+            },
+            pricing_version: {
+              anyOf: [
+                {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            usage_semantics: {
+              enum: [
+                "inclusive_input_cache_subset.v1",
+                "provider_session_only.v1",
+                "unknown"
+              ]
+            },
+            coverage: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/coverage"
+            },
+            native_baseline_usd: {
+              anyOf: [
+                {
+                  type: "number",
+                  minimum: 0
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            native_cumulative_usd: {
+              anyOf: [
+                {
+                  type: "number",
+                  minimum: 0
+                },
+                {
+                  type: "null"
+                }
+              ]
+            }
+          },
+          required: [
+            "granularity",
+            "observation_id",
+            "revision",
+            "final",
+            "accounting_identity",
+            "parent_accounting_identity",
+            "inclusion",
+            "input_inclusive",
+            "output",
+            "cache_read_subset",
+            "cache_write_subset",
+            "total",
+            "cost_usd",
+            "cost_basis",
+            "currency",
+            "pricing_version",
+            "usage_semantics",
+            "coverage",
+            "native_baseline_usd",
+            "native_cumulative_usd"
+          ],
+          additionalProperties: false
+        },
+        budget: {
+          type: "object",
+          properties: {
+            mode: {
+              enum: [
+                "strict_verified",
+                "native_spend_threshold"
+              ]
+            },
+            threshold_usd: {
+              type: "number",
+              minimum: 0
+            },
+            duration_limit_ms: {
+              type: "integer",
+              minimum: 1
+            },
+            overshoot_possible: {
+              type: "boolean"
+            },
+            qualification: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+            },
+            policy_hash: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            }
+          },
+          required: [
+            "mode",
+            "threshold_usd",
+            "duration_limit_ms",
+            "overshoot_possible",
+            "qualification",
+            "policy_hash"
+          ],
+          additionalProperties: false
+        },
+        authority: {
+          type: "object",
+          properties: {
+            controller_source_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            controller_epoch: {
+              type: "integer",
+              minimum: 0
+            },
+            execution_id: {
+              anyOf: [
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            attempt_id: {
+              anyOf: [
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            writer_scope_hash: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            source_disposition_revision: {
+              anyOf: [
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            }
+          },
+          required: [
+            "controller_source_id",
+            "controller_epoch",
+            "execution_id",
+            "attempt_id",
+            "writer_scope_hash",
+            "source_disposition_revision"
+          ],
+          additionalProperties: false
+        },
+        query_identity: {
+          type: "object",
+          properties: {
+            schema_version: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            versions: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/version_set"
+            },
+            snapshot: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/snapshot"
+            },
+            grain: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/kind"
+            },
+            filters: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  dimension: {
+                    enum: [
+                      "initiative",
+                      "run",
+                      "execution",
+                      "phase",
+                      "goal",
+                      "task",
+                      "attempt",
+                      "agent",
+                      "host",
+                      "requested_model",
+                      "observed_model",
+                      "workflow_revision",
+                      "config",
+                      "case",
+                      "scorer",
+                      "pair",
+                      "applied_revision",
+                      "knowledge_channel",
+                      "generation"
+                    ]
+                  },
+                  values: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096
+                    },
+                    minItems: 1,
+                    maxItems: 100,
+                    uniqueItems: true
+                  }
+                },
+                required: [
+                  "dimension",
+                  "values"
+                ],
+                additionalProperties: false
+              },
+              minItems: 0,
+              maxItems: 50
+            },
+            window: {
+              type: "object",
+              properties: {
+                from: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/time"
+                },
+                to: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/time"
+                },
+                basis: {
+                  enum: [
+                    "activity_completed",
+                    "accepted_outcome_cohort",
+                    "as_of_snapshot"
+                  ]
+                },
+                timezone: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                }
+              },
+              required: [
+                "from",
+                "to",
+                "basis",
+                "timezone"
+              ],
+              additionalProperties: false
+            },
+            cohort_hash: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            underlying_scalar: {
+              anyOf: [
+                {
+                  type: "object",
+                  properties: {
+                    metric_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+                    },
+                    formula_version: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096
+                    }
+                  },
+                  required: [
+                    "metric_id",
+                    "formula_version"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "null"
+                }
+              ]
+            }
+          },
+          required: [
+            "schema_version",
+            "versions",
+            "snapshot",
+            "grain",
+            "filters",
+            "window",
+            "cohort_hash",
+            "underlying_scalar"
+          ],
+          additionalProperties: false
+        },
+        publication_basis: {
+          type: "object",
+          properties: {
+            commit: {
+              anyOf: [
+                {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            tree: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            dirty_blob_manifest: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            file_inventory: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            resolver_policy: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            scan_policy: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            source_worktree_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            }
+          },
+          required: [
+            "commit",
+            "tree",
+            "dirty_blob_manifest",
+            "file_inventory",
+            "resolver_policy",
+            "scan_policy",
+            "source_worktree_id"
+          ],
+          additionalProperties: false
+        },
+        error: {
+          type: "object",
+          properties: {
+            code: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            message: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            retryable: {
+              type: "boolean"
+            }
+          },
+          required: [
+            "code",
+            "message",
+            "retryable"
+          ],
+          additionalProperties: false
+        }
+      }
+    },
+    "entity-evidence.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/entity-evidence.schema.json",
+      title: "C2 EntityEvidence v2",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.stack.entity-evidence.v2"
+        },
+        entity: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+        },
+        evidence: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+          },
+          minItems: 0,
+          maxItems: 100
+        },
+        snapshot: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/snapshot"
+        }
+      },
+      required: [
+        "schema_version",
+        "entity",
+        "evidence",
+        "snapshot"
+      ],
+      additionalProperties: false
+    },
+    "evaluation-manifest.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/evaluation-manifest.schema.json",
+      title: "C10 EvaluationManifest v2",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.stack.evaluation-manifest.v2"
+        },
+        evaluation: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+        },
+        cases: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              case_id: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              case_version: {
+                type: "string",
+                minLength: 1,
+                maxLength: 4096
+              },
+              scorer_version: {
+                type: "string",
+                minLength: 1,
+                maxLength: 4096
+              },
+              input_hash: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+              },
+              difficulty: {
+                anyOf: [
+                  {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 4096
+                  },
+                  {
+                    type: "null"
+                  }
+                ]
+              }
+            },
+            required: [
+              "case_id",
+              "case_version",
+              "scorer_version",
+              "input_hash",
+              "difficulty"
+            ],
+            additionalProperties: false
+          },
+          minItems: 1,
+          maxItems: 1e3
+        },
+        pairing: {
+          type: "object",
+          properties: {
+            baseline_revision: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            candidate_revision: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            pair_ids: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              minItems: 0,
+              maxItems: 1e3,
+              uniqueItems: true
+            },
+            seed_policy: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            repetition_count: {
+              type: "integer",
+              minimum: 1
+            },
+            quality_floor: {
+              anyOf: [
+                {
+                  type: "number"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            }
+          },
+          required: [
+            "baseline_revision",
+            "candidate_revision",
+            "pair_ids",
+            "seed_policy",
+            "repetition_count",
+            "quality_floor"
+          ],
+          additionalProperties: false
+        },
+        configuration_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        requested_model: {
+          type: "string",
+          minLength: 1,
+          maxLength: 4096
+        },
+        observed_identity: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/observed_identity"
+        },
+        applied_revision: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        linked_runs: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+          },
+          minItems: 0,
+          maxItems: 1e3
+        },
+        accounting_identities: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+          },
+          minItems: 0,
+          maxItems: 1e3,
+          uniqueItems: true
+        },
+        query: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/query_identity"
+        },
+        budget: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/budget"
+        },
+        coverage: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/coverage"
+        },
+        artifacts: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+          },
+          minItems: 0,
+          maxItems: 1e3
+        },
+        receipt: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+        }
+      },
+      required: [
+        "schema_version",
+        "evaluation",
+        "cases",
+        "pairing",
+        "configuration_hash",
+        "requested_model",
+        "observed_identity",
+        "applied_revision",
+        "linked_runs",
+        "accounting_identities",
+        "query",
+        "budget",
+        "coverage",
+        "artifacts",
+        "receipt"
+      ],
+      additionalProperties: false
+    },
+    "execution-lineage.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/execution-lineage.schema.json",
+      title: "C12 ExecutionLineage v1 in bundle v2",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.stack.execution-lineage.v1"
+        },
+        lineage: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/lineage"
+        },
+        run_schema: {
+          const: "guild.logical_run.v2"
+        },
+        pins: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/pins"
+        },
+        requested_host: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        observed_host: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        requested_model: {
+          anyOf: [
+            {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        observed_identity: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/observed_identity"
+        },
+        adapter_capability_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        authority: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/authority"
+        },
+        attempt_grant_ref: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        admission: {
+          enum: [
+            "active",
+            "reconcile_only",
+            "revoked",
+            "sealed"
+          ]
+        },
+        state: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/state_axes"
+        },
+        interval: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/interval"
+        },
+        handoffs: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              operation_id: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              from_execution_id: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              to_execution_id: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              accepted_by_controller_epoch: {
+                type: "integer",
+                minimum: 0
+              },
+              evidence: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+              }
+            },
+            required: [
+              "operation_id",
+              "from_execution_id",
+              "to_execution_id",
+              "accepted_by_controller_epoch",
+              "evidence"
+            ],
+            additionalProperties: false
+          },
+          minItems: 0,
+          maxItems: 100
+        },
+        evidence: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+          },
+          minItems: 0,
+          maxItems: 100
+        }
+      },
+      required: [
+        "schema_version",
+        "lineage",
+        "run_schema",
+        "pins",
+        "requested_host",
+        "observed_host",
+        "requested_model",
+        "observed_identity",
+        "adapter_capability_hash",
+        "authority",
+        "attempt_grant_ref",
+        "admission",
+        "state",
+        "interval",
+        "handoffs",
+        "evidence"
+      ],
+      additionalProperties: false
+    },
+    "execution-segment.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/execution-segment.schema.json",
+      title: "Immutable execution segment v1",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.execution_segment.v1"
+        },
+        lineage: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/lineage"
+        },
+        original_host_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        host_session_id: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        issued_controller_epoch: {
+          type: "integer",
+          minimum: 0
+        },
+        adapter_capability_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        pins: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/pins"
+        },
+        admission: {
+          enum: [
+            "active",
+            "reconcile_only",
+            "revoked",
+            "sealed"
+          ]
+        },
+        interval: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/interval"
+        },
+        observation_manifest: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        seal_evidence: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+            },
+            {
+              type: "null"
+            }
+          ]
+        }
+      },
+      required: [
+        "schema_version",
+        "lineage",
+        "original_host_id",
+        "host_session_id",
+        "issued_controller_epoch",
+        "adapter_capability_hash",
+        "pins",
+        "admission",
+        "interval",
+        "observation_manifest",
+        "seal_evidence"
+      ],
+      additionalProperties: false
+    },
+    "followup-transfer.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/followup-transfer.schema.json",
+      title: "Exclusive follow-up transfer v1",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.followup_transfer.v1"
+        },
+        operation_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        source_work: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+        },
+        expected_disposition_revision: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        reserved_disposition_revision: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        destination_work: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+        },
+        destination_policy_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        payload_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        state: {
+          enum: [
+            "reserved",
+            "target_prepared",
+            "source_committed",
+            "target_activated",
+            "acknowledged",
+            "recovery_needed",
+            "aborted"
+          ]
+        },
+        source_commit: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        target_activation: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        target_ack: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        prepared_target_executable: {
+          const: false
+        },
+        recorded_at: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/time"
+        }
+      },
+      required: [
+        "schema_version",
+        "operation_id",
+        "source_work",
+        "expected_disposition_revision",
+        "reserved_disposition_revision",
+        "destination_work",
+        "destination_policy_hash",
+        "payload_hash",
+        "state",
+        "source_commit",
+        "target_activation",
+        "target_ack",
+        "prepared_target_executable",
+        "recorded_at"
+      ],
+      additionalProperties: false
+    },
+    "knowledge-publication.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/knowledge-publication.schema.json",
+      title: "C13 KnowledgePublication v1 in bundle v2",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.stack.knowledge-publication.v1"
+        },
+        source_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        source_worktree_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        durable_owner_source_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        publication_scope_source_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        basis: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/publication_basis"
+        },
+        source_basis_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        basis_verified_at: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/time"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        generation: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        previous_generation: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        destination_layer_digest: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        manifest: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+        },
+        channels: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              channel: {
+                enum: [
+                  "structural_graph",
+                  "semantic_graph",
+                  "recall",
+                  "wiki",
+                  "project_memory"
+                ]
+              },
+              state: {
+                enum: [
+                  "current_for_basis",
+                  "pending",
+                  "stale",
+                  "unknown"
+                ]
+              },
+              basis_hash: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+              },
+              layer_hash: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+              },
+              output: {
+                anyOf: [
+                  {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+                  },
+                  {
+                    type: "null"
+                  }
+                ]
+              },
+              reason: {
+                anyOf: [
+                  {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 4096
+                  },
+                  {
+                    type: "null"
+                  }
+                ]
+              }
+            },
+            required: [
+              "channel",
+              "state",
+              "basis_hash",
+              "layer_hash",
+              "output",
+              "reason"
+            ],
+            additionalProperties: false
+          },
+          minItems: 1,
+          maxItems: 5
+        },
+        decision_refs: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+          },
+          minItems: 0,
+          maxItems: 100
+        },
+        replan_required: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+          },
+          minItems: 0,
+          maxItems: 100
+        }
+      },
+      required: [
+        "schema_version",
+        "source_id",
+        "source_worktree_id",
+        "durable_owner_source_id",
+        "publication_scope_source_id",
+        "basis",
+        "source_basis_hash",
+        "basis_verified_at",
+        "generation",
+        "previous_generation",
+        "destination_layer_digest",
+        "manifest",
+        "channels",
+        "decision_refs",
+        "replan_required"
+      ],
+      additionalProperties: false
+    },
+    "logical-run.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/logical-run.schema.json",
+      title: "Logical run v2 canonical record",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.logical_run.v2"
+        },
+        source_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        run_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        initiative_id: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        parent_run: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        created_at: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/time"
+        },
+        phase: {
+          enum: [
+            "init",
+            "ideate",
+            "plan",
+            "build",
+            "qa",
+            "ops"
+          ]
+        },
+        initial_command: {
+          type: "string",
+          minLength: 1,
+          maxLength: 4096
+        },
+        initial_prompt_ref: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        controller: {
+          type: "object",
+          properties: {
+            source_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            host_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            epoch: {
+              type: "integer",
+              minimum: 0
+            },
+            state: {
+              enum: [
+                "active",
+                "suspended"
+              ]
+            },
+            failover: {
+              const: "manual_new_run_only"
+            }
+          },
+          required: [
+            "source_id",
+            "host_id",
+            "epoch",
+            "state",
+            "failover"
+          ],
+          additionalProperties: false
+        },
+        workflow_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        settings_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        execution_refs: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+          },
+          minItems: 0,
+          maxItems: 1e3
+        },
+        goal_refs: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+          },
+          minItems: 0,
+          maxItems: 1e3
+        },
+        state: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/state_axes"
+        }
+      },
+      required: [
+        "schema_version",
+        "source_id",
+        "run_id",
+        "initiative_id",
+        "parent_run",
+        "created_at",
+        "phase",
+        "initial_command",
+        "initial_prompt_ref",
+        "controller",
+        "workflow_hash",
+        "settings_hash",
+        "execution_refs",
+        "goal_refs",
+        "state"
+      ],
+      additionalProperties: false
+    },
+    "metric-drilldown.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/metric-drilldown.schema.json",
+      title: "Bounded metric evidence drilldown",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.stack.metric-drilldown.v2"
+        },
+        metric_id: {
+          enum: [
+            "M01.run_count",
+            "M01.execution_count",
+            "M01.task_count",
+            "M01.goal_count",
+            "M01.status_count",
+            "M02.elapsed_ms",
+            "M03.active_union_ms",
+            "M03.agent_work_ms",
+            "M04.raw_wait_ms",
+            "M04.exclusive_wait_ms",
+            "M04.queue_wait_ms",
+            "M04.operator_wait_ms",
+            "M04.handoff_wait_ms",
+            "M05.latency_p50_ms",
+            "M05.latency_p95_ms",
+            "M05.sample_count",
+            "M06.input_tokens",
+            "M07.output_tokens",
+            "M08.cache_read_tokens",
+            "M08.cache_write_tokens",
+            "M08.cache_hit_ratio",
+            "M09.total_tokens",
+            "M10.measured_spend_usd",
+            "M10.derived_estimate_usd",
+            "M10.native_estimate_usd",
+            "M11.threshold_usd",
+            "M11.remaining_estimate_usd",
+            "M11.overshoot_estimate_usd",
+            "M11.remaining_duration_ms",
+            "M12.coverage_ratio",
+            "M12.covered_count",
+            "M12.eligible_count",
+            "M12.dropped_count",
+            "M12.invalid_count",
+            "M12.duplicate_count",
+            "M13.allocated_tokens",
+            "M13.unallocated_tokens",
+            "M13.allocated_usd",
+            "M13.unallocated_usd",
+            "M14.outcome_count",
+            "M14.success_ratio",
+            "M15.first_attempt_success_ratio",
+            "M15.retry_count",
+            "M15.rework_count",
+            "M16.review_round_count",
+            "M16.finding_count",
+            "M16.verdict_count",
+            "M17.assurance_ratio",
+            "M17.stale_evidence_count",
+            "M18.loop_round_count",
+            "M18.cap_hit_count",
+            "M18.unresolved_question_count",
+            "M18.blocker_count",
+            "M19.tool_call_count",
+            "M19.tool_failure_ratio",
+            "M19.tool_latency_p50_ms",
+            "M19.tool_latency_p95_ms",
+            "M19.tool_retry_count",
+            "M20.handoff_count",
+            "M20.startup_latency_ms",
+            "M20.orphan_attempt_count",
+            "M20.recovery_count",
+            "M21.transfer_count",
+            "M21.unacked_age_ms",
+            "M22.cost_per_success_usd",
+            "M22.elapsed_per_success_ms",
+            "M23.channel_state_count",
+            "M23.freshness_coverage_ratio",
+            "M23.observed_invalidation_lag_ms",
+            "M24.refresh_job_count",
+            "M24.refresh_latency_p50_ms",
+            "M24.refresh_latency_p95_ms",
+            "M24.refresh_queue_count",
+            "M24.cas_rejection_count",
+            "M24.equivalence_failure_count",
+            "M25.graph_node_count",
+            "M25.graph_edge_count",
+            "M25.indexed_file_count",
+            "M25.resolution_ratio",
+            "M26.query_count",
+            "M26.retrieval_hit_ratio",
+            "M26.retrieval_latency_mean_ms",
+            "M26.retrieval_latency_p50_ms",
+            "M26.retrieval_latency_p95_ms",
+            "M26.retrieval_use_ratio",
+            "M27.candidate_count",
+            "M27.decision_supersession_count",
+            "M27.replan_required_count",
+            "M27.replan_age_ms",
+            "M28.evaluation_score",
+            "M28.paired_score_delta",
+            "M28.paired_cost_delta_usd",
+            "M28.paired_latency_delta_ms",
+            "M28.pair_count",
+            "M29.series_value",
+            "M29.excluded_count",
+            "M29.outlier_count",
+            "M30.context_estimate_tokens",
+            "M30.context_utilization_ratio",
+            "M30.context_cap_hit_count",
+            "M31.prompt_count",
+            "M31.steering_count",
+            "M31.handoff_count",
+            "M31.prompt_capture_ratio"
+          ]
+        },
+        point_key: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        query_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        snapshot: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/snapshot"
+        },
+        records: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+          },
+          minItems: 0,
+          maxItems: 1e3
+        },
+        coverage: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/coverage"
+        },
+        next_cursor: {
+          anyOf: [
+            {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            {
+              type: "null"
+            }
+          ]
+        }
+      },
+      required: [
+        "schema_version",
+        "metric_id",
+        "point_key",
+        "query_hash",
+        "snapshot",
+        "records",
+        "coverage",
+        "next_cursor"
+      ],
+      additionalProperties: false
+    },
+    "metric-series.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/metric-series.schema.json",
+      title: "C9 MetricSeries v2",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.stack.metric-series.v2"
+        },
+        metric_id: {
+          enum: [
+            "M01.run_count",
+            "M01.execution_count",
+            "M01.task_count",
+            "M01.goal_count",
+            "M01.status_count",
+            "M02.elapsed_ms",
+            "M03.active_union_ms",
+            "M03.agent_work_ms",
+            "M04.raw_wait_ms",
+            "M04.exclusive_wait_ms",
+            "M04.queue_wait_ms",
+            "M04.operator_wait_ms",
+            "M04.handoff_wait_ms",
+            "M05.latency_p50_ms",
+            "M05.latency_p95_ms",
+            "M05.sample_count",
+            "M06.input_tokens",
+            "M07.output_tokens",
+            "M08.cache_read_tokens",
+            "M08.cache_write_tokens",
+            "M08.cache_hit_ratio",
+            "M09.total_tokens",
+            "M10.measured_spend_usd",
+            "M10.derived_estimate_usd",
+            "M10.native_estimate_usd",
+            "M11.threshold_usd",
+            "M11.remaining_estimate_usd",
+            "M11.overshoot_estimate_usd",
+            "M11.remaining_duration_ms",
+            "M12.coverage_ratio",
+            "M12.covered_count",
+            "M12.eligible_count",
+            "M12.dropped_count",
+            "M12.invalid_count",
+            "M12.duplicate_count",
+            "M13.allocated_tokens",
+            "M13.unallocated_tokens",
+            "M13.allocated_usd",
+            "M13.unallocated_usd",
+            "M14.outcome_count",
+            "M14.success_ratio",
+            "M15.first_attempt_success_ratio",
+            "M15.retry_count",
+            "M15.rework_count",
+            "M16.review_round_count",
+            "M16.finding_count",
+            "M16.verdict_count",
+            "M17.assurance_ratio",
+            "M17.stale_evidence_count",
+            "M18.loop_round_count",
+            "M18.cap_hit_count",
+            "M18.unresolved_question_count",
+            "M18.blocker_count",
+            "M19.tool_call_count",
+            "M19.tool_failure_ratio",
+            "M19.tool_latency_p50_ms",
+            "M19.tool_latency_p95_ms",
+            "M19.tool_retry_count",
+            "M20.handoff_count",
+            "M20.startup_latency_ms",
+            "M20.orphan_attempt_count",
+            "M20.recovery_count",
+            "M21.transfer_count",
+            "M21.unacked_age_ms",
+            "M22.cost_per_success_usd",
+            "M22.elapsed_per_success_ms",
+            "M23.channel_state_count",
+            "M23.freshness_coverage_ratio",
+            "M23.observed_invalidation_lag_ms",
+            "M24.refresh_job_count",
+            "M24.refresh_latency_p50_ms",
+            "M24.refresh_latency_p95_ms",
+            "M24.refresh_queue_count",
+            "M24.cas_rejection_count",
+            "M24.equivalence_failure_count",
+            "M25.graph_node_count",
+            "M25.graph_edge_count",
+            "M25.indexed_file_count",
+            "M25.resolution_ratio",
+            "M26.query_count",
+            "M26.retrieval_hit_ratio",
+            "M26.retrieval_latency_mean_ms",
+            "M26.retrieval_latency_p50_ms",
+            "M26.retrieval_latency_p95_ms",
+            "M26.retrieval_use_ratio",
+            "M27.candidate_count",
+            "M27.decision_supersession_count",
+            "M27.replan_required_count",
+            "M27.replan_age_ms",
+            "M28.evaluation_score",
+            "M28.paired_score_delta",
+            "M28.paired_cost_delta_usd",
+            "M28.paired_latency_delta_ms",
+            "M28.pair_count",
+            "M29.series_value",
+            "M29.excluded_count",
+            "M29.outlier_count",
+            "M30.context_estimate_tokens",
+            "M30.context_utilization_ratio",
+            "M30.context_cap_hit_count",
+            "M31.prompt_count",
+            "M31.steering_count",
+            "M31.handoff_count",
+            "M31.prompt_capture_ratio"
+          ]
+        },
+        underlying_formula_version: {
+          anyOf: [
+            {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        underlying_metric_id: {
+          anyOf: [
+            {
+              enum: [
+                "M01.run_count",
+                "M01.execution_count",
+                "M01.task_count",
+                "M01.goal_count",
+                "M01.status_count",
+                "M02.elapsed_ms",
+                "M03.active_union_ms",
+                "M03.agent_work_ms",
+                "M04.raw_wait_ms",
+                "M04.exclusive_wait_ms",
+                "M04.queue_wait_ms",
+                "M04.operator_wait_ms",
+                "M04.handoff_wait_ms",
+                "M05.latency_p50_ms",
+                "M05.latency_p95_ms",
+                "M05.sample_count",
+                "M06.input_tokens",
+                "M07.output_tokens",
+                "M08.cache_read_tokens",
+                "M08.cache_write_tokens",
+                "M08.cache_hit_ratio",
+                "M09.total_tokens",
+                "M10.measured_spend_usd",
+                "M10.derived_estimate_usd",
+                "M10.native_estimate_usd",
+                "M11.threshold_usd",
+                "M11.remaining_estimate_usd",
+                "M11.overshoot_estimate_usd",
+                "M11.remaining_duration_ms",
+                "M12.coverage_ratio",
+                "M12.covered_count",
+                "M12.eligible_count",
+                "M12.dropped_count",
+                "M12.invalid_count",
+                "M12.duplicate_count",
+                "M13.allocated_tokens",
+                "M13.unallocated_tokens",
+                "M13.allocated_usd",
+                "M13.unallocated_usd",
+                "M14.outcome_count",
+                "M14.success_ratio",
+                "M15.first_attempt_success_ratio",
+                "M15.retry_count",
+                "M15.rework_count",
+                "M16.review_round_count",
+                "M16.finding_count",
+                "M16.verdict_count",
+                "M17.assurance_ratio",
+                "M17.stale_evidence_count",
+                "M18.loop_round_count",
+                "M18.cap_hit_count",
+                "M18.unresolved_question_count",
+                "M18.blocker_count",
+                "M19.tool_call_count",
+                "M19.tool_failure_ratio",
+                "M19.tool_latency_p50_ms",
+                "M19.tool_latency_p95_ms",
+                "M19.tool_retry_count",
+                "M20.handoff_count",
+                "M20.startup_latency_ms",
+                "M20.orphan_attempt_count",
+                "M20.recovery_count",
+                "M21.transfer_count",
+                "M21.unacked_age_ms",
+                "M22.cost_per_success_usd",
+                "M22.elapsed_per_success_ms",
+                "M23.channel_state_count",
+                "M23.freshness_coverage_ratio",
+                "M23.observed_invalidation_lag_ms",
+                "M24.refresh_job_count",
+                "M24.refresh_latency_p50_ms",
+                "M24.refresh_latency_p95_ms",
+                "M24.refresh_queue_count",
+                "M24.cas_rejection_count",
+                "M24.equivalence_failure_count",
+                "M25.graph_node_count",
+                "M25.graph_edge_count",
+                "M25.indexed_file_count",
+                "M25.resolution_ratio",
+                "M26.query_count",
+                "M26.retrieval_hit_ratio",
+                "M26.retrieval_latency_mean_ms",
+                "M26.retrieval_latency_p50_ms",
+                "M26.retrieval_latency_p95_ms",
+                "M26.retrieval_use_ratio",
+                "M27.candidate_count",
+                "M27.decision_supersession_count",
+                "M27.replan_required_count",
+                "M27.replan_age_ms",
+                "M28.evaluation_score",
+                "M28.paired_score_delta",
+                "M28.paired_cost_delta_usd",
+                "M28.paired_latency_delta_ms",
+                "M28.pair_count",
+                "M30.context_estimate_tokens",
+                "M30.context_utilization_ratio",
+                "M30.context_cap_hit_count",
+                "M31.prompt_count",
+                "M31.steering_count",
+                "M31.handoff_count",
+                "M31.prompt_capture_ratio"
+              ]
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        unit: {
+          enum: [
+            "ms",
+            "usd",
+            "tokens",
+            "count",
+            "ratio",
+            "usd_per_outcome",
+            "ms_per_outcome",
+            "case_score"
+          ]
+        },
+        unit_label: {
+          type: "string",
+          minLength: 1,
+          maxLength: 4096
+        },
+        query: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/query_identity"
+        },
+        usage_semantics: {
+          enum: [
+            "inclusive_input_cache_subset.v1",
+            "provider_session_only.v1",
+            "not_applicable",
+            "unknown"
+          ]
+        },
+        pricing: {
+          anyOf: [
+            {
+              type: "object",
+              properties: {
+                version: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                },
+                currency: {
+                  const: "USD"
+                },
+                source_hash: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+                }
+              },
+              required: [
+                "version",
+                "currency",
+                "source_hash"
+              ],
+              additionalProperties: false
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        coverage: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/coverage"
+        },
+        points: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              key: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              value: {
+                anyOf: [
+                  {
+                    type: "number"
+                  },
+                  {
+                    type: "null"
+                  }
+                ]
+              },
+              known_subtotal: {
+                anyOf: [
+                  {
+                    type: "number"
+                  },
+                  {
+                    type: "null"
+                  }
+                ]
+              },
+              exact_total: {
+                anyOf: [
+                  {
+                    type: "number"
+                  },
+                  {
+                    type: "null"
+                  }
+                ]
+              },
+              numerator: {
+                anyOf: [
+                  {
+                    type: "number"
+                  },
+                  {
+                    type: "null"
+                  }
+                ]
+              },
+              denominator: {
+                anyOf: [
+                  {
+                    type: "number",
+                    minimum: 0
+                  },
+                  {
+                    type: "null"
+                  }
+                ]
+              },
+              coverage: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/coverage"
+              },
+              cost_basis: {
+                enum: [
+                  "measured",
+                  "derived_estimate",
+                  "native_estimate",
+                  "unavailable",
+                  "not_applicable"
+                ]
+              },
+              reason: {
+                anyOf: [
+                  {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 4096
+                  },
+                  {
+                    type: "null"
+                  }
+                ]
+              },
+              evidence: {
+                type: "array",
+                items: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+                },
+                minItems: 0,
+                maxItems: 100
+              },
+              drilldown: {
+                type: "object",
+                properties: {
+                  query_hash: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+                  },
+                  cursor: {
+                    anyOf: [
+                      {
+                        type: "string",
+                        minLength: 1,
+                        maxLength: 4096
+                      },
+                      {
+                        type: "null"
+                      }
+                    ]
+                  }
+                },
+                required: [
+                  "query_hash",
+                  "cursor"
+                ],
+                additionalProperties: false
+              }
+            },
+            required: [
+              "key",
+              "value",
+              "known_subtotal",
+              "exact_total",
+              "numerator",
+              "denominator",
+              "coverage",
+              "cost_basis",
+              "reason",
+              "evidence",
+              "drilldown"
+            ],
+            additionalProperties: false
+          },
+          minItems: 0,
+          maxItems: 1e3
+        }
+      },
+      required: [
+        "schema_version",
+        "metric_id",
+        "underlying_formula_version",
+        "underlying_metric_id",
+        "unit",
+        "unit_label",
+        "query",
+        "usage_semantics",
+        "pricing",
+        "coverage",
+        "points"
+      ],
+      additionalProperties: false
+    },
+    "negotiation.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/negotiation.schema.json",
+      title: "Exact contract version negotiation",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.stack.negotiation.v2"
+        },
+        request_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        client_supported: {
+          type: "array",
+          items: {
+            type: "string",
+            minLength: 1,
+            maxLength: 4096
+          },
+          minItems: 1,
+          maxItems: 100,
+          uniqueItems: true
+        },
+        server_supported: {
+          type: "array",
+          items: {
+            type: "string",
+            minLength: 1,
+            maxLength: 4096
+          },
+          minItems: 1,
+          maxItems: 100,
+          uniqueItems: true
+        },
+        selected_schema_id: {
+          anyOf: [
+            {
+              type: "string",
+              format: "uri"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        selected_schema_version: {
+          anyOf: [
+            {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        status: {
+          enum: [
+            "compatible",
+            "unsupported"
+          ]
+        },
+        error: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/error"
+            },
+            {
+              type: "null"
+            }
+          ]
+        }
+      },
+      required: [
+        "schema_version",
+        "request_id",
+        "client_supported",
+        "server_supported",
+        "selected_schema_id",
+        "selected_schema_version",
+        "status",
+        "error"
+      ],
+      additionalProperties: false
+    },
+    "operation-arguments.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/operation-arguments.schema.json",
+      title: "Versioned typed operation arguments",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.stack.operation-arguments.v2"
+        },
+        kind: {
+          enum: [
+            "launch",
+            "resume",
+            "cancel",
+            "seal",
+            "close",
+            "transfer",
+            "workflow_adopt",
+            "knowledge_publish",
+            "refresh",
+            "evaluate",
+            "report"
+          ]
+        },
+        target: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        execution_id: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        host_session_id: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        attempt_id: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        host_proof: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        expected_revision: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        workflow_hash: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        policy_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        budget: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/budget"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        destination: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        payload_ref: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+            },
+            {
+              type: "null"
+            }
+          ]
+        }
+      },
+      required: [
+        "schema_version",
+        "kind",
+        "target",
+        "execution_id",
+        "host_session_id",
+        "attempt_id",
+        "host_proof",
+        "expected_revision",
+        "workflow_hash",
+        "policy_hash",
+        "budget",
+        "destination",
+        "payload_ref"
+      ],
+      additionalProperties: false
+    },
+    "operation-preview.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/operation-preview.schema.json",
+      title: "C4 OperationPreview v2",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.stack.operation-preview.v2"
+        },
+        operation_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        operation: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        source_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        session_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        targets: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+          },
+          minItems: 1,
+          maxItems: 100
+        },
+        dependencies: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+          },
+          minItems: 0,
+          maxItems: 100
+        },
+        input_schema_id: {
+          type: "string",
+          format: "uri"
+        },
+        arguments: {
+          type: "object"
+        },
+        arguments_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        scope_revision: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        capability_revision: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        policy_revision: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        authority: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/authority"
+        },
+        budget: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/budget"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        effects: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              target: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+              },
+              before_hash: {
+                anyOf: [
+                  {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+                  },
+                  {
+                    type: "null"
+                  }
+                ]
+              },
+              after_hash: {
+                anyOf: [
+                  {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+                  },
+                  {
+                    type: "null"
+                  }
+                ]
+              },
+              action: {
+                enum: [
+                  "create",
+                  "update",
+                  "delete",
+                  "dispatch",
+                  "seal",
+                  "transfer"
+                ]
+              }
+            },
+            required: [
+              "target",
+              "before_hash",
+              "after_hash",
+              "action"
+            ],
+            additionalProperties: false
+          },
+          minItems: 1,
+          maxItems: 100
+        },
+        expires_at: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/time"
+        },
+        preview_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        }
+      },
+      required: [
+        "schema_version",
+        "operation_id",
+        "operation",
+        "source_id",
+        "session_id",
+        "targets",
+        "dependencies",
+        "input_schema_id",
+        "arguments",
+        "arguments_hash",
+        "scope_revision",
+        "capability_revision",
+        "policy_revision",
+        "authority",
+        "budget",
+        "effects",
+        "expires_at",
+        "preview_hash"
+      ],
+      additionalProperties: false
+    },
+    "operation-receipt.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/operation-receipt.schema.json",
+      title: "C6 OperationReceipt v2",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.stack.operation-receipt.v2"
+        },
+        operation_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        idempotency_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        source_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        preview_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        authority: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/authority"
+        },
+        state: {
+          enum: [
+            "accepted",
+            "running",
+            "applied",
+            "failed",
+            "recovery_needed"
+          ]
+        },
+        effect_kind: {
+          enum: [
+            "dispatch",
+            "segment_seal",
+            "logical_outcome",
+            "transfer_ack",
+            "domain_write"
+          ]
+        },
+        outcome: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/state_axes"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        touched: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+          },
+          minItems: 0,
+          maxItems: 100
+        },
+        evidence: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+          },
+          minItems: 0,
+          maxItems: 100
+        },
+        error: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/error"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        recorded_at: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/time"
+        }
+      },
+      required: [
+        "schema_version",
+        "operation_id",
+        "idempotency_id",
+        "source_id",
+        "preview_hash",
+        "authority",
+        "state",
+        "effect_kind",
+        "outcome",
+        "touched",
+        "evidence",
+        "error",
+        "recorded_at"
+      ],
+      additionalProperties: false
+    },
+    "read-projection.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/read-projection.schema.json",
+      title: "C3 ReadProjection v2",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.stack.read-projection.v2"
+        },
+        session_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        snapshot: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/snapshot"
+        },
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              ref: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+              },
+              body_schema_id: {
+                type: "string",
+                format: "uri"
+              },
+              body: {
+                type: "object"
+              }
+            },
+            required: [
+              "ref",
+              "body_schema_id",
+              "body"
+            ],
+            additionalProperties: false
+          },
+          minItems: 0,
+          maxItems: 1e3
+        },
+        next_cursor: {
+          anyOf: [
+            {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        total: {
+          anyOf: [
+            {
+              type: "integer",
+              minimum: 0
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        coverage: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/coverage"
+        },
+        source_errors: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              source_id: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              error: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/error"
+              }
+            },
+            required: [
+              "source_id",
+              "error"
+            ],
+            additionalProperties: false
+          },
+          minItems: 0,
+          maxItems: 100
+        }
+      },
+      required: [
+        "schema_version",
+        "session_id",
+        "snapshot",
+        "items",
+        "next_cursor",
+        "total",
+        "coverage",
+        "source_errors"
+      ],
+      additionalProperties: false
+    },
+    "read-request.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/read-request.schema.json",
+      title: "Bounded source-qualified query request",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.stack.read-request.v2"
+        },
+        request_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        session_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        operation: {
+          enum: [
+            "entities",
+            "trace",
+            "artifacts",
+            "workflow",
+            "knowledge",
+            "metric_series",
+            "metric_drilldown"
+          ]
+        },
+        result_schema_id: {
+          type: "string",
+          format: "uri"
+        },
+        query: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/query_identity"
+        },
+        cursor: {
+          anyOf: [
+            {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        limit: {
+          type: "integer",
+          minimum: 1,
+          maximum: 1e3
+        },
+        query_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        }
+      },
+      required: [
+        "schema_version",
+        "request_id",
+        "session_id",
+        "operation",
+        "result_schema_id",
+        "query",
+        "cursor",
+        "limit",
+        "query_hash"
+      ],
+      additionalProperties: false
+    },
+    "refusal.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/refusal.schema.json",
+      title: "Structured schema/capability/snapshot refusal",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.stack.refusal.v2"
+        },
+        request_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        code: {
+          enum: [
+            "unsupported_schema",
+            "unsupported_capability",
+            "stale_cursor",
+            "stale_source",
+            "expired_preview",
+            "authority_conflict",
+            "source_unavailable",
+            "input_unavailable",
+            "invalid_request"
+          ]
+        },
+        message: {
+          type: "string",
+          minLength: 1,
+          maxLength: 4096
+        },
+        retryable: {
+          type: "boolean"
+        },
+        expected_snapshot: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        observed_snapshot: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            {
+              type: "null"
+            }
+          ]
+        }
+      },
+      required: [
+        "schema_version",
+        "request_id",
+        "code",
+        "message",
+        "retryable",
+        "expected_snapshot",
+        "observed_snapshot"
+      ],
+      additionalProperties: false
+    },
+    "report-manifest.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/report-manifest.schema.json",
+      title: "C11 ReportManifest v2",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.stack.report-manifest.v2"
+        },
+        report: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+        },
+        owner_source_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        generator_version: {
+          type: "string",
+          minLength: 1,
+          maxLength: 4096
+        },
+        template_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        query: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/query_identity"
+        },
+        inputs: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+          },
+          minItems: 1,
+          maxItems: 1e3
+        },
+        metric_series: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+          },
+          minItems: 0,
+          maxItems: 104
+        },
+        knowledge_generations: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              source_id: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              generation: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+              }
+            },
+            required: [
+              "source_id",
+              "generation"
+            ],
+            additionalProperties: false
+          },
+          minItems: 0,
+          maxItems: 100
+        },
+        coverage: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/coverage"
+        },
+        omissions: {
+          type: "array",
+          items: {
+            type: "string",
+            minLength: 1,
+            maxLength: 4096
+          },
+          minItems: 0,
+          maxItems: 100
+        },
+        redaction_version: {
+          type: "string",
+          minLength: 1,
+          maxLength: 4096
+        },
+        outputs: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+          },
+          minItems: 1,
+          maxItems: 100
+        },
+        receipt: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+        }
+      },
+      required: [
+        "schema_version",
+        "report",
+        "owner_source_id",
+        "generator_version",
+        "template_hash",
+        "query",
+        "inputs",
+        "metric_series",
+        "knowledge_generations",
+        "coverage",
+        "omissions",
+        "redaction_version",
+        "outputs",
+        "receipt"
+      ],
+      additionalProperties: false
+    },
+    "run-analysis.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/run-analysis.schema.json",
+      title: "RunAnalysis v2",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.run_analysis.v2"
+        },
+        run: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+        },
+        analysis_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        query: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/query_identity"
+        },
+        input_evidence: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+          },
+          minItems: 0,
+          maxItems: 1e3
+        },
+        usage: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/usage"
+          },
+          minItems: 0,
+          maxItems: 1e3
+        },
+        state: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/state_axes"
+        },
+        metrics: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/metric-series.schema.json"
+          },
+          minItems: 0,
+          maxItems: 104
+        },
+        unallocated_request_ids: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+          },
+          minItems: 0,
+          maxItems: 1e3,
+          uniqueItems: true
+        },
+        losses: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              code: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              count: {
+                anyOf: [
+                  {
+                    type: "integer",
+                    minimum: 0
+                  },
+                  {
+                    type: "null"
+                  }
+                ]
+              },
+              reason: {
+                type: "string",
+                minLength: 1,
+                maxLength: 4096
+              }
+            },
+            required: [
+              "code",
+              "count",
+              "reason"
+            ],
+            additionalProperties: false
+          },
+          minItems: 0,
+          maxItems: 100
+        }
+      },
+      required: [
+        "schema_version",
+        "run",
+        "analysis_id",
+        "query",
+        "input_evidence",
+        "usage",
+        "state",
+        "metrics",
+        "unallocated_request_ids",
+        "losses"
+      ],
+      additionalProperties: false
+    },
+    "run-binding.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/run-binding.schema.json",
+      title: "Run binding v2 public identity; private grant values excluded",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.run_binding.v2"
+        },
+        source_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        run_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        controller_source_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        controller_host_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        controller_epoch: {
+          type: "integer",
+          minimum: 0
+        },
+        writer_grant_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        writer_scope_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        state: {
+          enum: [
+            "open",
+            "suspended",
+            "sealed"
+          ]
+        },
+        logical_run_manifest_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        }
+      },
+      required: [
+        "schema_version",
+        "source_id",
+        "run_id",
+        "controller_source_id",
+        "controller_host_id",
+        "controller_epoch",
+        "writer_grant_id",
+        "writer_scope_hash",
+        "state",
+        "logical_run_manifest_hash"
+      ],
+      additionalProperties: false
+    },
+    "run-comparison.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/run-comparison.schema.json",
+      title: "RunComparison v2",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.run_comparison.v2"
+        },
+        comparison_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        query: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/query_identity"
+        },
+        runs: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+          },
+          minItems: 2,
+          maxItems: 100
+        },
+        analysis_refs: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+          },
+          minItems: 2,
+          maxItems: 100
+        },
+        input_versions: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/version_set"
+          },
+          minItems: 2,
+          maxItems: 100
+        },
+        cohort_conditions_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        compatibility: {
+          enum: [
+            "compatible",
+            "refused"
+          ]
+        },
+        refusal_reasons: {
+          type: "array",
+          items: {
+            type: "string",
+            minLength: 1,
+            maxLength: 4096
+          },
+          minItems: 0,
+          maxItems: 100
+        },
+        metrics: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/metric-series.schema.json"
+          },
+          minItems: 0,
+          maxItems: 104
+        }
+      },
+      required: [
+        "schema_version",
+        "comparison_id",
+        "query",
+        "runs",
+        "analysis_refs",
+        "input_versions",
+        "cohort_conditions_hash",
+        "compatibility",
+        "refusal_reasons",
+        "metrics"
+      ],
+      additionalProperties: false
+    },
+    "scope-session.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/scope-session.schema.json",
+      title: "C1 ScopeSession v2",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.stack.scope-session.v2"
+        },
+        session_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        mode: {
+          enum: [
+            "workspace",
+            "project"
+          ]
+        },
+        root: {
+          type: "object",
+          properties: {
+            source_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            root_kind: {
+              enum: [
+                "workspace",
+                "project"
+              ]
+            },
+            root_identity: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            revision: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            health: {
+              enum: [
+                "healthy",
+                "offline",
+                "unsupported"
+              ]
+            },
+            read_only_reason: {
+              anyOf: [
+                {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            contract_versions: {
+              type: "array",
+              items: {
+                type: "string",
+                minLength: 1,
+                maxLength: 4096
+              },
+              minItems: 0,
+              maxItems: 100,
+              uniqueItems: true
+            }
+          },
+          required: [
+            "source_id",
+            "root_kind",
+            "root_identity",
+            "revision",
+            "health",
+            "read_only_reason",
+            "contract_versions"
+          ],
+          additionalProperties: false
+        },
+        children: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              source_id: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              root_kind: {
+                enum: [
+                  "workspace",
+                  "project"
+                ]
+              },
+              root_identity: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+              },
+              revision: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+              },
+              health: {
+                enum: [
+                  "healthy",
+                  "offline",
+                  "unsupported"
+                ]
+              },
+              read_only_reason: {
+                anyOf: [
+                  {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 4096
+                  },
+                  {
+                    type: "null"
+                  }
+                ]
+              },
+              contract_versions: {
+                type: "array",
+                items: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                },
+                minItems: 0,
+                maxItems: 100,
+                uniqueItems: true
+              }
+            },
+            required: [
+              "source_id",
+              "root_kind",
+              "root_identity",
+              "revision",
+              "health",
+              "read_only_reason",
+              "contract_versions"
+            ],
+            additionalProperties: false
+          },
+          minItems: 0,
+          maxItems: 100
+        },
+        expires_at: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/time"
+        },
+        capability_revision: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        snapshot: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/snapshot"
+        }
+      },
+      required: [
+        "schema_version",
+        "session_id",
+        "mode",
+        "root",
+        "children",
+        "expires_at",
+        "capability_revision",
+        "snapshot"
+      ],
+      additionalProperties: false
+    },
+    "task-assignment.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/task-assignment.schema.json",
+      title: "Task assignment v3; existing immutable TaskCell ids retained",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.task_assignment.v3"
+        },
+        lineage: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/lineage"
+        },
+        original_host_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        issued_controller_epoch: {
+          type: "integer",
+          minimum: 0
+        },
+        assignment_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        pins: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/pins"
+        },
+        result_scope_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        grant_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        created_at: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/time"
+        },
+        goal_contributions: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+          },
+          minItems: 0,
+          maxItems: 100
+        },
+        input_refs: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+          },
+          minItems: 0,
+          maxItems: 100
+        }
+      },
+      required: [
+        "schema_version",
+        "lineage",
+        "original_host_id",
+        "issued_controller_epoch",
+        "assignment_hash",
+        "pins",
+        "result_scope_hash",
+        "grant_id",
+        "created_at",
+        "goal_contributions",
+        "input_refs"
+      ],
+      additionalProperties: false
+    },
+    "task-attempt.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/task-attempt.schema.json",
+      title: "Task attempt v1",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.task_attempt.v1"
+        },
+        lineage: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/lineage"
+        },
+        assignment_ref: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+        },
+        ordinal: {
+          type: "integer",
+          minimum: 1
+        },
+        state: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/state_axes"
+        },
+        result_refs: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+          },
+          minItems: 0,
+          maxItems: 100
+        },
+        acceptance_subject_hash: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        accepted_by_controller_epoch: {
+          anyOf: [
+            {
+              type: "integer",
+              minimum: 0
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        receipt_loss_reconciled: {
+          type: "boolean"
+        },
+        uncertain_effects: {
+          type: "boolean"
+        }
+      },
+      required: [
+        "schema_version",
+        "lineage",
+        "assignment_ref",
+        "ordinal",
+        "state",
+        "result_refs",
+        "acceptance_subject_hash",
+        "accepted_by_controller_epoch",
+        "receipt_loss_reconciled",
+        "uncertain_effects"
+      ],
+      additionalProperties: false
+    },
+    "trace-analysis.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/trace-analysis.schema.json",
+      title: "Trace analysis v3",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.trace.analysis.v3"
+        },
+        event_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        sequence: {
+          type: "integer",
+          minimum: 0
+        },
+        event_class: {
+          enum: [
+            "prompt",
+            "dispatch",
+            "request_started",
+            "request_completed",
+            "handoff",
+            "phase",
+            "obligation",
+            "transfer",
+            "knowledge",
+            "retrieval",
+            "loss"
+          ]
+        },
+        at: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/time"
+        },
+        lineage: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/lineage"
+        },
+        operation_id: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        component_invocation_id: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        actor_id: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        pins: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/pins"
+        },
+        requested_model: {
+          anyOf: [
+            {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        observed_identity: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/observed_identity"
+        },
+        usage: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/usage"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        payload_ref: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        prompt_hash: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+            },
+            {
+              type: "null"
+            }
+          ]
+        },
+        redaction_version: {
+          type: "string",
+          minLength: 1,
+          maxLength: 4096
+        },
+        capture: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/coverage"
+        },
+        interval: {
+          anyOf: [
+            {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/interval"
+            },
+            {
+              type: "null"
+            }
+          ]
+        }
+      },
+      required: [
+        "schema_version",
+        "event_id",
+        "sequence",
+        "event_class",
+        "at",
+        "lineage",
+        "operation_id",
+        "component_invocation_id",
+        "actor_id",
+        "pins",
+        "requested_model",
+        "observed_identity",
+        "usage",
+        "payload_ref",
+        "prompt_hash",
+        "redaction_version",
+        "capture",
+        "interval"
+      ],
+      additionalProperties: false
+    },
+    "workflow-projection.schema.json": {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/v2/workflow-projection.schema.json",
+      title: "C8 WorkflowProjection v2",
+      type: "object",
+      properties: {
+        schema_version: {
+          const: "guild.stack.workflow-projection.v2"
+        },
+        workflow: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/entity"
+        },
+        class: {
+          enum: [
+            "product",
+            "research",
+            "debug",
+            "ops",
+            "init"
+          ]
+        },
+        definition_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        compiler_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        policy_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        expanded_hash: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+        },
+        components: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              version: {
+                type: "string",
+                minLength: 1,
+                maxLength: 4096
+              },
+              sha256: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+              }
+            },
+            required: [
+              "id",
+              "version",
+              "sha256"
+            ],
+            additionalProperties: false
+          },
+          minItems: 1,
+          maxItems: 100
+        },
+        nodes: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              component_id: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              component_hash: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+              },
+              effect: {
+                enum: [
+                  "read",
+                  "write",
+                  "review",
+                  "gate",
+                  "privileged_operation",
+                  "release"
+                ]
+              },
+              gate_role: {
+                anyOf: [
+                  {
+                    enum: [
+                      "d5",
+                      "qa",
+                      "ops",
+                      "d8"
+                    ]
+                  },
+                  {
+                    type: "null"
+                  }
+                ]
+              },
+              within_gate: {
+                anyOf: [
+                  {
+                    enum: [
+                      "d5",
+                      "qa",
+                      "ops",
+                      "d8"
+                    ]
+                  },
+                  {
+                    type: "null"
+                  }
+                ]
+              },
+              role: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              capabilities: {
+                type: "array",
+                items: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+                },
+                minItems: 0,
+                maxItems: 50,
+                uniqueItems: true
+              },
+              inputs: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    name: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+                    },
+                    type: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096
+                    }
+                  },
+                  required: [
+                    "name",
+                    "type"
+                  ],
+                  additionalProperties: false
+                },
+                minItems: 0,
+                maxItems: 50
+              },
+              outputs: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    name: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+                    },
+                    type: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096
+                    }
+                  },
+                  required: [
+                    "name",
+                    "type"
+                  ],
+                  additionalProperties: false
+                },
+                minItems: 0,
+                maxItems: 50
+              },
+              required: {
+                type: "boolean"
+              }
+            },
+            required: [
+              "id",
+              "component_id",
+              "component_hash",
+              "effect",
+              "gate_role",
+              "within_gate",
+              "role",
+              "capabilities",
+              "inputs",
+              "outputs",
+              "required"
+            ],
+            additionalProperties: false
+          },
+          minItems: 1,
+          maxItems: 1e3
+        },
+        edges: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              from: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              to: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              on: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              }
+            },
+            required: [
+              "from",
+              "to",
+              "on"
+            ],
+            additionalProperties: false
+          },
+          minItems: 0,
+          maxItems: 5e3
+        },
+        entry: {
+          $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+        },
+        protected_gates: {
+          type: "array",
+          items: {
+            $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+          },
+          minItems: 0,
+          maxItems: 10,
+          uniqueItems: true
+        },
+        obligations: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              kind: {
+                enum: [
+                  "security",
+                  "adversarial_security",
+                  "ui",
+                  "ux",
+                  "quality",
+                  "project_specific"
+                ]
+              },
+              node_id: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              subject_hash: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+              },
+              invocation_id: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              round: {
+                type: "integer",
+                minimum: 1
+              },
+              status: {
+                enum: [
+                  "pending",
+                  "accepted",
+                  "rejected",
+                  "invalidated"
+                ]
+              },
+              authority: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              evidence: {
+                type: "array",
+                items: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/evidence"
+                },
+                minItems: 0,
+                maxItems: 50
+              }
+            },
+            required: [
+              "id",
+              "kind",
+              "node_id",
+              "subject_hash",
+              "invocation_id",
+              "round",
+              "status",
+              "authority",
+              "evidence"
+            ],
+            additionalProperties: false
+          },
+          minItems: 0,
+          maxItems: 200
+        },
+        invocations: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              node_id: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+              },
+              round: {
+                type: "integer",
+                minimum: 0
+              },
+              max_rounds: {
+                type: "integer",
+                minimum: 1
+              },
+              unresolved_questions: {
+                type: "array",
+                items: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/id"
+                },
+                minItems: 0,
+                maxItems: 100
+              },
+              state: {
+                enum: [
+                  "active",
+                  "blocked",
+                  "accepted",
+                  "cancelled"
+                ]
+              },
+              definition_hash: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+              },
+              subject_hash: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json#/$defs/hash"
+              }
+            },
+            required: [
+              "id",
+              "node_id",
+              "round",
+              "max_rounds",
+              "unresolved_questions",
+              "state",
+              "definition_hash",
+              "subject_hash"
+            ],
+            additionalProperties: false
+          },
+          minItems: 0,
+          maxItems: 100
+        }
+      },
+      required: [
+        "schema_version",
+        "workflow",
+        "class",
+        "definition_hash",
+        "compiler_hash",
+        "policy_hash",
+        "expanded_hash",
+        "components",
+        "nodes",
+        "edges",
+        "entry",
+        "protected_gates",
+        "obligations",
+        "invocations"
+      ],
+      additionalProperties: false
+    }
+  },
+  metric_catalog: {
+    schema_version: "guild.proposed_metric_catalog.v1",
+    metrics: [
+      {
+        id: "M01",
+        name: "Run/execution/task/goal counts and status distribution",
+        family: "inventory",
+        unit: "count",
+        producer_package: "T01\u2192T02\u2192T03",
+        raw_inputs: "Canonical source-qualified entity manifests, lifecycle and accepted outcome axes",
+        formula: "Count distinct identities at selected grain; goals union contributions, runs dedup repeated initiative links.",
+        availability: "Unknown source coverage keeps counts partial; absence in preview is not zero.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S01/S02/S03",
+        tests: [
+          "AT14",
+          "AT28"
+        ],
+        formula_version: "proposed:m01.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M01.run_count",
+          "M01.execution_count",
+          "M01.task_count",
+          "M01.goal_count",
+          "M01.status_count"
+        ]
+      },
+      {
+        id: "M02",
+        name: "Elapsed wall time / elapsed so far",
+        family: "time",
+        unit: "ms",
+        producer_package: "T01\u2192T02\u2192T03",
+        raw_inputs: "Controller observed run start/end; local monotonic segment durations and clock quality",
+        formula: "Terminal controller end-start; active run as_of-start; never sum nested span durations.",
+        availability: "Missing bounds/unsafe cross-host clock arithmetic unavailable or qualified partial.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S01/S02/S03/C9 reports",
+        tests: [
+          "AT25"
+        ],
+        formula_version: "proposed:m02.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M02.elapsed_ms"
+        ]
+      },
+      {
+        id: "M03",
+        name: "Active union and agent work time",
+        family: "time",
+        unit: "ms",
+        producer_package: "T01\u2192T02\u2192T03",
+        raw_inputs: "Authoritative admitted active span intervals with parent/leaf classification",
+        formula: "Active=union intervals in one clock domain; agent work=sum disjoint per-agent active intervals, may exceed elapsed.",
+        availability: "Incomplete interval instrumentation gives partial known total; incomparable clocks disallow global union.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S03/S04/P09",
+        tests: [
+          "AT25"
+        ],
+        formula_version: "proposed:m03.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M03.active_union_ms",
+          "M03.agent_work_ms"
+        ]
+      },
+      {
+        id: "M04",
+        name: "Waiting / queue / review / operator / handoff time",
+        family: "time",
+        unit: "ms",
+        producer_package: "T01\u2192T02\u2192T03",
+        raw_inputs: "Explicit typed wait intervals, controller queue admissions and resolutions",
+        formula: "Union by reason; raw waiting separate from exclusive waiting outside active union; intersect [from,to).",
+        availability: "No inferred wait from gaps; missing interval boundaries partial; reasons need not sum if overlap disclosed.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S01/S02/S03/P09",
+        tests: [
+          "AT25",
+          "AT30"
+        ],
+        formula_version: "proposed:m04.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M04.raw_wait_ms",
+          "M04.exclusive_wait_ms",
+          "M04.queue_wait_ms",
+          "M04.operator_wait_ms",
+          "M04.handoff_wait_ms"
+        ]
+      },
+      {
+        id: "M05",
+        name: "Phase/component/attempt latency distributions",
+        family: "time",
+        unit: "ms",
+        producer_package: "T01\u2192T02\u2192T03",
+        raw_inputs: "Complete start/end interval pairs and qualified same-domain duration",
+        formula: "Per declared grain p50/p95 nearest-rank over covered completed samples; expose n/outliers; active samples right-censored separately.",
+        availability: "Open/missing spans excluded with reason; n0 unavailable, no fabricated latency.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S03/S04/P09",
+        tests: [
+          "AT25",
+          "AT46"
+        ],
+        formula_version: "proposed:m05.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M05.latency_p50_ms",
+          "M05.latency_p95_ms",
+          "M05.sample_count"
+        ]
+      },
+      {
+        id: "M06",
+        name: "Input tokens",
+        family: "usage",
+        unit: "tokens",
+        producer_package: "T01\u2192T02\u2192T03",
+        raw_inputs: "Final normalized billable leaf request input including cached subset",
+        formula: "Sum unique final leaf input counters across selected request set.",
+        availability: "Missing request usage exact total=null; known subtotal and covered/eligible shown.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S01/S02/S03/P09",
+        tests: [
+          "AT23"
+        ],
+        formula_version: "proposed:m06.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M06.input_tokens"
+        ]
+      },
+      {
+        id: "M07",
+        name: "Output tokens",
+        family: "usage",
+        unit: "tokens",
+        producer_package: "T01\u2192T02\u2192T03",
+        raw_inputs: "Final billable leaf output counters",
+        formula: "Sum unique final leaf outputs; retries counted as distinct requests.",
+        availability: "Missing output not0.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S01/S02/S03/P09",
+        tests: [
+          "AT23"
+        ],
+        formula_version: "proposed:m07.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M07.output_tokens"
+        ]
+      },
+      {
+        id: "M08",
+        name: "Cached read/write tokens and cache ratio",
+        family: "usage",
+        unit: "tokens/ratio",
+        producer_package: "T01\u2192T02\u2192T03",
+        raw_inputs: "Provider-declared cache-read/cache-write inclusion semantics and input counters",
+        formula: "Cache tokens subset of inclusive input; cache-hit ratio=covered cache-read/input for compatible requests, not added to total. Cache-write displayed separately by adapter semantics.",
+        availability: "Provider unsupported/unknown inclusion stays unavailable; denominator0 unavailable.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S03/P09",
+        tests: [
+          "AT23",
+          "AT30"
+        ],
+        formula_version: "proposed:m08.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M08.cache_read_tokens",
+          "M08.cache_write_tokens",
+          "M08.cache_hit_ratio"
+        ]
+      },
+      {
+        id: "M09",
+        name: "Total billable tokens",
+        family: "usage",
+        unit: "tokens",
+        producer_package: "T01\u2192T02\u2192T03",
+        raw_inputs: "M06+M07 on identical eligible request set",
+        formula: "input+output; exclude mirrored and parent inclusive totals, do not add cached again.",
+        availability: "Exact total null if any eligible leaf unknown; known subtotal exposed.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S01/S02/S03/P09/P11",
+        tests: [
+          "AT23",
+          "AT28"
+        ],
+        formula_version: "proposed:m09.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M09.total_tokens"
+        ]
+      },
+      {
+        id: "M10",
+        name: "Measured spend and derived cost estimate",
+        family: "cost",
+        unit: "usd",
+        producer_package: "T01\u2192T02\u2192T03",
+        raw_inputs: "Provider invoice/request costs OR usage+observed provider/model+versioned prices/currency",
+        formula: "Separate measured and estimated series; marginal input excludes cache subset at uncached price; per-request sum with scope dedup. No guessed FX.",
+        availability: "Unknown cost not free; mixed currency refuses aggregate until explicit conversion contract. Native estimate never measured.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S01/S02/S03/P09/P11",
+        tests: [
+          "AT24",
+          "AT30"
+        ],
+        formula_version: "proposed:m10.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M10.measured_spend_usd",
+          "M10.derived_estimate_usd",
+          "M10.native_estimate_usd"
+        ]
+      },
+      {
+        id: "M11",
+        name: "Budget threshold, remaining estimate and overshoot",
+        family: "cost",
+        unit: "usd/ms",
+        producer_package: "T01\u2192T02\u2192T03",
+        raw_inputs: "Approved launch policy/hash, mode, max_usd threshold, duration deadline, estimate freshness/baseline",
+        formula: "Native threshold overshoot=max(0,known session estimate-threshold); remaining=max(0,threshold-known estimate) labelled estimate; deadline uses supervisor clock.",
+        availability: "Unknown spend remaining/overshoot unavailable; threshold is not strict ceiling; cumulative sessions use baseline delta.",
+        dimensions: "source/run/execution/attempt/native session/budget policy",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S03 launch/review/P09",
+        tests: [
+          "AT18",
+          "AT24"
+        ],
+        formula_version: "proposed:m11.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M11.threshold_usd",
+          "M11.remaining_estimate_usd",
+          "M11.overshoot_estimate_usd",
+          "M11.remaining_duration_ms"
+        ]
+      },
+      {
+        id: "M12",
+        name: "Usage and cost coverage / telemetry loss",
+        family: "coverage",
+        unit: "ratio/count",
+        producer_package: "T01\u2192T02\u2192T03",
+        raw_inputs: "Expected/admitted leaf requests, final usage counters, adapter capabilities, dropped/invalid/retained event manifests",
+        formula: "covered/eligible per field plus dropped/duplicate/invalid counts; completeness independent from measurement basis.",
+        availability: "Unknown eligible denominator => coverage unknown; enumerated expected request count is not billable completion proof.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "All metric displays and reports",
+        tests: [
+          "AT20",
+          "AT23",
+          "AT29"
+        ],
+        formula_version: "proposed:m12.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M12.coverage_ratio",
+          "M12.covered_count",
+          "M12.eligible_count",
+          "M12.dropped_count",
+          "M12.invalid_count",
+          "M12.duplicate_count"
+        ]
+      },
+      {
+        id: "M13",
+        name: "Task/agent/host/model allocation and residual",
+        family: "attribution",
+        unit: "tokens/usd",
+        producer_package: "T01\u2192T02\u2192T03",
+        raw_inputs: "Exact request\u2192attempt\u2192task\u2192instance\u2192execution bindings; observed/requested model",
+        formula: "Group unique leaves by exact provenance; sum allocated + unallocated equals known scope ledger.",
+        availability: "Ambiguous allocation stays unallocated, never evenly split; requested model not observed model.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S03/P09 agent/task inspectors",
+        tests: [
+          "AT19",
+          "AT23",
+          "AT24"
+        ],
+        formula_version: "proposed:m13.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M13.allocated_tokens",
+          "M13.unallocated_tokens",
+          "M13.allocated_usd",
+          "M13.unallocated_usd"
+        ]
+      },
+      {
+        id: "M14",
+        name: "Verified success / failed / cancelled / partial outcomes",
+        family: "quality",
+        unit: "count/ratio",
+        producer_package: "T01\u2192T02\u2192T03",
+        raw_inputs: "Separate accepted outcome and lifecycle axes, eligibility manifest",
+        formula: "verified success/eligible completed; show each non-success class; acceptance unknown excluded with reason.",
+        availability: "Closed/exited0 not automatic success; no-verdict not accepted.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S01/S02/S03/P09",
+        tests: [
+          "AT14",
+          "AT30"
+        ],
+        formula_version: "proposed:m14.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M14.outcome_count",
+          "M14.success_ratio"
+        ]
+      },
+      {
+        id: "M15",
+        name: "First-attempt success / retry / rework rate",
+        family: "quality",
+        unit: "ratio/count",
+        producer_package: "T01\u2192T02\u2192T03",
+        raw_inputs: "Logical task identity, immutable attempt order, verification and repeat/repair reason",
+        formula: "First accepted success on ordinal1 / eligible completed tasks; retries=sum(max(0,attempts-1)); repair work separate.",
+        availability: "Pending tasks excluded with denominators; rework needs reason instrumentation.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S01/S03/P09",
+        tests: [
+          "AT14",
+          "AT30"
+        ],
+        formula_version: "proposed:m15.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M15.first_attempt_success_ratio",
+          "M15.retry_count",
+          "M15.rework_count"
+        ]
+      },
+      {
+        id: "M16",
+        name: "Review rounds, findings and verdict distribution",
+        family: "assurance",
+        unit: "count/ratio",
+        producer_package: "W02/W04/T01\u2192T03",
+        raw_inputs: "Explicit obligation invocation/round, findings, independent reviewer strength and subject hashes",
+        formula: "Count distinct rounds/findings/verdicts; count unresolved by severity and final-subject acceptance.",
+        availability: "Do not infer reviewer from specialist name; no_verdict/forcepass shown separately.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S02/S03/S04/P09",
+        tests: [
+          "AT07",
+          "AT22"
+        ],
+        formula_version: "proposed:m16.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M16.review_round_count",
+          "M16.finding_count",
+          "M16.verdict_count"
+        ]
+      },
+      {
+        id: "M17",
+        name: "Assurance completion and stale evidence",
+        family: "assurance",
+        unit: "ratio/count",
+        producer_package: "W02\u2192T01\u2192T03",
+        raw_inputs: "Required obligations for final subject and evidence acceptance/invalidations",
+        formula: "Accepted current obligations / required applicable obligations; stale counts by invalidation cause.",
+        availability: "Unknown subject/effects block complete assurance; missing evidence not waived.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S02/S03/S04",
+        tests: [
+          "AT07",
+          "AT41"
+        ],
+        formula_version: "proposed:m17.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M17.assurance_ratio",
+          "M17.stale_evidence_count"
+        ]
+      },
+      {
+        id: "M18",
+        name: "Workflow loops, cap hits and blockers",
+        family: "workflow",
+        unit: "count/ratio",
+        producer_package: "W04\u2192T01\u2192T03",
+        raw_inputs: "Versioned invocation round/budget/escalation/unresolved question ledger",
+        formula: "Distinct rounds and cap hits by component/policy; blocked reason counts.",
+        availability: "Uninstrumented legacy loops unavailable; exhaustion not completion.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S03/S04/P09",
+        tests: [
+          "AT22"
+        ],
+        formula_version: "proposed:m18.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M18.loop_round_count",
+          "M18.cap_hit_count",
+          "M18.unresolved_question_count",
+          "M18.blocker_count"
+        ]
+      },
+      {
+        id: "M19",
+        name: "Tool calls, failure, latency and retries",
+        family: "tools",
+        unit: "count/ratio/ms",
+        producer_package: "T01\u2192T02\u2192T03",
+        raw_inputs: "Explicit tool operation ids, status, timings and safe type names",
+        formula: "Dedup operations; failed/completed with reason; covered latency p50/p95, retry count.",
+        availability: "Instrumentation gap unavailable; preserve secret redaction; do not classify n/a as failure.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S03/P09",
+        tests: [
+          "AT19",
+          "AT25",
+          "AT30"
+        ],
+        formula_version: "proposed:m19.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M19.tool_call_count",
+          "M19.tool_failure_ratio",
+          "M19.tool_latency_p50_ms",
+          "M19.tool_latency_p95_ms",
+          "M19.tool_retry_count"
+        ]
+      },
+      {
+        id: "M20",
+        name: "Handoffs, dispatch and startup recovery",
+        family: "execution",
+        unit: "count/ms",
+        producer_package: "R02/R05\u2192T01\u2192T03",
+        raw_inputs: "Execution segments, attempt/controller grants, dispatch receipts and reconciliation state",
+        formula: "Distinct handoffs; accepted-to-start lag, seal-to-accept lag, loss/orphan counts; no duplicate operation/receipt.",
+        availability: "Dispatch acceptance differs from host started and verified completion; unknown clock intervals stay unknown.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S03/P09",
+        tests: [
+          "AT10",
+          "AT17"
+        ],
+        formula_version: "proposed:m20.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M20.handoff_count",
+          "M20.startup_latency_ms",
+          "M20.orphan_attempt_count",
+          "M20.recovery_count"
+        ]
+      },
+      {
+        id: "M21",
+        name: "Follow-up transfer progress and age",
+        family: "lifecycle",
+        unit: "count/ms",
+        producer_package: "R04\u2192T01\u2192T03",
+        raw_inputs: "Exclusive source revision reservation, target prepare/activate/ack, controller timestamps",
+        formula: "Counts by transfer state; unacked age=as_of-commit where controller comparable.",
+        availability: "Cross-root uncertainty visible; target prepared never executable.",
+        dimensions: "source/work revision/transfer/destination/run/initiative",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S02/S03",
+        tests: [
+          "AT15",
+          "AT16"
+        ],
+        formula_version: "proposed:m21.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M21.transfer_count",
+          "M21.unacked_age_ms"
+        ]
+      },
+      {
+        id: "M22",
+        name: "Cost and elapsed per verified outcome",
+        family: "efficiency",
+        unit: "usd/ms per outcome",
+        producer_package: "T01\u2192T02\u2192T03",
+        raw_inputs: "All eligible attempts spend/elapsed, accepted outcomes and scope selection",
+        formula: "Covered cost of all eligible attempts / verified successful outcomes; time denominator matches selected cohort.",
+        availability: "Denominator0 unavailable; partial numerator labelled partial; failures remain in cost numerator.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S01/S02/P09/P11",
+        tests: [
+          "AT24",
+          "AT30"
+        ],
+        formula_version: "proposed:m22.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M22.cost_per_success_usd",
+          "M22.elapsed_per_success_ms"
+        ]
+      },
+      {
+        id: "M23",
+        name: "Knowledge freshness by channel and basis",
+        family: "knowledge",
+        unit: "count/ratio/ms",
+        producer_package: "K01/K03\u2192T01\u2192T03",
+        raw_inputs: "Publication manifest, verified source basis, observed time, dirty/invalidation evidence",
+        formula: "Count current_for_basis/pending/stale/unknown per graph/recall/wiki/memory; lag since observed change, not truth age.",
+        availability: "Ages are age-of-check; cached marker cannot imply current bytes; offline root unknown.",
+        dimensions: "source worktree/owner/publication scope/channel/generation",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S01/S06/P07",
+        tests: [
+          "AT34",
+          "AT42"
+        ],
+        formula_version: "proposed:m23.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M23.channel_state_count",
+          "M23.freshness_coverage_ratio",
+          "M23.observed_invalidation_lag_ms"
+        ]
+      },
+      {
+        id: "M24",
+        name: "Refresh work, latency and CAS conflicts",
+        family: "knowledge",
+        unit: "count/ms",
+        producer_package: "K02/K03\u2192T01\u2192T03",
+        raw_inputs: "Source/destination basis, refresh job interval/status/rejection reason and layer digests",
+        formula: "Complete job latency distribution; invalidations, queue length, retry/CAS-rejection and clean-equivalence failures.",
+        availability: "Partial job logs give partial results; job success distinct from published-current.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S06/P07/P09",
+        tests: [
+          "AT35",
+          "AT36"
+        ],
+        formula_version: "proposed:m24.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M24.refresh_job_count",
+          "M24.refresh_latency_p50_ms",
+          "M24.refresh_latency_p95_ms",
+          "M24.refresh_queue_count",
+          "M24.cas_rejection_count",
+          "M24.equivalence_failure_count"
+        ]
+      },
+      {
+        id: "M25",
+        name: "Graph/index inventory and resolution coverage",
+        family: "knowledge",
+        unit: "count/ratio",
+        producer_package: "K02/K03\u2192T01\u2192T03",
+        raw_inputs: "Generation-pinned node/edge/file inventories, unresolved imports and dependency completeness",
+        formula: "Counts at one generation, resolved/eligible references with declared resolver version; deleted derivations removed.",
+        availability: "Counts do not demonstrate knowledge usefulness; unknown dependencies disable selective freshness.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S06/P07",
+        tests: [
+          "AT33",
+          "AT36"
+        ],
+        formula_version: "proposed:m25.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M25.graph_node_count",
+          "M25.graph_edge_count",
+          "M25.indexed_file_count",
+          "M25.resolution_ratio"
+        ]
+      },
+      {
+        id: "M26",
+        name: "Retrieval latency, hit and citation/use rates",
+        family: "knowledge",
+        unit: "ms/ratio",
+        producer_package: "K05\u2192T01\u2192T03",
+        raw_inputs: "Query id/start/end/source+generation/result count and downstream explicit citation/use links",
+        formula: "Hit=queries with results/covered completed queries; citation use=queries with explicit downstream use/eligible covered queries; latency p50/p95.",
+        availability: "Use signals optional/unavailable; result presence or promotion count not causal usefulness.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S06/P09",
+        tests: [
+          "AT52",
+          "AT20",
+          "AT42",
+          "AT46"
+        ],
+        formula_version: "proposed:m26.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M26.query_count",
+          "M26.retrieval_hit_ratio",
+          "M26.retrieval_latency_mean_ms",
+          "M26.retrieval_latency_p50_ms",
+          "M26.retrieval_latency_p95_ms",
+          "M26.retrieval_use_ratio"
+        ]
+      },
+      {
+        id: "M27",
+        name: "Candidates, decisions, propagation and replan queue",
+        family: "knowledge",
+        unit: "count/ms",
+        producer_package: "K04\u2192T01\u2192T03",
+        raw_inputs: "Candidate lifecycle, accepted decision event revisions and dependent plan/summary refs",
+        formula: "Distinct candidates/status, decision supersessions, stale dependent count and pending replan age.",
+        availability: "Proposed decision not accepted; no cross-root auto-promotion or copied wiki authority.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S02/S05/S06/P07",
+        tests: [
+          "AT37",
+          "AT38"
+        ],
+        formula_version: "proposed:m27.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M27.candidate_count",
+          "M27.decision_supersession_count",
+          "M27.replan_required_count",
+          "M27.replan_age_ms"
+        ]
+      },
+      {
+        id: "M28",
+        name: "Evolution/benchmark quality and paired deltas",
+        family: "evaluation",
+        unit: "ratio/score/usd/ms",
+        producer_package: "B01\u2192T04",
+        raw_inputs: "Evaluation case/scorer/input/model/config versions, seeds/repetitions, pair ids and applied revision",
+        formula: "Case-defined score; paired per-case baseline/candidate deltas with declared aggregation, n/pairs, uncertainty and quality floor.",
+        availability: "Incompatible/unpaired observational cohorts cannot imply causal improvement; metric-specific score unit declared.",
+        dimensions: "source/evaluation/case/scorer/pair/applied revision/model/config",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S05/S08/P10/P11",
+        tests: [
+          "AT43",
+          "AT44"
+        ],
+        formula_version: "proposed:m28.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M28.evaluation_score",
+          "M28.paired_score_delta",
+          "M28.paired_cost_delta_usd",
+          "M28.paired_latency_delta_ms",
+          "M28.pair_count"
+        ]
+      },
+      {
+        id: "M29",
+        name: "Time-series trends and outliers",
+        family: "series",
+        unit: "metric-specific",
+        producer_package: "T04",
+        raw_inputs: "C9 normalized measurements plus eligible/excluded manifest and cohort conditions",
+        formula: "UTC half-open windows, display timezone only; pooled numerator/denominator, nearest-rank quantiles, declared outlier policy; compare compatible formula/semantics versions.",
+        availability: "No average-of-averages, silent outlier drop or active-run censoring as0.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S01/P09/P11",
+        tests: [
+          "AT29",
+          "AT30",
+          "AT46"
+        ],
+        formula_version: "proposed:m29.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M29.series_value",
+          "M29.excluded_count",
+          "M29.outlier_count"
+        ]
+      },
+      {
+        id: "M30",
+        name: "Projected context load and recall pressure",
+        family: "context",
+        unit: "tokens/ratio/count",
+        producer_package: "T01\u2192T03",
+        raw_inputs: "Context bundle estimates versus observed provider input, cap/escalation and recall layer versions",
+        formula: "Show bundle token estimate separately from measured request input; utilization only with known compatible limit; cap hit count explicit.",
+        availability: "Provider context limit or actual token usage unavailable => ratio unavailable; estimate never billed tokens.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S03/S06/P09",
+        tests: [
+          "AT20",
+          "AT23",
+          "AT46"
+        ],
+        formula_version: "proposed:m30.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M30.context_estimate_tokens",
+          "M30.context_utilization_ratio",
+          "M30.context_cap_hit_count"
+        ]
+      },
+      {
+        id: "M31",
+        name: "Prompt, user steering and handoff provenance",
+        family: "provenance",
+        unit: "count/ratio",
+        producer_package: "T01\u2192T03",
+        raw_inputs: "Sanitized initial/followup/system prompt refs, hash/redaction versions, caller role, assignment and handoff receipt identities; no hidden reasoning",
+        formula: "Distinct observed prompt/handoff events by kind and actor; capture coverage and missing reason; safe sidecar drilldown with exact source/run/execution/task/agent/model correlation.",
+        availability: "Unavailable originals are not reconstructed; prompt lengths/estimates are not billed token measurements.",
+        dimensions: "source/run/execution/phase/task/attempt/agent/host/model/workflow revision",
+        compute_owner: "Plugin normalizes per-run ledger; benchmark T04 computes selected-scope series once; UI/report renders returned values",
+        storage: "Source-qualified trace/sidecar/receipt records \u2192 immutable versioned run analysis artifacts at existing KTD16 homes \u2192 rebuildable benchmark read cache",
+        ui_consumers: "S02/S03/P09",
+        tests: [
+          "AT19",
+          "AT20"
+        ],
+        formula_version: "proposed:m31.1",
+        status: "planned_not_collected",
+        atomic_ids: [
+          "M31.prompt_count",
+          "M31.steering_count",
+          "M31.handoff_count",
+          "M31.prompt_capture_ratio"
+        ]
+      }
+    ],
+    atomic_measurements: [
+      {
+        id: "M01.run_count",
+        family: "M01",
+        unit: "count",
+        formula: "distinct source+run",
+        formula_version: "proposed:m01.run_count.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT14",
+          "AT28"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M01.execution_count",
+        family: "M01",
+        unit: "count",
+        formula: "distinct source+run+execution",
+        formula_version: "proposed:m01.execution_count.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT14",
+          "AT28"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M01.task_count",
+        family: "M01",
+        unit: "count",
+        formula: "distinct source+logical task",
+        formula_version: "proposed:m01.task_count.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT14",
+          "AT28"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M01.goal_count",
+        family: "M01",
+        unit: "count",
+        formula: "distinct source+goal contribution union",
+        formula_version: "proposed:m01.goal_count.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT14",
+          "AT28"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M01.status_count",
+        family: "M01",
+        unit: "count",
+        formula: "count by independent lifecycle/outcome/acceptance/observability axis",
+        formula_version: "proposed:m01.status_count.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT14",
+          "AT28"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M02.elapsed_ms",
+        family: "M02",
+        unit: "ms",
+        formula: "qualified terminal-start or as_of-start",
+        formula_version: "proposed:m02.elapsed_ms.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT25"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M03.active_union_ms",
+        family: "M03",
+        unit: "ms",
+        formula: "union comparable active intervals",
+        formula_version: "proposed:m03.active_union_ms.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT25"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M03.agent_work_ms",
+        family: "M03",
+        unit: "ms",
+        formula: "sum per-agent disjoint active intervals",
+        formula_version: "proposed:m03.agent_work_ms.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT25"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M04.raw_wait_ms",
+        family: "M04",
+        unit: "ms",
+        formula: "union explicit intervals by reason",
+        formula_version: "proposed:m04.raw_wait_ms.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT25",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M04.exclusive_wait_ms",
+        family: "M04",
+        unit: "ms",
+        formula: "wait union minus active union in comparable clock domain",
+        formula_version: "proposed:m04.exclusive_wait_ms.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT25",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M04.queue_wait_ms",
+        family: "M04",
+        unit: "ms",
+        formula: "admitted-start minus queued controller timestamp",
+        formula_version: "proposed:m04.queue_wait_ms.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT25",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M04.operator_wait_ms",
+        family: "M04",
+        unit: "ms",
+        formula: "union explicit operator wait intervals",
+        formula_version: "proposed:m04.operator_wait_ms.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT25",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M04.handoff_wait_ms",
+        family: "M04",
+        unit: "ms",
+        formula: "union explicit handoff wait intervals",
+        formula_version: "proposed:m04.handoff_wait_ms.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT25",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M05.latency_p50_ms",
+        family: "M05",
+        unit: "ms",
+        formula: "nearest_rank(0.50, completed covered latencies)",
+        formula_version: "proposed:m05.latency_p50_ms.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT25",
+          "AT46"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M05.latency_p95_ms",
+        family: "M05",
+        unit: "ms",
+        formula: "nearest_rank(0.95, completed covered latencies)",
+        formula_version: "proposed:m05.latency_p95_ms.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT25",
+          "AT46"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M05.sample_count",
+        family: "M05",
+        unit: "count",
+        formula: "covered completed latency samples",
+        formula_version: "proposed:m05.sample_count.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT25",
+          "AT46"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M06.input_tokens",
+        family: "M06",
+        unit: "tokens",
+        formula: "sum final leaf inclusive input",
+        formula_version: "proposed:m06.input_tokens.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT23"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M07.output_tokens",
+        family: "M07",
+        unit: "tokens",
+        formula: "sum final leaf output",
+        formula_version: "proposed:m07.output_tokens.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT23"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M08.cache_read_tokens",
+        family: "M08",
+        unit: "tokens",
+        formula: "sum declared cache-read subset",
+        formula_version: "proposed:m08.cache_read_tokens.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT23",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M08.cache_write_tokens",
+        family: "M08",
+        unit: "tokens",
+        formula: "sum compatible declared cache-write counters",
+        formula_version: "proposed:m08.cache_write_tokens.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT23",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M08.cache_hit_ratio",
+        family: "M08",
+        unit: "ratio",
+        formula: "covered compatible cache-read / inclusive input; null when denominator0",
+        formula_version: "proposed:m08.cache_hit_ratio.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT23",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M09.total_tokens",
+        family: "M09",
+        unit: "tokens",
+        formula: "input+output, cached not additive",
+        formula_version: "proposed:m09.total_tokens.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT23",
+          "AT28"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M10.measured_spend_usd",
+        family: "M10",
+        unit: "usd",
+        formula: "sum unique measured provider request spend",
+        formula_version: "proposed:m10.measured_spend_usd.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT24",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M10.derived_estimate_usd",
+        family: "M10",
+        unit: "usd",
+        formula: "sum per-request ((inclusive input-cache subset)*uncached price+cache subset*cache price+output*output price), adapter-specific cache-write rules versioned",
+        formula_version: "proposed:m10.derived_estimate_usd.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT24",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M10.native_estimate_usd",
+        family: "M10",
+        unit: "usd",
+        formula: "non-overlapping cumulative native session delta, explicitly estimated",
+        formula_version: "proposed:m10.native_estimate_usd.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT24",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M11.threshold_usd",
+        family: "M11",
+        unit: "usd",
+        formula: "approved native spend threshold",
+        formula_version: "proposed:m11.threshold_usd.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT18",
+          "AT24"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M11.remaining_estimate_usd",
+        family: "M11",
+        unit: "usd",
+        formula: "max(0, threshold-estimate); unknown when estimate unknown",
+        formula_version: "proposed:m11.remaining_estimate_usd.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT18",
+          "AT24"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M11.overshoot_estimate_usd",
+        family: "M11",
+        unit: "usd",
+        formula: "max(0, estimate-threshold)",
+        formula_version: "proposed:m11.overshoot_estimate_usd.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT18",
+          "AT24"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M11.remaining_duration_ms",
+        family: "M11",
+        unit: "ms",
+        formula: "max(0, supervisor deadline-as_of) in supervisor clock",
+        formula_version: "proposed:m11.remaining_duration_ms.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT18",
+          "AT24"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M12.coverage_ratio",
+        family: "M12",
+        unit: "ratio",
+        formula: "field covered / known eligible",
+        formula_version: "proposed:m12.coverage_ratio.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT20",
+          "AT23",
+          "AT29"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M12.covered_count",
+        family: "M12",
+        unit: "count",
+        formula: "eligible samples with field evidence",
+        formula_version: "proposed:m12.covered_count.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT20",
+          "AT23",
+          "AT29"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M12.eligible_count",
+        family: "M12",
+        unit: "count",
+        formula: "known admitted eligible samples, null if enumeration incomplete",
+        formula_version: "proposed:m12.eligible_count.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT20",
+          "AT23",
+          "AT29"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M12.dropped_count",
+        family: "M12",
+        unit: "count",
+        formula: "explicit dropped telemetry counter",
+        formula_version: "proposed:m12.dropped_count.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT20",
+          "AT23",
+          "AT29"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M12.invalid_count",
+        family: "M12",
+        unit: "count",
+        formula: "explicit invalid input count",
+        formula_version: "proposed:m12.invalid_count.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT20",
+          "AT23",
+          "AT29"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M12.duplicate_count",
+        family: "M12",
+        unit: "count",
+        formula: "explicit suppressed identity repeats",
+        formula_version: "proposed:m12.duplicate_count.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT20",
+          "AT23",
+          "AT29"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M13.allocated_tokens",
+        family: "M13",
+        unit: "tokens",
+        formula: "sum known tokens with exact requested dimension binding",
+        formula_version: "proposed:m13.allocated_tokens.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT19",
+          "AT23",
+          "AT24"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M13.unallocated_tokens",
+        family: "M13",
+        unit: "tokens",
+        formula: "known total minus exact allocated total",
+        formula_version: "proposed:m13.unallocated_tokens.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT19",
+          "AT23",
+          "AT24"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M13.allocated_usd",
+        family: "M13",
+        unit: "usd",
+        formula: "sum compatible known cost with exact dimension binding; basis retained",
+        formula_version: "proposed:m13.allocated_usd.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT19",
+          "AT23",
+          "AT24"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M13.unallocated_usd",
+        family: "M13",
+        unit: "usd",
+        formula: "compatible known cost residual; basis retained",
+        formula_version: "proposed:m13.unallocated_usd.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT19",
+          "AT23",
+          "AT24"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M14.outcome_count",
+        family: "M14",
+        unit: "count",
+        formula: "distinct eligible tasks/runs by accepted outcome",
+        formula_version: "proposed:m14.outcome_count.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT14",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M14.success_ratio",
+        family: "M14",
+        unit: "ratio",
+        formula: "verified successful / eligible completed, denominator0 unavailable",
+        formula_version: "proposed:m14.success_ratio.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT14",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M15.first_attempt_success_ratio",
+        family: "M15",
+        unit: "ratio",
+        formula: "eligible completed logical tasks accepted on attempt1 / eligible completed logical tasks",
+        formula_version: "proposed:m15.first_attempt_success_ratio.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT14",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M15.retry_count",
+        family: "M15",
+        unit: "count",
+        formula: "sum max(0, attempt_count-1)",
+        formula_version: "proposed:m15.retry_count.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT14",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M15.rework_count",
+        family: "M15",
+        unit: "count",
+        formula: "distinct explicit repair/rework operations",
+        formula_version: "proposed:m15.rework_count.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT14",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M16.review_round_count",
+        family: "M16",
+        unit: "count",
+        formula: "distinct obligation+invocation+round",
+        formula_version: "proposed:m16.review_round_count.1",
+        producer_package: "W02/W04/T01\u2192T03",
+        tests: [
+          "AT07",
+          "AT22"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M16.finding_count",
+        family: "M16",
+        unit: "count",
+        formula: "distinct finding identity by severity/disposition",
+        formula_version: "proposed:m16.finding_count.1",
+        producer_package: "W02/W04/T01\u2192T03",
+        tests: [
+          "AT07",
+          "AT22"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M16.verdict_count",
+        family: "M16",
+        unit: "count",
+        formula: "explicit satisfied/issues/no_verdict/forcepass by independence strength",
+        formula_version: "proposed:m16.verdict_count.1",
+        producer_package: "W02/W04/T01\u2192T03",
+        tests: [
+          "AT07",
+          "AT22"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M17.assurance_ratio",
+        family: "M17",
+        unit: "ratio",
+        formula: "accepted final-subject required obligations / applicable required obligations",
+        formula_version: "proposed:m17.assurance_ratio.1",
+        producer_package: "W02\u2192T01\u2192T03",
+        tests: [
+          "AT07",
+          "AT41"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M17.stale_evidence_count",
+        family: "M17",
+        unit: "count",
+        formula: "distinct invalidated assurance result ids",
+        formula_version: "proposed:m17.stale_evidence_count.1",
+        producer_package: "W02\u2192T01\u2192T03",
+        tests: [
+          "AT07",
+          "AT41"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M18.loop_round_count",
+        family: "M18",
+        unit: "count",
+        formula: "distinct component invocation+round",
+        formula_version: "proposed:m18.loop_round_count.1",
+        producer_package: "W04\u2192T01\u2192T03",
+        tests: [
+          "AT22"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M18.cap_hit_count",
+        family: "M18",
+        unit: "count",
+        formula: "distinct bounded exhaustion events",
+        formula_version: "proposed:m18.cap_hit_count.1",
+        producer_package: "W04\u2192T01\u2192T03",
+        tests: [
+          "AT22"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M18.unresolved_question_count",
+        family: "M18",
+        unit: "count",
+        formula: "distinct unresolved question identities at snapshot",
+        formula_version: "proposed:m18.unresolved_question_count.1",
+        producer_package: "W04\u2192T01\u2192T03",
+        tests: [
+          "AT22"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M18.blocker_count",
+        family: "M18",
+        unit: "count",
+        formula: "distinct current blocker reason/work identities",
+        formula_version: "proposed:m18.blocker_count.1",
+        producer_package: "W04\u2192T01\u2192T03",
+        tests: [
+          "AT22"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M19.tool_call_count",
+        family: "M19",
+        unit: "count",
+        formula: "distinct completed tool operation ids",
+        formula_version: "proposed:m19.tool_call_count.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT19",
+          "AT25",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M19.tool_failure_ratio",
+        family: "M19",
+        unit: "ratio",
+        formula: "failed/completed applicable tool operations",
+        formula_version: "proposed:m19.tool_failure_ratio.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT19",
+          "AT25",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M19.tool_latency_p50_ms",
+        family: "M19",
+        unit: "ms",
+        formula: "nearest_rank(.50, covered tool latencies)",
+        formula_version: "proposed:m19.tool_latency_p50_ms.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT19",
+          "AT25",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M19.tool_latency_p95_ms",
+        family: "M19",
+        unit: "ms",
+        formula: "nearest_rank(.95, covered tool latencies)",
+        formula_version: "proposed:m19.tool_latency_p95_ms.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT19",
+          "AT25",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M19.tool_retry_count",
+        family: "M19",
+        unit: "count",
+        formula: "distinct retries bound to logical tool operation",
+        formula_version: "proposed:m19.tool_retry_count.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT19",
+          "AT25",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M20.handoff_count",
+        family: "M20",
+        unit: "count",
+        formula: "distinct execution handoff operation ids",
+        formula_version: "proposed:m20.handoff_count.1",
+        producer_package: "R02/R05\u2192T01\u2192T03",
+        tests: [
+          "AT10",
+          "AT17"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M20.startup_latency_ms",
+        family: "M20",
+        unit: "ms",
+        formula: "qualified host start minus controller dispatch acceptance",
+        formula_version: "proposed:m20.startup_latency_ms.1",
+        producer_package: "R02/R05\u2192T01\u2192T03",
+        tests: [
+          "AT10",
+          "AT17"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M20.orphan_attempt_count",
+        family: "M20",
+        unit: "count",
+        formula: "unreconciled admitted attempts at snapshot",
+        formula_version: "proposed:m20.orphan_attempt_count.1",
+        producer_package: "R02/R05\u2192T01\u2192T03",
+        tests: [
+          "AT10",
+          "AT17"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M20.recovery_count",
+        family: "M20",
+        unit: "count",
+        formula: "distinct operation reconciliation attempts",
+        formula_version: "proposed:m20.recovery_count.1",
+        producer_package: "R02/R05\u2192T01\u2192T03",
+        tests: [
+          "AT10",
+          "AT17"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M21.transfer_count",
+        family: "M21",
+        unit: "count",
+        formula: "distinct exclusive source-disposition transfer ids by state",
+        formula_version: "proposed:m21.transfer_count.1",
+        producer_package: "R04\u2192T01\u2192T03",
+        tests: [
+          "AT15",
+          "AT16"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M21.unacked_age_ms",
+        family: "M21",
+        unit: "ms",
+        formula: "as_of-source commit while target ack absent",
+        formula_version: "proposed:m21.unacked_age_ms.1",
+        producer_package: "R04\u2192T01\u2192T03",
+        tests: [
+          "AT15",
+          "AT16"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M22.cost_per_success_usd",
+        family: "M22",
+        unit: "usd_per_outcome",
+        formula: "all eligible attempt known spend / verified successful outcomes; partial basis explicit",
+        formula_version: "proposed:m22.cost_per_success_usd.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT24",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M22.elapsed_per_success_ms",
+        family: "M22",
+        unit: "ms_per_outcome",
+        formula: "declared compatible task/run elapsed numerator / verified successful outcomes; overlaps follow selected grain, not pooled wall-clock",
+        formula_version: "proposed:m22.elapsed_per_success_ms.1",
+        producer_package: "T01\u2192T02\u2192T03",
+        tests: [
+          "AT24",
+          "AT30"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M23.channel_state_count",
+        family: "M23",
+        unit: "count",
+        formula: "count current_for_basis/pending/stale/unknown by source channel generation",
+        formula_version: "proposed:m23.channel_state_count.1",
+        producer_package: "K01/K03\u2192T01\u2192T03",
+        tests: [
+          "AT34",
+          "AT42"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M23.freshness_coverage_ratio",
+        family: "M23",
+        unit: "ratio",
+        formula: "verified channels / eligible channels at declared basis",
+        formula_version: "proposed:m23.freshness_coverage_ratio.1",
+        producer_package: "K01/K03\u2192T01\u2192T03",
+        tests: [
+          "AT34",
+          "AT42"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M23.observed_invalidation_lag_ms",
+        family: "M23",
+        unit: "ms",
+        formula: "as_of-observed change until verified publication; age of observation only",
+        formula_version: "proposed:m23.observed_invalidation_lag_ms.1",
+        producer_package: "K01/K03\u2192T01\u2192T03",
+        tests: [
+          "AT34",
+          "AT42"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M24.refresh_job_count",
+        family: "M24",
+        unit: "count",
+        formula: "distinct refresh jobs by state",
+        formula_version: "proposed:m24.refresh_job_count.1",
+        producer_package: "K02/K03\u2192T01\u2192T03",
+        tests: [
+          "AT35",
+          "AT36"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M24.refresh_latency_p50_ms",
+        family: "M24",
+        unit: "ms",
+        formula: "nearest_rank(.50, covered completed refresh durations)",
+        formula_version: "proposed:m24.refresh_latency_p50_ms.1",
+        producer_package: "K02/K03\u2192T01\u2192T03",
+        tests: [
+          "AT35",
+          "AT36"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M24.refresh_latency_p95_ms",
+        family: "M24",
+        unit: "ms",
+        formula: "nearest_rank(.95, covered completed refresh durations)",
+        formula_version: "proposed:m24.refresh_latency_p95_ms.1",
+        producer_package: "K02/K03\u2192T01\u2192T03",
+        tests: [
+          "AT35",
+          "AT36"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M24.refresh_queue_count",
+        family: "M24",
+        unit: "count",
+        formula: "queued not yet admitted refresh jobs",
+        formula_version: "proposed:m24.refresh_queue_count.1",
+        producer_package: "K02/K03\u2192T01\u2192T03",
+        tests: [
+          "AT35",
+          "AT36"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M24.cas_rejection_count",
+        family: "M24",
+        unit: "count",
+        formula: "distinct failed source/destination CAS attempts",
+        formula_version: "proposed:m24.cas_rejection_count.1",
+        producer_package: "K02/K03\u2192T01\u2192T03",
+        tests: [
+          "AT35",
+          "AT36"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M24.equivalence_failure_count",
+        family: "M24",
+        unit: "count",
+        formula: "distinct clean-rebuild differential failures",
+        formula_version: "proposed:m24.equivalence_failure_count.1",
+        producer_package: "K02/K03\u2192T01\u2192T03",
+        tests: [
+          "AT35",
+          "AT36"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M25.graph_node_count",
+        family: "M25",
+        unit: "count",
+        formula: "nodes in pinned generation",
+        formula_version: "proposed:m25.graph_node_count.1",
+        producer_package: "K02/K03\u2192T01\u2192T03",
+        tests: [
+          "AT33",
+          "AT36"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M25.graph_edge_count",
+        family: "M25",
+        unit: "count",
+        formula: "edges in same generation",
+        formula_version: "proposed:m25.graph_edge_count.1",
+        producer_package: "K02/K03\u2192T01\u2192T03",
+        tests: [
+          "AT33",
+          "AT36"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M25.indexed_file_count",
+        family: "M25",
+        unit: "count",
+        formula: "included files in generation inventory",
+        formula_version: "proposed:m25.indexed_file_count.1",
+        producer_package: "K02/K03\u2192T01\u2192T03",
+        tests: [
+          "AT33",
+          "AT36"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M25.resolution_ratio",
+        family: "M25",
+        unit: "ratio",
+        formula: "resolved references / eligible references under versioned resolver",
+        formula_version: "proposed:m25.resolution_ratio.1",
+        producer_package: "K02/K03\u2192T01\u2192T03",
+        tests: [
+          "AT33",
+          "AT36"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M26.query_count",
+        family: "M26",
+        unit: "count",
+        formula: "distinct completed query ids",
+        formula_version: "proposed:m26.query_count.1",
+        producer_package: "K05\u2192T01\u2192T03",
+        tests: [
+          "AT52",
+          "AT20",
+          "AT42",
+          "AT46"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M26.retrieval_hit_ratio",
+        family: "M26",
+        unit: "ratio",
+        formula: "covered queries with result_count>0 / covered completed queries",
+        formula_version: "proposed:m26.retrieval_hit_ratio.1",
+        producer_package: "K05\u2192T01\u2192T03",
+        tests: [
+          "AT52",
+          "AT20",
+          "AT42",
+          "AT46"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M26.retrieval_latency_mean_ms",
+        family: "M26",
+        unit: "ms",
+        formula: "sum covered durations / covered completed queries",
+        formula_version: "proposed:m26.retrieval_latency_mean_ms.1",
+        producer_package: "K05\u2192T01\u2192T03",
+        tests: [
+          "AT52",
+          "AT20",
+          "AT42",
+          "AT46"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M26.retrieval_latency_p50_ms",
+        family: "M26",
+        unit: "ms",
+        formula: "nearest_rank(.50, covered query durations)",
+        formula_version: "proposed:m26.retrieval_latency_p50_ms.1",
+        producer_package: "K05\u2192T01\u2192T03",
+        tests: [
+          "AT52",
+          "AT20",
+          "AT42",
+          "AT46"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M26.retrieval_latency_p95_ms",
+        family: "M26",
+        unit: "ms",
+        formula: "nearest_rank(.95, covered query durations)",
+        formula_version: "proposed:m26.retrieval_latency_p95_ms.1",
+        producer_package: "K05\u2192T01\u2192T03",
+        tests: [
+          "AT52",
+          "AT20",
+          "AT42",
+          "AT46"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M26.retrieval_use_ratio",
+        family: "M26",
+        unit: "ratio",
+        formula: "queries with explicit downstream use / eligible queries with supported complete use instrumentation; unavailable if unsupported",
+        formula_version: "proposed:m26.retrieval_use_ratio.1",
+        producer_package: "K05\u2192T01\u2192T03",
+        tests: [
+          "AT52",
+          "AT20",
+          "AT42",
+          "AT46"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M27.candidate_count",
+        family: "M27",
+        unit: "count",
+        formula: "distinct candidates by disposition",
+        formula_version: "proposed:m27.candidate_count.1",
+        producer_package: "K04\u2192T01\u2192T03",
+        tests: [
+          "AT37",
+          "AT38"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M27.decision_supersession_count",
+        family: "M27",
+        unit: "count",
+        formula: "accepted decision supersession events",
+        formula_version: "proposed:m27.decision_supersession_count.1",
+        producer_package: "K04\u2192T01\u2192T03",
+        tests: [
+          "AT37",
+          "AT38"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M27.replan_required_count",
+        family: "M27",
+        unit: "count",
+        formula: "dependent pinned plans requiring replan",
+        formula_version: "proposed:m27.replan_required_count.1",
+        producer_package: "K04\u2192T01\u2192T03",
+        tests: [
+          "AT37",
+          "AT38"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M27.replan_age_ms",
+        family: "M27",
+        unit: "ms",
+        formula: "as_of-accepted invalidating decision until replan accepted",
+        formula_version: "proposed:m27.replan_age_ms.1",
+        producer_package: "K04\u2192T01\u2192T03",
+        tests: [
+          "AT37",
+          "AT38"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M28.evaluation_score",
+        family: "M28",
+        unit: "case_score",
+        formula: "scorer-defined value and unit, never pooled across incompatible scorer scales",
+        formula_version: "proposed:m28.evaluation_score.1",
+        producer_package: "B01\u2192T04",
+        tests: [
+          "AT43",
+          "AT44"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M28.paired_score_delta",
+        family: "M28",
+        unit: "case_score",
+        formula: "declared paired candidate-baseline score statistic",
+        formula_version: "proposed:m28.paired_score_delta.1",
+        producer_package: "B01\u2192T04",
+        tests: [
+          "AT43",
+          "AT44"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M28.paired_cost_delta_usd",
+        family: "M28",
+        unit: "usd",
+        formula: "declared paired candidate-baseline known cost statistic",
+        formula_version: "proposed:m28.paired_cost_delta_usd.1",
+        producer_package: "B01\u2192T04",
+        tests: [
+          "AT43",
+          "AT44"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M28.paired_latency_delta_ms",
+        family: "M28",
+        unit: "ms",
+        formula: "declared paired candidate-baseline latency statistic",
+        formula_version: "proposed:m28.paired_latency_delta_ms.1",
+        producer_package: "B01\u2192T04",
+        tests: [
+          "AT43",
+          "AT44"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M28.pair_count",
+        family: "M28",
+        unit: "count",
+        formula: "eligible completed matched baseline/candidate pairs",
+        formula_version: "proposed:m28.pair_count.1",
+        producer_package: "B01\u2192T04",
+        tests: [
+          "AT43",
+          "AT44"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M29.series_value",
+        family: "M29",
+        unit: "inherited_metric_unit",
+        formula: "underlying scalar metric formula per compatible bucket, never mixed units",
+        formula_version: "proposed:m29.series_value.1",
+        producer_package: "T04",
+        tests: [
+          "AT29",
+          "AT30",
+          "AT46"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M29.excluded_count",
+        family: "M29",
+        unit: "count",
+        formula: "explicit excluded entities by reason",
+        formula_version: "proposed:m29.excluded_count.1",
+        producer_package: "T04",
+        tests: [
+          "AT29",
+          "AT30",
+          "AT46"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M29.outlier_count",
+        family: "M29",
+        unit: "count",
+        formula: "declared flagged samples retained unless explicit exclusion policy",
+        formula_version: "proposed:m29.outlier_count.1",
+        producer_package: "T04",
+        tests: [
+          "AT29",
+          "AT30",
+          "AT46"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M30.context_estimate_tokens",
+        family: "M30",
+        unit: "tokens",
+        formula: "versioned bundle estimator; estimated basis",
+        formula_version: "proposed:m30.context_estimate_tokens.1",
+        producer_package: "T01\u2192T03",
+        tests: [
+          "AT20",
+          "AT23",
+          "AT46"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M30.context_utilization_ratio",
+        family: "M30",
+        unit: "ratio",
+        formula: "compatible observed or explicitly estimated context / declared context limit",
+        formula_version: "proposed:m30.context_utilization_ratio.1",
+        producer_package: "T01\u2192T03",
+        tests: [
+          "AT20",
+          "AT23",
+          "AT46"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M30.context_cap_hit_count",
+        family: "M30",
+        unit: "count",
+        formula: "distinct explicit context cap escalation events",
+        formula_version: "proposed:m30.context_cap_hit_count.1",
+        producer_package: "T01\u2192T03",
+        tests: [
+          "AT20",
+          "AT23",
+          "AT46"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M31.prompt_count",
+        family: "M31",
+        unit: "count",
+        formula: "distinct observed initial/followup/system prompt refs by actor",
+        formula_version: "proposed:m31.prompt_count.1",
+        producer_package: "T01\u2192T03",
+        tests: [
+          "AT19",
+          "AT20"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M31.steering_count",
+        family: "M31",
+        unit: "count",
+        formula: "distinct observed user steering events bound to prompt refs",
+        formula_version: "proposed:m31.steering_count.1",
+        producer_package: "T01\u2192T03",
+        tests: [
+          "AT19",
+          "AT20"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M31.handoff_count",
+        family: "M31",
+        unit: "count",
+        formula: "distinct handoff receipt identities",
+        formula_version: "proposed:m31.handoff_count.1",
+        producer_package: "T01\u2192T03",
+        tests: [
+          "AT19",
+          "AT20"
+        ],
+        state: "planned_not_implemented"
+      },
+      {
+        id: "M31.prompt_capture_ratio",
+        family: "M31",
+        unit: "ratio",
+        formula: "safe captured prompt refs / known expected prompt count; unknown denominator stays unknown",
+        formula_version: "proposed:m31.prompt_capture_ratio.1",
+        producer_package: "T01\u2192T03",
+        tests: [
+          "AT19",
+          "AT20"
+        ],
+        state: "planned_not_implemented"
+      }
+    ],
+    cohort_rules: {
+      "Identity/grain": "Every query declares grain and source-qualified entity keys. Repeated run attachments and linked imported evaluation requests are unioned by identity. Different sources with the same local id remain distinct. Task and goal contributions never create a second copy of billable usage.",
+      "Activity windows": "UTC [from,to), filter completed request/tool/query observations by qualified completion timestamp; interval metrics clip to the window in a comparable clock domain. Invalid or absent clocks are excluded with reason, never silently coerced.",
+      "Outcome cohorts": "Select eligible logical tasks/runs by accepted terminal time in [from,to), scoped source/task/case/difficulty/workflow/model/config conditions. Pending outcomes are right-censored and reported separately. Cost-per-outcome includes ALL attempts of those selected entities, even attempts before the window. Do not truncate numerator to activity-window spend.",
+      Snapshots: "Inventory/status counts are as_of snapshots, not event-count windows. All pages and drilldown use the same immutable input-manifest digest and source generation; changed snapshots cause explicit stale-cursor refusal or a new query.",
+      Missingness: "Eligible, covered, excluded and unavailable counts are field-specific. A capable producer fixture must yield observed metrics; unavailable is valid only for a recorded capability/data-loss reason. Unknown eligible denominator makes coverage unknown; no null-to-zero default.",
+      "Quality and distributions": "Pool numerators and denominators rather than average rates. Nearest-rank quantiles use completed covered samples with n and outliers visible; no silent outlier removal. Active samples are censored, not zero-duration. Comparable case/scorer/config/model/semantics and quality floor required for improvement claims.",
+      "Session-only accounting": "If a host exposes only a cumulative session/native estimate, retain a distinct session observation with baseline/delta and coverage. Never invent leaf request ids, exact per-task allocation or complete request denominators. Where final request observations also exist, choose one authoritative accounting granularity to avoid overlap."
+    },
+    all_required_for_ui_contract: true,
+    collection_implemented: false
+  },
+  schema_registry: {
+    schema_version: "guild.stack.schema_registry.v2",
+    protocol_major: 2,
+    availability: "schema_contract_only_no_runtime_capability",
+    contracts: [
+      {
+        name: "common",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/common.schema.json",
+        schema_version: null,
+        file: "schemas/common.schema.json"
+      },
+      {
+        name: "scope-session",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/scope-session.schema.json",
+        schema_version: "guild.stack.scope-session.v2",
+        file: "schemas/scope-session.schema.json"
+      },
+      {
+        name: "entity-evidence",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/entity-evidence.schema.json",
+        schema_version: "guild.stack.entity-evidence.v2",
+        file: "schemas/entity-evidence.schema.json"
+      },
+      {
+        name: "read-projection",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/read-projection.schema.json",
+        schema_version: "guild.stack.read-projection.v2",
+        file: "schemas/read-projection.schema.json"
+      },
+      {
+        name: "capability-manifest",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/capability-manifest.schema.json",
+        schema_version: "guild.stack.capability-manifest.v2",
+        file: "schemas/capability-manifest.schema.json"
+      },
+      {
+        name: "operation-preview",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-preview.schema.json",
+        schema_version: "guild.stack.operation-preview.v2",
+        file: "schemas/operation-preview.schema.json"
+      },
+      {
+        name: "operation-arguments",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-arguments.schema.json",
+        schema_version: "guild.stack.operation-arguments.v2",
+        file: "schemas/operation-arguments.schema.json"
+      },
+      {
+        name: "approval-record",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/approval-record.schema.json",
+        schema_version: "guild.stack.approval-record.v2",
+        file: "schemas/approval-record.schema.json"
+      },
+      {
+        name: "operation-receipt",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-receipt.schema.json",
+        schema_version: "guild.stack.operation-receipt.v2",
+        file: "schemas/operation-receipt.schema.json"
+      },
+      {
+        name: "workflow-projection",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/workflow-projection.schema.json",
+        schema_version: "guild.stack.workflow-projection.v2",
+        file: "schemas/workflow-projection.schema.json"
+      },
+      {
+        name: "metric-series",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/metric-series.schema.json",
+        schema_version: "guild.stack.metric-series.v2",
+        file: "schemas/metric-series.schema.json"
+      },
+      {
+        name: "execution-lineage",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/execution-lineage.schema.json",
+        schema_version: "guild.stack.execution-lineage.v1",
+        file: "schemas/execution-lineage.schema.json"
+      },
+      {
+        name: "knowledge-publication",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/knowledge-publication.schema.json",
+        schema_version: "guild.stack.knowledge-publication.v1",
+        file: "schemas/knowledge-publication.schema.json"
+      },
+      {
+        name: "trace-analysis",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/trace-analysis.schema.json",
+        schema_version: "guild.trace.analysis.v3",
+        file: "schemas/trace-analysis.schema.json"
+      },
+      {
+        name: "run-analysis",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/run-analysis.schema.json",
+        schema_version: "guild.run_analysis.v2",
+        file: "schemas/run-analysis.schema.json"
+      },
+      {
+        name: "run-comparison",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/run-comparison.schema.json",
+        schema_version: "guild.run_comparison.v2",
+        file: "schemas/run-comparison.schema.json"
+      },
+      {
+        name: "evaluation-manifest",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/evaluation-manifest.schema.json",
+        schema_version: "guild.stack.evaluation-manifest.v2",
+        file: "schemas/evaluation-manifest.schema.json"
+      },
+      {
+        name: "report-manifest",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/report-manifest.schema.json",
+        schema_version: "guild.stack.report-manifest.v2",
+        file: "schemas/report-manifest.schema.json"
+      },
+      {
+        name: "logical-run",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/logical-run.schema.json",
+        schema_version: "guild.logical_run.v2",
+        file: "schemas/logical-run.schema.json"
+      },
+      {
+        name: "execution-segment",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/execution-segment.schema.json",
+        schema_version: "guild.execution_segment.v1",
+        file: "schemas/execution-segment.schema.json"
+      },
+      {
+        name: "task-assignment",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/task-assignment.schema.json",
+        schema_version: "guild.task_assignment.v3",
+        file: "schemas/task-assignment.schema.json"
+      },
+      {
+        name: "task-attempt",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/task-attempt.schema.json",
+        schema_version: "guild.task_attempt.v1",
+        file: "schemas/task-attempt.schema.json"
+      },
+      {
+        name: "run-binding",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/run-binding.schema.json",
+        schema_version: "guild.run_binding.v2",
+        file: "schemas/run-binding.schema.json"
+      },
+      {
+        name: "followup-transfer",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/followup-transfer.schema.json",
+        schema_version: "guild.followup_transfer.v1",
+        file: "schemas/followup-transfer.schema.json"
+      },
+      {
+        name: "negotiation",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/negotiation.schema.json",
+        schema_version: "guild.stack.negotiation.v2",
+        file: "schemas/negotiation.schema.json"
+      },
+      {
+        name: "read-request",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/read-request.schema.json",
+        schema_version: "guild.stack.read-request.v2",
+        file: "schemas/read-request.schema.json"
+      },
+      {
+        name: "metric-drilldown",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/metric-drilldown.schema.json",
+        schema_version: "guild.stack.metric-drilldown.v2",
+        file: "schemas/metric-drilldown.schema.json"
+      },
+      {
+        name: "refusal",
+        schema_id: "https://guildstack.dev/contracts/guild-stack/v2/refusal.schema.json",
+        schema_version: "guild.stack.refusal.v2",
+        file: "schemas/refusal.schema.json"
+      }
+    ],
+    supported_v1: "../v1/contract-bundle.json",
+    negotiation: "Exact schema version intersection; unknown/unsupported version refuses. Never send new fields to closed v1. A04 installed readers required before new writers activate.",
+    metric_registry: "metric-catalog.json",
+    semantic_validator: "verify_contracts.py",
+    projection_body_schemas: [
+      "entity-evidence",
+      "execution-lineage",
+      "logical-run",
+      "execution-segment",
+      "task-assignment",
+      "task-attempt",
+      "run-binding",
+      "followup-transfer",
+      "trace-analysis",
+      "workflow-projection",
+      "knowledge-publication",
+      "metric-series",
+      "metric-drilldown",
+      "run-analysis",
+      "run-comparison",
+      "evaluation-manifest",
+      "report-manifest",
+      "operation-receipt",
+      "approval-record"
+    ],
+    projection_body_rule: "ReadProjection item bodies are restricted to these public versioned documents; helper, request, negotiation, preview/argument and legacy schemas structured-refuse"
+  },
+  operation_catalog: {
+    schema_version: "guild.stack.operation_catalog.v2",
+    operations: [
+      {
+        id: "v2.launch",
+        input_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-arguments.schema.json",
+        output_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-receipt.schema.json",
+        argument_kind: "launch",
+        availability: "unavailable_until_domain_qualification",
+        approval: "exact preview/authority/revisions/budget; apply under current source controller lock",
+        poll_terminal_states: [
+          "applied",
+          "failed"
+        ],
+        recovery_state: "recovery_needed",
+        dispatch_is_logical_success: false
+      },
+      {
+        id: "v2.resume",
+        input_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-arguments.schema.json",
+        output_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-receipt.schema.json",
+        argument_kind: "resume",
+        availability: "unavailable_until_domain_qualification",
+        approval: "exact preview/authority/revisions/budget; apply under current source controller lock",
+        poll_terminal_states: [
+          "applied",
+          "failed"
+        ],
+        recovery_state: "recovery_needed",
+        dispatch_is_logical_success: false
+      },
+      {
+        id: "v2.cancel",
+        input_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-arguments.schema.json",
+        output_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-receipt.schema.json",
+        argument_kind: "cancel",
+        availability: "unavailable_until_domain_qualification",
+        approval: "exact preview/authority/revisions/budget; apply under current source controller lock",
+        poll_terminal_states: [
+          "applied",
+          "failed"
+        ],
+        recovery_state: "recovery_needed",
+        dispatch_is_logical_success: false
+      },
+      {
+        id: "v2.seal",
+        input_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-arguments.schema.json",
+        output_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-receipt.schema.json",
+        argument_kind: "seal",
+        availability: "unavailable_until_domain_qualification",
+        approval: "exact preview/authority/revisions/budget; apply under current source controller lock",
+        poll_terminal_states: [
+          "applied",
+          "failed"
+        ],
+        recovery_state: "recovery_needed",
+        dispatch_is_logical_success: false
+      },
+      {
+        id: "v2.close",
+        input_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-arguments.schema.json",
+        output_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-receipt.schema.json",
+        argument_kind: "close",
+        availability: "unavailable_until_domain_qualification",
+        approval: "exact preview/authority/revisions/budget; apply under current source controller lock",
+        poll_terminal_states: [
+          "applied",
+          "failed"
+        ],
+        recovery_state: "recovery_needed",
+        dispatch_is_logical_success: false
+      },
+      {
+        id: "v2.transfer",
+        input_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-arguments.schema.json",
+        output_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-receipt.schema.json",
+        argument_kind: "transfer",
+        availability: "unavailable_until_domain_qualification",
+        approval: "exact preview/authority/revisions/budget; apply under current source controller lock",
+        poll_terminal_states: [
+          "applied",
+          "failed"
+        ],
+        recovery_state: "recovery_needed",
+        dispatch_is_logical_success: false
+      },
+      {
+        id: "v2.workflow_adopt",
+        input_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-arguments.schema.json",
+        output_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-receipt.schema.json",
+        argument_kind: "workflow_adopt",
+        availability: "unavailable_until_domain_qualification",
+        approval: "exact preview/authority/revisions/budget; apply under current source controller lock",
+        poll_terminal_states: [
+          "applied",
+          "failed"
+        ],
+        recovery_state: "recovery_needed",
+        dispatch_is_logical_success: false
+      },
+      {
+        id: "v2.knowledge_publish",
+        input_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-arguments.schema.json",
+        output_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-receipt.schema.json",
+        argument_kind: "knowledge_publish",
+        availability: "unavailable_until_domain_qualification",
+        approval: "exact preview/authority/revisions/budget; apply under current source controller lock",
+        poll_terminal_states: [
+          "applied",
+          "failed"
+        ],
+        recovery_state: "recovery_needed",
+        dispatch_is_logical_success: false
+      },
+      {
+        id: "v2.refresh",
+        input_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-arguments.schema.json",
+        output_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-receipt.schema.json",
+        argument_kind: "refresh",
+        availability: "unavailable_until_domain_qualification",
+        approval: "exact preview/authority/revisions/budget; apply under current source controller lock",
+        poll_terminal_states: [
+          "applied",
+          "failed"
+        ],
+        recovery_state: "recovery_needed",
+        dispatch_is_logical_success: false
+      },
+      {
+        id: "v2.evaluate",
+        input_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-arguments.schema.json",
+        output_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-receipt.schema.json",
+        argument_kind: "evaluate",
+        availability: "unavailable_until_domain_qualification",
+        approval: "exact preview/authority/revisions/budget; apply under current source controller lock",
+        poll_terminal_states: [
+          "applied",
+          "failed"
+        ],
+        recovery_state: "recovery_needed",
+        dispatch_is_logical_success: false
+      },
+      {
+        id: "v2.report",
+        input_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-arguments.schema.json",
+        output_schema_id: "https://guildstack.dev/contracts/guild-stack/v2/operation-receipt.schema.json",
+        argument_kind: "report",
+        availability: "unavailable_until_domain_qualification",
+        approval: "exact preview/authority/revisions/budget; apply under current source controller lock",
+        poll_terminal_states: [
+          "applied",
+          "failed"
+        ],
+        recovery_state: "recovery_needed",
+        dispatch_is_logical_success: false
+      }
+    ],
+    legacy_operation_names: "v1 operation ids/arguments remain untouched; negotiated v2 operation ids do not silently replace v1",
+    http_compatibility: "Preserve v1 HTTP200 immediate receipt and202 operation status; v2 capability negotiates operation/receipt kinds explicitly",
+    runtime_available: false
+  },
+  storage_contract: {
+    schema_version: "guild.stack.storage_contract.v2",
+    source_truth: ".guild in the owning project/workspace; no cross-repo source imports",
+    paths: {
+      logical_run: "runs/<run_id>/run.yaml (new version after R01, v1 open records unchanged)",
+      execution: "runs/<run_id>/executions/<execution_id>/manifest.json",
+      trace: "runs/<run_id>/trace.jsonl (versioned events, retain capture/loss metadata)",
+      run_analysis: "analysis/runs/<run_id>/analysis.json is legacy v1; v2 lives at analysis/runs/<run_id>/versions/<analysis_id>/analysis.json with current.v2.json pointer; v1 bytes remain unchanged",
+      comparison: "analysis/comparisons/<comparison_id>/comparison.json is legacy v1; v2 at analysis/comparisons/<comparison_id>/versions/<analysis_id>/comparison.json with current.v2.json pointer",
+      workflow_components: "graphs/components/<component_id>.yaml",
+      knowledge: "knowledge/ immutable generation outputs + publication manifest owned by qualified scope",
+      evaluation: "artifacts/generated/benchmarks/<evaluation_id>/",
+      report: "artifacts/reports/<report_id>/"
+    },
+    private_excluded: [
+      "raw prompts/queries/handoffs unless scrubbed and retention-qualified",
+      "writer/worker grants and nonces",
+      "binding/session operational secrets"
+    ],
+    retention: {
+      pinned_inputs: "retain while referenced by active work/review/report/recovery",
+      expired_originals: "keep safe hash and explicit unavailable reason; never reconstruct",
+      derived_cache: "rebuildable, version/input/pricing/semantics keyed",
+      all_writers_must_upgrade: true
+    },
+    legacy: "No mutation/backfill of immutable v1 identity; new projections only where retained evidence supports them"
+  }
+};
+
+// src/domains/lifecycle/stack-contract-reader.ts
+var V2_PREFIX = "https://guildstack.dev/contracts/guild-stack/v2/";
+var STACK_V2_ACTIVATION_GATES = Object.freeze(["V01", "D01", "Z01"]);
+var cached = null;
+function tables() {
+  if (cached) return cached;
+  const contracts = [];
+  const byUri = /* @__PURE__ */ new Map();
+  for (const [file, schema] of Object.entries(stack_contracts_generated_default.schemas)) {
+    byUri.set(schema.$id, schema);
+    const version = schema?.properties?.schema_version?.const;
+    if (typeof version === "string") contracts.push({ name: file.replace(/\.schema\.json$/, ""), schema_id: schema.$id, schema_version: version, major: "v1" });
+  }
+  for (const s of Object.values(stack_contracts_v2_generated_default.schemas)) byUri.set(s.$id, s);
+  for (const c of stack_contracts_v2_generated_default.schema_registry.contracts)
+    if (typeof c.schema_version === "string") contracts.push({ name: c.name, schema_id: c.schema_id, schema_version: c.schema_version, major: "v2" });
+  const metrics = new Map(stack_contracts_v2_generated_default.metric_catalog.atomic_measurements.map((m) => [m.id, m]));
+  cached = {
+    contracts,
+    byUri,
+    byVersion: new Map(contracts.map((c) => [c.schema_version, c])),
+    v2NameByUri: new Map(Object.entries(stack_contracts_v2_generated_default.schemas).map(([file, s]) => [s.$id, file.replace(/\.schema\.json$/, "")])),
+    metrics,
+    operations: new Map(stack_contracts_v2_generated_default.operation_catalog.operations.map((o) => [o.id, o])),
+    projectionBodies: new Set(stack_contracts_v2_generated_default.schema_registry.projection_body_schemas),
+    signedMetrics: new Set([...metrics.values()].filter((m) => String(m.formula).includes("paired candidate-baseline")).map((m) => m.id)),
+    v1Operations: new Map(stack_contracts_generated_default.catalog.operations.map((o) => [o.id, o]))
+  };
+  return cached;
+}
+function stackReaderVersions(profile = "v1+v2") {
+  return tables().contracts.filter((c) => profile === "v1+v2" || c.major === "v1").map((c) => c.schema_version).sort();
+}
+var LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u;
+function canonical2(value) {
+  if (typeof value === "string" && LONE_SURROGATE.test(value)) throw new Error("Invalid Unicode");
+  if (typeof value === "number" && !Number.isFinite(value)) throw new Error("Number is not interoperable JSON");
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return "[" + value.map(canonical2).join(",") + "]";
+  return "{" + Object.keys(value).sort().map((k) => JSON.stringify(k) + ":" + canonical2(value[k])).join(",") + "}";
+}
+var stackContractDigest = (value) => "sha256:" + (0, import_node_crypto7.createHash)("sha256").update(canonical2(value)).digest("hex");
+var eq = (a, b) => canonical2(a) === canonical2(b);
+var includes2 = (list, x) => list.some((y) => eq(x, y));
+var truthy = (x) => !(x === null || x === void 0 || x === false || x === 0 || x === "" || Array.isArray(x) && x.length === 0 || typeof x === "object" && !Array.isArray(x) && Object.keys(x).length === 0);
+var isObj4 = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
+var has = (o, keys) => keys.every((k) => k in o);
+function dt(s) {
+  const m = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$/.exec(s);
+  const base = m ? Date.parse(m[1] + m[3]) : NaN;
+  if (!m || Number.isNaN(base)) throw new Error("unsupported timestamp");
+  return BigInt(base) * 1000n + BigInt((m[2] ?? "").slice(0, 6).padEnd(6, "0"));
+}
+var PY_SPACE = "	\n\v\f\r \x85\xA0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000";
+function pyStrip(x) {
+  let a = 0, b = x.length;
+  while (a < b && PY_SPACE.includes(x[a])) a++;
+  while (b > a && PY_SPACE.includes(x[b - 1])) b--;
+  return x.slice(a, b);
+}
+function nonInteroperable(o, level = 0) {
+  if (level > 64) return true;
+  if (typeof o === "number") return !Number.isFinite(o) || Number.isInteger(o) && !Number.isSafeInteger(o);
+  if (typeof o === "string") return LONE_SURROGATE.test(o);
+  if (Array.isArray(o)) return o.some((x) => nonInteroperable(x, level + 1));
+  if (isObj4(o)) return Object.entries(o).some(([k, x]) => LONE_SURROGATE.test(k) || nonInteroperable(x, level + 1));
+  return false;
+}
+var isclose = (a, b, abs = 1e-12) => Math.abs(a - b) <= Math.max(1e-9 * Math.max(Math.abs(a), Math.abs(b)), abs);
+var subset = (a, b) => [...a].every((x) => b.has(x));
+var REQUIRED_GATE_ROLES = { product: ["d5", "qa", "d8"] };
+var RELEASE_GATE_ROLES = ["d5", "qa", "d8"];
+var RELEASE_CLASS_GATE_ROLES = { ops: ["ops"] };
+var QA_ASSURANCE_KINDS = /* @__PURE__ */ new Set(["security", "adversarial_security", "ui", "ux"]);
+var UNSIGNED_UNITS = /* @__PURE__ */ new Set(["count", "tokens", "ms", "usd", "usd_per_outcome", "ms_per_outcome"]);
+var USAGE_COUNTERS = ["input_inclusive", "output", "cache_read_subset", "cache_write_subset", "total"];
+var usable = (e) => e !== null && e !== void 0 && e.availability === "available";
+var disclosed = (e) => e !== null && e !== void 0 && (e.availability === "available" || ["expired", "redacted"].includes(e.availability) && truthy(e.reason));
+function inputIdentity(q) {
+  const c = JSON.parse(JSON.stringify(q));
+  delete c.versions.formula;
+  delete c.underlying_scalar;
+  return c;
+}
+function bodyIdentity(name, b) {
+  const l = b.lineage;
+  switch (name) {
+    case "entity-evidence":
+      return b.entity;
+    case "workflow-projection":
+      return b.workflow;
+    case "run-analysis":
+      return b.run;
+    case "evaluation-manifest":
+      return b.evaluation;
+    case "report-manifest":
+      return b.report;
+    case "execution-lineage":
+    case "execution-segment":
+      return [l.source_id, "execution", l.execution_id];
+    case "task-assignment":
+      return [l.source_id, "logical_task", l.logical_task_id];
+    case "task-attempt":
+      return [l.source_id, "task_attempt", l.attempt_id];
+    case "trace-analysis":
+      return [l.source_id, null, null];
+    case "logical-run":
+    case "run-binding":
+      return [b.source_id, "run", b.run_id];
+    case "followup-transfer":
+      return [b.source_work.source_id, "transfer", b.operation_id];
+    case "knowledge-publication":
+      return [b.durable_owner_source_id, null, null];
+    case "operation-receipt":
+      return [b.source_id, "operation", b.operation_id];
+    case "approval-record":
+      return [b.source_id, "decision", b.decision_id];
+    default:
+      return null;
+  }
+}
+function stackV2SemanticErrors(name, value, shape2, depth = 0) {
+  let errors = [];
+  const assertRule = (ok, message) => {
+    if (!ok) errors.push(message);
+  };
+  const coverage2 = (c) => {
+    if (c.eligible !== null) {
+      assertRule(c.covered <= c.eligible, "covered exceeds eligible");
+      if (c.missing !== null) assertRule(c.covered + c.missing === c.eligible, "eligible must equal covered plus missing; excluded is outside eligible");
+    }
+    if (c.state === "complete") assertRule(c.eligible !== null && c.covered === c.eligible && c.missing === 0, "complete requires known full coverage");
+    else assertRule(truthy(c.reason), "incomplete coverage needs reason");
+    if (c.state === "unavailable") assertRule(c.covered === 0, "unavailable coverage cannot have covered samples");
+  };
+  const snapshot = (s) => {
+    const gens = new Set(s.source_generations.map((x) => x.source_id));
+    const ids = new Set(s.source_ids);
+    assertRule(s.source_generations.length === gens.size && gens.size === ids.size && subset(gens, ids), "snapshot source/generation identity mismatch");
+  };
+  const query = (q) => {
+    snapshot(q.snapshot);
+    assertRule(dt(q.window.from) < dt(q.window.to), "window must be nonempty half-open [from,to)");
+  };
+  const axes = (s) => {
+    if (s.outcome === "succeeded") assertRule(s.acceptance === "verified", "success requires verified acceptance");
+    if (s.lifecycle === "closed") assertRule(!["pending", "unknown"].includes(s.outcome), "closed cannot have pending/unknown outcome");
+  };
+  const usage2 = (u) => {
+    coverage2(u.coverage);
+    if (u.coverage.state === "unavailable") assertRule(USAGE_COUNTERS.every((k) => u[k] === null), "unavailable usage must report null counters, not zero");
+    if (u.input_inclusive !== null)
+      for (const k of ["cache_read_subset", "cache_write_subset"]) assertRule(u[k] === null || u[k] <= u.input_inclusive, "cache must be subset of inclusive input");
+    const expected = u.input_inclusive === null || u.output === null ? null : u.input_inclusive + u.output;
+    assertRule(u.total === expected, "total must be input plus output; cache is not additive");
+    if (u.cost_basis === "unavailable") assertRule(u.cost_usd === null, "unavailable cost must be null");
+    if (u.cost_basis !== "unavailable") assertRule(u.cost_usd !== null, "available cost basis requires value");
+    if (u.cost_basis === "derived_estimate") assertRule(truthy(u.pricing_version), "derived estimate needs pricing version");
+    if (u.granularity === "native_session") {
+      assertRule(u.inclusion === "session_cumulative" && u.usage_semantics === "provider_session_only.v1", "session accounting cannot claim leaf semantics");
+      assertRule(USAGE_COUNTERS.every((k) => u[k] === null), "session-only cost does not synthesize normalized leaf tokens");
+      assertRule(["native_estimate", "unavailable"].includes(u.cost_basis), "native session never measured billing");
+      if (u.cost_usd !== null)
+        assertRule(u.native_baseline_usd !== null && u.native_cumulative_usd !== null && u.native_cumulative_usd >= u.native_baseline_usd && isclose(u.cost_usd, u.native_cumulative_usd - u.native_baseline_usd), "session delta needs non-reset baseline");
+    } else assertRule(u.inclusion !== "session_cumulative", "leaf cannot claim cumulative session inclusion");
+  };
+  const budget = (b) => {
+    assertRule(b.threshold_usd > 0, "paid dispatch threshold must be positive");
+    assertRule(b.overshoot_possible === (b.mode === "native_spend_threshold"), "native threshold may overshoot; strict mode requires separate verified qualification");
+    assertRule(disclosed(b.qualification), "budget qualification cannot rest on missing or unsupported evidence");
+  };
+  const walk = (o, level = 0) => {
+    if (level > 32) {
+      errors.push("object depth exceeds validation budget");
+      return;
+    }
+    if (isObj4(o)) {
+      if (has(o, ["eligible", "covered", "excluded", "missing", "state", "reason", "exclusion_reasons"])) coverage2(o);
+      if (has(o, ["lifecycle", "outcome", "acceptance", "observability"])) axes(o);
+      if (has(o, ["start", "end", "duration_ms", "clock"])) {
+        assertRule(o.end === null || dt(o.end) >= dt(o.start), "interval cannot end before start");
+        assertRule(o.duration_ms === null || o.clock.basis !== "unknown", "unknown clock cannot claim duration");
+      }
+      if (has(o, ["threshold_usd", "duration_limit_ms", "overshoot_possible", "qualification", "policy_hash", "mode"])) budget(o);
+      if (has(o, ["source_id", "run_id", "execution_id", "host_session_id", "attempt_id", "logical_task_id", "request_id"]))
+        assertRule(o.attempt_id === null || o.logical_task_id !== null, "attempt requires logical task");
+      if (has(o, ["provider", "model", "status", "reason"])) {
+        if (o.status === "observed") assertRule(o.model !== null, "observed identity needs observed model");
+        if (o.status === "unavailable") assertRule(o.model === null && truthy(o.reason), "unavailable observed identity needs null model and reason");
+      }
+      for (const x of Object.values(o)) walk(x, level + 1);
+    } else if (Array.isArray(o)) for (const x of o) walk(x, level + 1);
+  };
+  if (depth > 16) return ["nested projection exceeds validation budget"];
+  walk(value);
+  if ("query" in value) query(value.query);
+  if ("snapshot" in value) snapshot(value.snapshot);
+  const v = value;
+  if (name === "scope-session") {
+    const ids = [v.root.source_id, ...v.children.map((x) => x.source_id)];
+    assertRule(ids.length === new Set(ids).size, "duplicate registered source");
+    assertRule(v.mode === v.root.root_kind, "scope mode/root mismatch");
+    assertRule(v.mode === "workspace" || !truthy(v.children), "project cannot enumerate children");
+    assertRule(v.snapshot.source_ids.includes(v.root.source_id) && subset(v.snapshot.source_ids, new Set(ids)), "session snapshot must contain the root and only registered sources");
+  } else if (name === "entity-evidence") {
+    assertRule(v.evidence.every((x) => x.source_id === v.entity.source_id), "evidence crosses entity owner");
+    assertRule(v.snapshot.source_ids.includes(v.entity.source_id), "entity owner outside its evidence snapshot");
+  } else if (name === "read-projection") {
+    const allowed = new Set(v.snapshot.source_ids);
+    for (const item of v.items) {
+      assertRule(allowed.has(item.ref.source_id), "item outside source snapshot");
+      const target = tables().v2NameByUri.get(item.body_schema_id);
+      assertRule(target !== void 0 && tables().projectionBodies.has(target), "body schema is not a public projection document; structured-refuse");
+      if (target !== void 0 && tables().projectionBodies.has(target)) {
+        const nestedOk = shape2(target, item.body);
+        assertRule(nestedOk, "invalid typed projection body");
+        if (nestedOk) {
+          errors = errors.concat(stackV2SemanticErrors(target, item.body, shape2, depth + 1));
+          const bodySnapshot = "snapshot" in item.body ? item.body.snapshot : item.body.query?.snapshot;
+          if (truthy(bodySnapshot)) assertRule(eq(bodySnapshot, v.snapshot), "projection cannot mix snapshots/generations");
+          const ident = bodyIdentity(target, item.body);
+          if (isObj4(ident)) assertRule(eq(ident, item.ref), "typed body entity differs from containing ref");
+          else if (ident) assertRule(ident[0] === item.ref.source_id && (ident[1] === null || ident[1] === item.ref.kind && ident[2] === item.ref.id), "typed body owner/identity differs from containing source-qualified ref");
+          else assertRule(bodySnapshot !== null && bodySnapshot !== void 0 && bodySnapshot.source_ids.includes(item.ref.source_id), "aggregate body must be scoped to the ref source snapshot");
+        }
+      }
+    }
+  } else if (name === "capability-manifest") {
+    const keys = v.supported_contracts.map((x) => canonical2([x.schema_id, x.schema_version]));
+    assertRule(keys.length === new Set(keys).size, "duplicate capability contract");
+    for (const op of v.operations) if (op.availability === "unavailable") assertRule(truthy(op.reason), "unavailable operation needs reason");
+  } else if (name === "operation-preview") {
+    const owner = v.source_id;
+    assertRule(v.authority.controller_source_id === owner, "foreign controller authority");
+    assertRule(v.targets.every((x) => x.source_id === owner) && v.effects.every((x) => x.target.source_id === owner), "preview writes escape owner");
+    assertRule(v.effects.every((x) => includes2(v.targets, x.target)), "effect target is not an exact reviewed preview target/revision");
+    const op = tables().operations.get(v.operation);
+    assertRule(op !== void 0, "operation is not in the pinned operation catalog");
+    if (op) assertRule(v.input_schema_id === op.input_schema_id, "input schema differs from catalog operation input schema");
+    const target = tables().v2NameByUri.get(v.input_schema_id);
+    assertRule(target !== void 0, "unsupported input schema");
+    if (target !== void 0) {
+      const nestedOk = shape2(target, v.arguments);
+      assertRule(nestedOk, "invalid typed operation arguments");
+      if (nestedOk) {
+        errors = errors.concat(stackV2SemanticErrors(target, v.arguments, shape2, depth + 1).map((e) => "arguments: " + e));
+        if (op && target === "operation-arguments") {
+          const a = v.arguments, auth = v.authority;
+          assertRule(a.kind === op.argument_kind, "argument kind differs from catalog operation");
+          if (a.target !== null) {
+            assertRule(includes2(v.targets, a.target), "argument target is not an exact preview target");
+            assertRule(a.expected_revision === a.target.revision, "argument expected revision differs from target revision");
+          }
+          if (a.destination !== null) assertRule(includes2([...v.targets, ...v.dependencies], a.destination), "argument destination is not bound by preview");
+          for (const k of ["execution_id", "attempt_id"]) if (auth[k] !== null) assertRule(a[k] === auth[k], "argument " + k + " differs from preview authority");
+          assertRule(a.policy_hash === v.policy_revision, "argument policy differs from preview policy revision");
+          assertRule(eq(a.budget, v.budget), "outer preview budget differs from typed argument budget");
+          if (a.budget !== null) assertRule(a.budget.policy_hash === a.policy_hash && a.budget.qualification.source_id === owner, "budget policy or qualification owner differs from preview controller");
+          if (a.host_proof !== null) assertRule(a.host_proof.source_id === owner, "host proof is not recorded by the preview controller source");
+        }
+      }
+    }
+    assertRule(v.arguments_hash === stackContractDigest(v.arguments), "argument hash mismatch");
+    const { preview_hash: _ph, ...rest } = v;
+    assertRule(v.preview_hash === stackContractDigest(rest), "preview hash does not bind full authority/content");
+  } else if (name === "operation-arguments") {
+    if (v.kind === "launch") assertRule(v.budget !== null && v.workflow_hash !== null, "launch requires budget and workflow pin");
+    if (["resume", "cancel", "seal"].includes(v.kind)) assertRule(v.target !== null && v.execution_id !== null && v.expected_revision !== null, "resume/cancel/seal must bind exact execution, target and revision");
+    if (v.kind === "resume") assertRule(v.host_session_id !== null && v.attempt_id !== null && usable(v.host_proof), "resume requires exact observed host session, attempt and available proof");
+    if (v.kind === "cancel") assertRule(v.attempt_id !== null && usable(v.host_proof), "cancel requires exact owned attempt and available proof; no latest fallback");
+    if (v.budget !== null) assertRule(usable(v.budget.qualification), "paid dispatch budget requires available qualification evidence");
+    if (v.kind === "transfer") assertRule(v.destination !== null && v.target !== null && v.expected_revision !== null, "transfer must bind source revision and destination");
+  } else if (name === "approval-record" || name === "operation-receipt") {
+    assertRule(v.authority.controller_source_id === v.source_id, "authority owner mismatch");
+    if (name === "operation-receipt") {
+      assertRule([...v.touched, ...v.evidence].every((x) => x.source_id === v.source_id), "receipt effects escape owner");
+      if (v.effect_kind === "dispatch") assertRule(v.outcome === null, "dispatch receipt is not logical success");
+      if (["failed", "recovery_needed"].includes(v.state)) assertRule(v.error !== null, "failed/recovery receipt needs reason");
+    }
+  } else if (name === "workflow-projection") {
+    errors = errors.concat(workflowErrors(v));
+  } else if (name === "metric-series") {
+    const definition = tables().metrics.get(v.metric_id);
+    const unit = definition.unit;
+    assertRule(v.query.versions.formula === definition.formula_version, "metric formula version differs from pinned registry");
+    if (v.metric_id === "M29.series_value") {
+      const under = tables().metrics.get(v.underlying_metric_id);
+      assertRule(under !== void 0, "M29 alias needs underlying scalar");
+      if (under) assertRule(v.unit === under.unit && v.underlying_formula_version === under.formula_version, "M29 underlying unit/formula mismatch");
+    } else assertRule(v.underlying_metric_id === null && v.underlying_formula_version === null && v.unit === unit, "scalar unit or unexpected alias mismatch");
+    const expectedUnder = v.metric_id !== "M29.series_value" ? null : { metric_id: v.underlying_metric_id, formula_version: v.underlying_formula_version };
+    assertRule(eq(v.query.underlying_scalar, expectedUnder), "query identity must carry exactly the M29 underlying scalar (null for ordinary scalars)");
+    assertRule(v.usage_semantics === v.query.versions.usage_semantics, "series usage semantics differ from pinned query usage semantics");
+    const effective = v.metric_id === "M29.series_value" ? v.underlying_metric_id : v.metric_id;
+    const queryHash = stackContractDigest(v.query);
+    for (const p of v.points) {
+      assertRule(p.drilldown.query_hash === queryHash, "drilldown query identity mismatch");
+      if (p.coverage.state !== "complete") assertRule(p.exact_total === null, "incomplete metric cannot claim exact total");
+      if (p.coverage.state === "unavailable") assertRule(p.value === null && p.known_subtotal === null && truthy(p.reason), "unavailable metric must be null with reason");
+      if (p.denominator === 0) assertRule(p.value === null && truthy(p.reason), "zero denominator is unavailable with an explicit reason, not zero score");
+      if (p.value === null) assertRule(truthy(p.reason), "unavailable metric value needs an explicit reason independent of input coverage");
+      if (UNSIGNED_UNITS.has(v.unit) && !tables().signedMetrics.has(effective))
+        assertRule(["value", "known_subtotal", "exact_total", "numerator"].every((k) => p[k] === null || p[k] >= 0), "unsigned metric cannot be negative");
+      if (p.value !== null) {
+        if (v.unit === "ratio") assertRule(p.value >= 0 && p.value <= 1, "ratio outside0..1");
+        if (v.unit === "count") assertRule(p.value >= 0 && Number.isInteger(p.value), "count must be nonnegative integer");
+      }
+      assertRule(p.evidence.every((x) => v.query.snapshot.source_ids.includes(x.source_id)), "metric evidence outside query sources");
+      if (effective === "M10.native_estimate_usd") assertRule(p.cost_basis === "native_estimate", "native estimate cannot become measured billing");
+      if (effective === "M10.derived_estimate_usd") assertRule(p.cost_basis === "derived_estimate", "derived estimate must retain basis");
+      if (effective === "M10.measured_spend_usd") assertRule(p.cost_basis === "measured", "measured series cannot contain estimated cost");
+      if (p.cost_basis === "derived_estimate") assertRule(v.pricing !== null && v.pricing.version === v.query.versions.pricing, "derived estimate needs pinned pricing matching query pricing version");
+    }
+  } else if (["execution-lineage", "execution-segment", "task-assignment", "task-attempt", "trace-analysis"].includes(name)) {
+    const l = v.lineage;
+    if ("authority" in v) assertRule(v.authority.controller_source_id === l.source_id && v.authority.execution_id === l.execution_id && v.authority.attempt_id === l.attempt_id, "lineage/authority mismatch");
+    if (name === "task-assignment" || name === "task-attempt") assertRule(l.attempt_id !== null && l.logical_task_id !== null, "assignment/attempt missing immutable identity");
+    const owned = {
+      "execution-lineage": () => [...v.evidence ?? [], ...(v.handoffs ?? []).map((h) => h.evidence)],
+      "execution-segment": () => [v.seal_evidence],
+      "task-attempt": () => [v.assignment_ref, ...v.result_refs ?? []],
+      "trace-analysis": () => [v.payload_ref]
+    }[name]?.() ?? [];
+    assertRule(owned.every((e) => e === null || e === void 0 || e.source_id === l.source_id), "lineage-owned evidence recorded by another source");
+    if (name === "task-attempt" && v.state.outcome === "succeeded")
+      assertRule(truthy(v.receipt_loss_reconciled) && !truthy(v.uncertain_effects) && v.accepted_by_controller_epoch !== null && v.acceptance_subject_hash !== null, "uncertain/unreconciled task cannot succeed");
+    if (name === "trace-analysis") {
+      if (["request_started", "request_completed"].includes(v.event_class)) assertRule(l.request_id !== null, "request event missing request id");
+      if (truthy(v.usage)) usage2(v.usage);
+      if (truthy(v.usage) && v.usage.cost_basis === "derived_estimate") assertRule(v.observed_identity.status === "observed", "derived model pricing needs observed model, not requested fallback");
+      if (v.observed_identity.status === "unavailable") assertRule(v.observed_identity.model === null && truthy(v.observed_identity.reason), "unobserved model cannot be requested-model fallback");
+    }
+  } else if (name === "knowledge-publication") {
+    assertRule(v.basis.source_worktree_id === v.source_worktree_id, "scan worktree identity mismatch");
+    assertRule(v.source_id === v.durable_owner_source_id, "durable publication owner mismatch");
+    assertRule(v.source_basis_hash === stackContractDigest(v.basis), "knowledge source basis hash mismatch");
+    assertRule(v.manifest.source_id === v.durable_owner_source_id, "publication manifest owner mismatch");
+    assertRule(v.channels.length === new Set(v.channels.map((x) => canonical2(x.channel))).size, "duplicate knowledge channel");
+    for (const ch of v.channels) {
+      assertRule(ch.basis_hash === v.source_basis_hash, "mixed source bases in publication");
+      if (ch.state === "current_for_basis") assertRule(v.basis_verified_at !== null && ch.output !== null && ch.output.availability === "available" && ch.output.sha256 === ch.layer_hash, "unverified or missing generation cannot be fresh");
+      if (truthy(ch.output) && ch.output.availability !== "available") assertRule(truthy(ch.output.reason), "unavailable generation output needs loss reason");
+      if (truthy(ch.output)) assertRule(ch.output.source_id === v.durable_owner_source_id, "channel artifact owner mismatch");
+    }
+  } else if (name === "logical-run") {
+    assertRule(v.controller.source_id === v.source_id, "logical run fixed-controller owner mismatch");
+    assertRule(v.execution_refs.every((x) => x.source_id === v.source_id && x.kind === "execution"), "foreign execution reference");
+    assertRule(v.initial_prompt_ref === null || v.initial_prompt_ref.source_id === v.source_id, "initial prompt evidence owner mismatch");
+  } else if (name === "run-binding") {
+    assertRule(v.controller_source_id === v.source_id, "binding controller moved to another source");
+  } else if (name === "followup-transfer") {
+    const stages = ["reserved", "target_prepared", "source_committed", "target_activated", "acknowledged"];
+    const i = stages.indexOf(v.state);
+    if (i >= 2) assertRule(disclosed(v.source_commit), "activation without retained source commit evidence");
+    if (i >= 3) assertRule(disclosed(v.target_activation), "activation evidence absent or unavailable");
+    if (v.state === "acknowledged") assertRule(disclosed(v.target_ack), "source completion needs retained target ack evidence");
+  } else if (name === "run-analysis") {
+    const seen = /* @__PURE__ */ new Set();
+    for (const u of v.usage) {
+      usage2(u);
+      const key = canonical2(u.accounting_identity);
+      assertRule(!seen.has(key), "duplicate accounting identity; normalized ledger keeps only current observation");
+      seen.add(key);
+      assertRule(u.inclusion !== "parent_inclusive", "normalized usage cannot bill parent-inclusive counters");
+    }
+    const sessionIds = new Set(v.usage.filter((u) => u.granularity === "native_session").map((u) => canonical2(u.accounting_identity)));
+    assertRule(!v.usage.some((u) => u.granularity === "leaf_request" && sessionIds.has(canonical2(u.parent_accounting_identity))), "normalized ledger cannot overlap session and leaf scopes");
+    for (const series of v.metrics) {
+      errors = errors.concat(stackV2SemanticErrors("metric-series", series, shape2, depth + 1));
+      assertRule(eq(inputIdentity(series.query), inputIdentity(v.query)), "nested metric series input identity differs from enclosing analysis");
+    }
+    assertRule(v.run.kind === "run" && v.query.snapshot.source_ids.includes(v.run.source_id), "analysis source/run mismatch");
+    assertRule(v.input_evidence.every((x) => v.query.snapshot.source_ids.includes(x.source_id)), "analysis input evidence outside query snapshot sources");
+  } else if (name === "run-comparison") {
+    const keys = v.runs.map((x) => canonical2([x.source_id, x.id]));
+    assertRule(keys.length === new Set(keys).size, "duplicate compared run");
+    assertRule(v.runs.length === v.analysis_refs.length && v.analysis_refs.length === v.input_versions.length, "comparison input cardinality mismatch");
+    assertRule([...v.runs, ...v.analysis_refs].every((x) => v.query.snapshot.source_ids.includes(x.source_id)), "comparison run or analysis ref outside query snapshot sources");
+    if (v.compatibility === "compatible")
+      assertRule(v.analysis_refs.every((e) => e.schema_version === "guild.run_analysis.v2") && v.input_versions.every((x) => eq(x, v.query.versions)), "incompatible analysis schema/normalizer/semantics/pricing versions cannot be ranked");
+    assertRule(v.compatibility === "compatible" === !truthy(v.refusal_reasons), "comparison refusal state mismatch");
+    for (const series of v.metrics) {
+      errors = errors.concat(stackV2SemanticErrors("metric-series", series, shape2, depth + 1));
+      assertRule(eq(inputIdentity(series.query), inputIdentity(v.query)), "nested metric series input identity differs from enclosing comparison");
+    }
+  } else if (name === "evaluation-manifest") {
+    const owner = v.evaluation.source_id;
+    assertRule(v.evaluation.kind === "evaluation", "evaluation kind mismatch");
+    assertRule(v.artifacts.every((x) => x.source_id === owner && String(x.path).startsWith("artifacts/generated/benchmarks/" + v.evaluation.id + "/")), "evaluation artifact owner/home mismatch");
+    assertRule(disclosed(v.receipt), "evaluation receipt cannot rest on missing or unsupported evidence");
+    assertRule(v.receipt.source_id === owner && v.budget.qualification.source_id === owner, "evaluation receipt/budget qualification owner mismatch");
+    assertRule(v.linked_runs.every((x) => v.query.snapshot.source_ids.includes(x.source_id)), "evaluation linked run outside query snapshot sources");
+  } else if (name === "report-manifest") {
+    const owner = v.owner_source_id, ids = v.query.snapshot.source_ids;
+    assertRule(v.report.kind === "report" && v.report.source_id === owner, "report owner mismatch");
+    assertRule([...v.inputs, ...v.metric_series].every((x) => ids.includes(x.source_id)), "unlisted report source");
+    assertRule(v.outputs.every((x) => x.source_id === owner && String(x.path).startsWith("artifacts/reports/" + v.report.id + "/")), "report output owner/home mismatch");
+    assertRule(v.knowledge_generations.every((x) => ids.includes(x.source_id)), "report knowledge generation outside query snapshot sources");
+    assertRule(disclosed(v.receipt), "report receipt cannot rest on missing or unsupported evidence");
+    assertRule(v.receipt.source_id === owner, "report receipt owner mismatch");
+    assertRule(v.coverage.state === "complete" || truthy(v.omissions), "incomplete report must disclose omissions");
+  } else if (name === "negotiation") {
+    const selected = v.selected_schema_version;
+    if (v.status === "compatible") {
+      const s = tables().byUri.get(v.selected_schema_id);
+      assertRule(v.client_supported.includes(selected) && v.server_supported.includes(selected) && s !== void 0 && s?.properties?.schema_version?.const === selected && v.error === null, "selected schema/version not supported by both");
+    } else assertRule(selected === null && v.selected_schema_id === null && v.error !== null, "unsupported negotiation must refuse explicitly");
+  } else if (name === "metric-drilldown") {
+    assertRule(v.records.every((x) => v.snapshot.source_ids.includes(x.source_id)), "drilldown record outside snapshot sources");
+  } else if (name === "read-request") {
+    assertRule(v.query_hash === stackContractDigest(v.query) && tables().byUri.has(v.result_schema_id), "query hash or requested schema unsupported");
+  }
+  return errors;
+}
+function workflowErrors(v) {
+  const errors = [];
+  const assertRule = (ok, message) => {
+    if (!ok) errors.push(message);
+  };
+  const nodes = new Map(v.nodes.map((x) => [x.id, x]));
+  assertRule(nodes.size === v.nodes.length, "duplicate expanded node");
+  assertRule(nodes.has(v.entry), "unknown graph entry");
+  assertRule(v.edges.every((x) => nodes.has(x.from) && nodes.has(x.to)), "unknown expanded edge endpoint");
+  const gates = new Set(v.protected_gates);
+  assertRule(subset(gates, new Set(nodes.keys())), "unknown protected gate");
+  const roles = /* @__PURE__ */ new Map();
+  for (const n of v.nodes)
+    if (n.gate_role !== null) {
+      assertRule(n.effect === "gate", "gate role requires gate effect");
+      assertRule(gates.has(n.id), "gate-role node must be protected");
+      assertRule(!roles.has(n.gate_role), "duplicate gate role");
+      roles.set(n.gate_role, n.id);
+    }
+  const known2 = [...gates].filter((g) => nodes.has(g));
+  assertRule(known2.every((g) => nodes.get(g).effect === "gate" && nodes.get(g).gate_role !== null), "protected gate must be a gate-effect node with a semantic gate role");
+  assertRule(known2.every((g) => truthy(nodes.get(g).required)) && v.nodes.every((n) => n.gate_role === null || truthy(n.required)), "protected gate cannot be made skippable (required=false)");
+  assertRule((REQUIRED_GATE_ROLES[v.class] ?? []).every((r) => roles.has(r)), v.class + " required gate roles missing");
+  if (v.nodes.some((n) => n.effect === "release"))
+    assertRule([...RELEASE_GATE_ROLES, ...RELEASE_CLASS_GATE_ROLES[v.class] ?? []].every((r) => roles.has(r)), "release effect requires non-waivable protected gate roles in every class");
+  for (const n of v.nodes)
+    if (n.within_gate !== null) {
+      assertRule(n.gate_role === null && roles.has(n.within_gate), "nested gate scope must name an existing protected gate role");
+      assertRule(!["release", "privileged_operation", "gate"].includes(n.effect), "nested gate scope cannot hold release, privileged or gate effects");
+    }
+  const inQa = (id2) => nodes.has(id2) && [nodes.get(id2).gate_role, nodes.get(id2).within_gate].includes("qa");
+  const pending = [[v.entry, /* @__PURE__ */ new Set()]];
+  const seen = /* @__PURE__ */ new Set();
+  while (pending.length && seen.size <= 1e4) {
+    const [node, before] = pending.pop();
+    if (!nodes.has(node)) continue;
+    const passed = new Set(before);
+    if (gates.has(node)) passed.add(node);
+    const state = JSON.stringify([node, [...passed].sort()]);
+    if (seen.has(state)) continue;
+    seen.add(state);
+    if (nodes.get(node).effect === "release") assertRule(subset(gates, passed), "release path bypasses protected gate");
+    for (const e of v.edges) if (e.from === node) pending.push([e.to, passed]);
+  }
+  assertRule(seen.size <= 1e4, "path proof budget exceeded");
+  const invs = new Map(v.invocations.map((x) => [x.id, x]));
+  assertRule(invs.size === v.invocations.length, "duplicate invocation");
+  for (const inv of v.invocations) {
+    assertRule(inv.round <= inv.max_rounds, "round exceeds bound");
+    assertRule(inv.state !== "accepted" || !truthy(inv.unresolved_questions), "exhaustion cannot accept unresolved questions");
+    assertRule(inv.definition_hash === v.definition_hash, "invocation definition changed");
+    assertRule(nodes.has(inv.node_id), "invocation references unknown node");
+  }
+  assertRule(v.obligations.length === new Set(v.obligations.map((x) => x.id)).size, "duplicate obligation");
+  for (const ob of v.obligations) {
+    const inv = invs.get(ob.invocation_id);
+    assertRule(nodes.has(ob.node_id), "obligation references unknown node");
+    assertRule(inv !== void 0, "obligation references unknown invocation");
+    if (QA_ASSURANCE_KINDS.has(ob.kind)) assertRule(inQa(ob.node_id) && (inv === void 0 || inQa(inv.node_id)), "security/adversarial/UI/UX assurance must execute inside the semantic QA gate scope");
+    if (inv) {
+      assertRule(inv.node_id === ob.node_id, "obligation/invocation node mismatch");
+      assertRule(ob.subject_hash === inv.subject_hash, "obligation subject differs from invocation subject");
+      assertRule(ob.round <= inv.round, "obligation round beyond invocation round");
+    }
+    if (ob.status === "accepted") {
+      assertRule(inv !== void 0 && inv.state === "accepted" && ob.round === inv.round, "accepted obligation needs an accepted invocation at the same round");
+      assertRule(truthy(ob.evidence) && ob.evidence.every((e) => e.availability === "available" && e.source_id === v.workflow.source_id), "accepted obligation needs available workflow-owner evidence");
+    }
+  }
+  return errors;
+}
+var V1_CLASS_ENTRY = { product: "intake", research: "recall", debug: "recall", ops: "ops.first-run", init: "detect" };
+function stackV1SemanticErrors(name, v, check) {
+  const errors = [];
+  const assertRule = (ok, message) => {
+    if (!ok) errors.push(message);
+  };
+  const owned = (refs, owner) => refs.every((x) => x.source_id === owner);
+  if (name === "scope-session") {
+    assertRule(v.root.kind === v.mode, "root kind disagrees with mode");
+    assertRule(v.mode !== "project" || !truthy(v.children), "project mode cannot federate children");
+    const sources = [v.root, ...v.children];
+    assertRule(new Set(sources.map((x) => x.source_id)).size === sources.length, "duplicate source ids");
+    assertRule(new Set(sources.map((x) => x.realpath)).size === sources.length, "aliased physical roots");
+    assertRule(v.children.every((x) => x.kind === "project"), "nested workspace forbidden");
+  } else if (name === "read-projection") {
+    assertRule(!truthy(v.source_errors) || truthy(v.partial), "source failures must mark partial");
+    assertRule(v.total === null || v.total >= v.items.length, "total smaller than page");
+  } else if (name === "operation-preview") {
+    const { preview_hash: _ph, ...content } = v;
+    assertRule(v.preview_hash === stackContractDigest(content), "preview hash does not bind exact content");
+    const op = tables().v1Operations.get(v.operation);
+    assertRule(op !== void 0, "unknown operation");
+    if (op) {
+      assertRule(check(op.input_schema, v.arguments), "invalid typed operation arguments");
+      assertRule(op.approval !== "required" || truthy(v.approval_required), "required approval bypass");
+      assertRule(v.targets.every((x) => op.target_kinds.includes(x.kind)), "operation target kind mismatch");
+    }
+    assertRule(owned(v.targets, v.source_id), "target ownership mismatch");
+    const refs = [];
+    const collect2 = (x) => {
+      if (isObj4(x)) {
+        if (has(x, ["source_id", "kind", "id", "revision"])) refs.push(x);
+        for (const c of Object.values(x)) collect2(c);
+      } else if (Array.isArray(x)) for (const c of x) collect2(c);
+    };
+    collect2(v.arguments);
+    const key = (x) => canonical2([x.source_id, x.kind, x.id, x.revision]);
+    const declared = new Set([...v.targets, ...v.dependencies].map(key));
+    assertRule(refs.every((x) => declared.has(key(x))), "argument ref outside reviewed envelope");
+    const targetArg = isObj4(v.arguments) ? v.arguments.target : void 0;
+    assertRule(targetArg === null || targetArg === void 0 || new Set(v.targets.map(key)).has(key(targetArg)), "argument target is not a writable target");
+    const revs = /* @__PURE__ */ new Map();
+    for (const item of [...v.targets, ...v.dependencies]) {
+      const identity = canonical2([item.source_id, item.kind, item.id]);
+      assertRule(!revs.has(identity) || revs.get(identity) === item.revision, "conflicting revisions for same ref");
+      revs.set(identity, item.revision);
+    }
+    assertRule(owned(v.diff.map((x) => x.target), v.source_id), "diff ownership mismatch");
+    const targetKeys = new Set(v.targets.map((x) => canonical2([x.kind, x.id, x.revision])));
+    assertRule(v.diff.every((x) => targetKeys.has(canonical2([x.target.kind, x.target.id, x.target.revision]))), "diff outside reviewed targets");
+    assertRule(v.policy.decision !== "refused" || !truthy(v.diff), "refused preview carries writable diff");
+  } else if (name === "approval-record") {
+    assertRule(v.decision === "approved" || truthy(pyStrip(String(v.rationale))), "rejection/return requires rationale");
+  } else if (name === "operation-receipt") {
+    assertRule(tables().v1Operations.has(v.operation), "unknown receipt operation");
+    assertRule(owned([...v.before, ...v.after, ...v.touched], v.source_id), "receipt effects cross owning source");
+    assertRule(!["applied", "verified", "handoff"].includes(v.state) || v.error === null, "successful receipt carries error");
+    assertRule(!["failed", "recovery_needed"].includes(v.state) || v.error !== null, "failed receipt missing diagnostic");
+  } else if (name === "capability-manifest") {
+    const ids = v.operations.map((x) => x.id);
+    assertRule(ids.length === new Set(ids).size, "duplicate capability ids");
+    for (const op of v.operations) {
+      const known2 = tables().v1Operations.get(op.id);
+      assertRule(known2 !== void 0, "unknown capability");
+      if (known2) {
+        assertRule(op.producer === known2.producer && op.effect === known2.effect, "capability effect/producer differs from contract");
+        assertRule(known2.approval !== "required" || op.approval === "required", "manifest weakens approval");
+        assertRule(op.target_kinds.every((k) => known2.target_kinds.includes(k)), "capability widens target kinds");
+        assertRule(op.input_schema === known2.input_schema && op.output_schema === known2.output_schema, "capability schema differs from catalog");
+      }
+      assertRule(op.availability !== "available" || truthy(op.entry_id), "available capability without executable binding");
+      assertRule(op.availability !== "unavailable" || truthy(op.reason), "unavailable capability without reason");
+    }
+    for (const host of v.host_requirements) assertRule(host.evidence !== "verified" || truthy(host.proof), "verified host missing proof");
+  } else if (name === "workflow-projection") {
+    const nodes = new Map(v.nodes.map((n) => [n.id, n]));
+    assertRule(nodes.size === v.nodes.length, "duplicate workflow node");
+    assertRule(nodes.has(v.entry), "entry is not a node");
+    assertRule(v.edges.every((x) => nodes.has(x.from) && (nodes.has(x.to) || x.to_class !== null)), "dangling workflow edge");
+    if (truthy(v.execution)) assertRule(nodes.has(v.execution.cursor_node), "unknown execution cursor");
+    assertRule(v.entry === V1_CLASS_ENTRY[v.class], "noncanonical class entry");
+    if (v.class === "product") {
+      const gates = ["d5", "product.qa", "d8"];
+      assertRule(gates.every((k) => nodes.has(k) && truthy(nodes.get(k).required)), "product mandatory gates missing");
+      const seen = /* @__PURE__ */ new Set(), seenNodes = /* @__PURE__ */ new Set();
+      const pending = [[v.entry, []]];
+      while (pending.length) {
+        const [nodeId, before] = pending.pop();
+        const state = JSON.stringify([nodeId, before]);
+        if (seen.has(state) || !nodes.has(nodeId)) continue;
+        seen.add(state);
+        seenNodes.add(nodeId);
+        let passed = before;
+        if (gates.includes(nodeId)) {
+          const position = gates.indexOf(nodeId);
+          assertRule(gates.slice(0, position).every((g) => passed.includes(g)), "mandatory gate ordering bypass");
+          passed = gates.filter((g) => passed.includes(g) || g === nodeId);
+        }
+        const outgoing = v.edges.filter((x) => x.from === nodeId && x.to_class === null);
+        const exitsClass = v.edges.some((x) => x.from === nodeId && x.to_class !== null);
+        const terminal = nodes.get(nodeId).terminal_outcome;
+        const successfulTerminal = !outgoing.length && !exitsClass && !["blocked", "failed", "escalate"].includes(terminal);
+        if (successfulTerminal || nodes.get(nodeId).station === "ops-runbooks") assertRule(gates.every((g) => passed.includes(g)), "terminal path bypasses mandatory gates");
+        for (const edge of outgoing) pending.push([edge.to, passed]);
+      }
+      assertRule(gates.every((g) => seenNodes.has(g)), "mandatory gate unreachable");
+    }
+  } else if (name === "metric-series") {
+    assertRule(v.covered_samples <= v.sample_count, "coverage exceeds samples");
+    assertRule(dt(v.cohort.from) <= dt(v.cohort.to), "reversed cohort window");
+    for (const p of v.points) {
+      assertRule(p.status !== "unavailable" || p.value === null && truthy(p.reason), "unavailable measurement must be null with reason");
+      assertRule(p.status !== "measured" || p.value !== null, "measured point cannot be null");
+      assertRule(p.denominator !== 0 || p.value === null, "zero denominator cannot yield a score");
+    }
+  } else if (name === "evaluation-manifest") {
+    assertRule(v.evaluation.kind === "evaluation", "evaluation ref has wrong kind");
+    assertRule(owned([...v.artifacts, v.receipt], v.evaluation.source_id), "evaluation outputs escape owner");
+    const prefix = "artifacts/generated/benchmarks/" + v.evaluation.id + "/";
+    assertRule(v.artifacts.every((x) => String(x.path).startsWith(prefix)), "evaluation output outside evaluation artifact home");
+  } else if (name === "report-manifest") {
+    const owner = v.owner_source_id;
+    assertRule(v.report.kind === "report" && v.report.source_id === owner, "report identity/owner mismatch");
+    assertRule(v.inputs.every((x) => v.input_source_ids.includes(x.source_id)), "unlisted report input source");
+    assertRule(owned([...v.outputs.map((x) => x.evidence), v.receipt], owner), "report outputs escape owner");
+    const prefix = "artifacts/reports/" + v.report.id + "/";
+    assertRule(v.outputs.every((x) => String(x.evidence.path).startsWith(prefix)), "report output outside report artifact home");
+    assertRule(v.coverage === "complete" || truthy(v.omissions), "incomplete report must disclose omissions");
+  }
+  return errors;
+}
+var ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+function stackRefusal(requestId, code, message) {
+  return { schema_version: "guild.stack.refusal.v2", request_id: requestId, code, message: message.slice(0, 4096), retryable: false, expected_snapshot: null, observed_snapshot: null };
+}
+function createStackContractReader(opts) {
+  const profile = opts.profile ?? "v1+v2";
+  const server = stackReaderVersions(profile);
+  const ok = (schemaId, value) => {
+    try {
+      opts.check(schemaId, value);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const shape2 = (name, value) => ok(V2_PREFIX + name + ".schema.json", value);
+  const self = (name, doc) => {
+    if (!shape2(name, doc) || stackV2SemanticErrors(name, doc, shape2).length) throw new Error("reader produced an invalid " + name);
+    return doc;
+  };
+  const requestId = (x) => typeof x === "string" && ID.test(x) ? x : "invalid-request";
+  function negotiate(input) {
+    const id2 = requestId(input?.request_id);
+    const client = input?.client_supported;
+    if (id2 !== input?.request_id || !Array.isArray(client) || client.length < 1 || client.length > 100 || client.some((x) => typeof x !== "string" || !x || x.length > 4096) || new Set(client).size !== client.length)
+      return self("refusal", stackRefusal(id2, "invalid_request", "negotiation needs request_id and 1..100 unique client_supported versions"));
+    const selected = client.find((x) => server.includes(x)) ?? null;
+    const contract = selected ? tables().byVersion.get(selected) : null;
+    return self("negotiation", {
+      schema_version: "guild.stack.negotiation.v2",
+      request_id: id2,
+      client_supported: client,
+      server_supported: server,
+      selected_schema_id: contract?.schema_id ?? null,
+      selected_schema_version: selected,
+      status: contract ? "compatible" : "unsupported",
+      error: contract ? null : { code: "unsupported_schema", message: "No exact schema version is supported by both reader and client", retryable: false }
+    });
+  }
+  function read(input) {
+    const id2 = requestId(input?.request_id);
+    const accept = input?.accept;
+    if (id2 !== input?.request_id || !Array.isArray(accept) || accept.length < 1 || accept.some((x) => typeof x !== "string"))
+      return self("refusal", stackRefusal(id2, "invalid_request", "read needs request_id and the negotiated accept list"));
+    const doc = input.document;
+    const version = isObj4(doc) && typeof doc.schema_version === "string" ? doc.schema_version : null;
+    const contract = version ? tables().byVersion.get(version) : void 0;
+    if (!version || !contract || !server.includes(version) || !accept.includes(version))
+      return self("refusal", stackRefusal(id2, "unsupported_schema", "Document schema_version " + JSON.stringify(version) + " was not negotiated with this reader"));
+    if (nonInteroperable(doc))
+      return self("refusal", stackRefusal(id2, "invalid_request", "Document is not interoperable JSON (non-finite number, unsafe integer or lone surrogate)"));
+    if (!ok(contract.schema_id, doc))
+      return self("refusal", stackRefusal(id2, "invalid_request", "Document violates " + contract.schema_version));
+    let errors;
+    try {
+      errors = contract.major === "v1" ? stackV1SemanticErrors(contract.name, doc, ok) : stackV2SemanticErrors(contract.name, doc, shape2);
+    } catch {
+      errors = ["document cannot be evaluated by the semantic validator"];
+    }
+    if (errors.length) return self("refusal", stackRefusal(id2, "invalid_request", contract.schema_version + " semantic refusal: " + errors.slice(0, 5).join("; ")));
+    return doc;
+  }
+  return { profile, versions: server, negotiate, read };
+}
 
 // src/adapters/model-discovery/index.ts
 init_config2();
@@ -65235,7 +73399,7 @@ init_config2();
 init_config2();
 
 // src/adapters/host-capability-snapshot.ts
-var import_node_crypto7 = require("node:crypto");
+var import_node_crypto8 = require("node:crypto");
 init_kernel();
 init_config2();
 init_config2();
@@ -65332,7 +73496,7 @@ function canonicalJson2(value) {
   return `{${parts.join(",")}}`;
 }
 function snapshotHash(hostId, hostVersion, facts) {
-  const digest2 = (0, import_node_crypto7.createHash)("sha256").update(
+  const digest2 = (0, import_node_crypto8.createHash)("sha256").update(
     canonicalJson2({
       schema_version: HOST_CAPABILITY_SNAPSHOT_SCHEMA,
       host_id: hostId,
@@ -66753,15 +74917,15 @@ var ROWS = (() => {
 // src/adapters/managed-node-process.ts
 var import_node_child_process4 = require("node:child_process");
 var fs73 = __toESM(require("node:fs"));
-var path86 = __toESM(require("node:path"));
+var path87 = __toESM(require("node:path"));
 var net = __toESM(require("node:net"));
-var import_node_crypto9 = require("node:crypto");
+var import_node_crypto10 = require("node:crypto");
 
 // src/adapters/managed-claude.ts
 var fs72 = __toESM(require("node:fs"));
 var import_node_child_process3 = require("node:child_process");
-var path85 = __toESM(require("node:path"));
-var import_node_crypto8 = require("node:crypto");
+var path86 = __toESM(require("node:path"));
+var import_node_crypto9 = require("node:crypto");
 init_state();
 init_lifecycle();
 var MANAGED_CLAUDE_PROFILE = Object.freeze({
@@ -66778,8 +74942,8 @@ var MANAGED_CLAUDE_PROFILE = Object.freeze({
 });
 function buildManagedClaudeLaunch(input, profile = MANAGED_CLAUDE_PROFILE) {
   const p = profile;
-  if (input.host_id !== p.host_id || input.model !== p.model || !path85.isAbsolute(input.sourceRoot) || fs72.realpathSync(input.sourceRoot) !== input.sourceRoot || typeof input.brief !== "string" || Buffer.byteLength(input.brief) > 4096 || !Number.isFinite(input.max_usd) || input.max_usd <= 0 || input.qualification === "probe" && input.max_usd > 0.01 || !Number.isSafeInteger(input.max_duration_ms) || input.max_duration_ms < 1 || input.qualification === "probe" && input.max_duration_ms > 3e4 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.native_session_id) || !["run.start", "run.rerun", "run.resume"].includes(input.operation)) throw new Error("Managed native profile refused");
-  if (fs72.realpathSync(p.binary) !== p.binary || "sha256:" + (0, import_node_crypto8.createHash)("sha256").update(fs72.readFileSync(p.binary)).digest("hex") !== p.binary_sha256) throw new Error("Managed native binary pin changed");
+  if (input.host_id !== p.host_id || input.model !== p.model || !path86.isAbsolute(input.sourceRoot) || fs72.realpathSync(input.sourceRoot) !== input.sourceRoot || typeof input.brief !== "string" || Buffer.byteLength(input.brief) > 4096 || !Number.isFinite(input.max_usd) || input.max_usd <= 0 || input.qualification === "probe" && input.max_usd > 0.01 || !Number.isSafeInteger(input.max_duration_ms) || input.max_duration_ms < 1 || input.qualification === "probe" && input.max_duration_ms > 3e4 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.native_session_id) || !["run.start", "run.rerun", "run.resume"].includes(input.operation)) throw new Error("Managed native profile refused");
+  if (fs72.realpathSync(p.binary) !== p.binary || "sha256:" + (0, import_node_crypto9.createHash)("sha256").update(fs72.readFileSync(p.binary)).digest("hex") !== p.binary_sha256) throw new Error("Managed native binary pin changed");
   const env = {};
   for (const key of ["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "TZ"]) if (process.env[key] !== void 0) env[key] = process.env[key];
   const settings = { disableAllHooks: true, enabledPlugins: {}, autoMemoryEnabled: false };
@@ -66788,7 +74952,7 @@ function buildManagedClaudeLaunch(input, profile = MANAGED_CLAUDE_PROFILE) {
 }
 function createManagedClaudeRuntime(input) {
   const sourceRoot = fs72.realpathSync(input.sourceRoot), packageRoot = fs72.realpathSync(input.packageRoot), file = input.authorizationFile;
-  if (!path85.isAbsolute(file) || fs72.lstatSync(file).isSymbolicLink() || fs72.statSync(file).size > 16384 || (fs72.statSync(file).mode & 63) !== 0) throw new Error("Private operator authorization required");
+  if (!path86.isAbsolute(file) || fs72.lstatSync(file).isSymbolicLink() || fs72.statSync(file).size > 16384 || (fs72.statSync(file).mode & 63) !== 0) throw new Error("Private operator authorization required");
   if (fs72.realpathSync((0, import_node_child_process3.execFileSync)("/usr/bin/git", ["-C", sourceRoot, "rev-parse", "--show-toplevel"], { encoding: "utf8", timeout: 2e3, maxBuffer: 4096 }).trim()) !== sourceRoot) throw new Error("Exact initialized Git/Guild root required");
   const authorization = JSON.parse(fs72.readFileSync(file, "utf8"));
   const candidate = authorization.schema_version === "guild.stack.managed_candidate_authorization.v1";
@@ -66915,7 +75079,7 @@ function loadManagedClaudeRuntime(sourceRoot, packageRoot, validate) {
 // src/adapters/managed-node-process.ts
 init_lifecycle();
 function digest(file) {
-  return "sha256:" + (0, import_node_crypto9.createHash)("sha256").update(fs73.readFileSync(file)).digest("hex");
+  return "sha256:" + (0, import_node_crypto10.createHash)("sha256").update(fs73.readFileSync(file)).digest("hex");
 }
 function startToken(pid) {
   try {
@@ -66932,7 +75096,7 @@ function startToken(pid) {
 }
 function controlFile(runtime, id2) {
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(id2)) throw new Error("Managed control identity invalid");
-  return path86.join(runtime, id2 + ".control.json");
+  return path87.join(runtime, id2 + ".control.json");
 }
 async function requestManagedControl(runtime, identity, nonce, action) {
   const file = controlFile(runtime, identity.attempt_id);
@@ -67012,16 +75176,18 @@ init_state();
 var import__ = __toESM(require__());
 var import_ajv_formats = __toESM(require_dist());
 init_lifecycle();
-function stackValidator() {
+function stackValidator(extraSchemas = [], formats = {}) {
   const ajv = new import__.default({
     strict: false,
     allErrors: true,
     allowUnionTypes: true
   });
   (0, import_ajv_formats.default)(ajv);
+  for (const [name, check] of Object.entries(formats)) ajv.addFormat(name, check);
   for (const schema of Object.values(stackContractBundle.schemas)) ajv.addSchema(schema);
   ajv.addSchema(stackP05Schemas);
   ajv.addSchema(stackManagedSchemas);
+  for (const schema of extraSchemas) ajv.addSchema(schema);
   return (schema, value) => {
     const check = ajv.getSchema(schema) ?? ajv.compile({ $ref: schema });
     if (!check(value))
@@ -67031,10 +75197,36 @@ function stackValidator() {
   };
 }
 
+// scripts/lib/stack-contract-reader-validator.ts
+var RFC3339 = /^(\d{4})-(0[1-9]|1[0-2])-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
+function oracleDateTime(value) {
+  const m = RFC3339.exec(value.toUpperCase()) ?? (value.endsWith("\n") ? RFC3339.exec(value.slice(0, -1).toUpperCase()) : null);
+  if (!m) return false;
+  const year = Number(m[1]), month = Number(m[2]), day = Number(m[3]);
+  const leap = year % 4 === 0 && year % 100 !== 0 || year % 400 === 0;
+  const max = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+  return year !== 0 && day >= 1 && day <= max;
+}
+var ORACLE_URI_PATTERN = "^[a-zA-Z][a-zA-Z0-9+.-]*:(?://(?:(?:[a-zA-Z0-9_.~-]|%[0-9A-Fa-f]{2}|[!$&'()*+,;=]|:)*@)?(?:\\[(?:(?:(?:[0-9A-Fa-f]{1,4}:){6}(?:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}|(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))|::(?:[0-9A-Fa-f]{1,4}:){5}(?:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}|(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))|(?:[0-9A-Fa-f]{1,4})?::(?:[0-9A-Fa-f]{1,4}:){4}(?:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}|(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))|(?:(?:[0-9A-Fa-f]{1,4}:)?[0-9A-Fa-f]{1,4})?::(?:[0-9A-Fa-f]{1,4}:){3}(?:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}|(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))|(?:(?:[0-9A-Fa-f]{1,4}:){,2}[0-9A-Fa-f]{1,4})?::(?:[0-9A-Fa-f]{1,4}:){2}(?:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}|(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))|(?:(?:[0-9A-Fa-f]{1,4}:){,3}[0-9A-Fa-f]{1,4})?::(?:[0-9A-Fa-f]{1,4}:)(?:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}|(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))|(?:(?:[0-9A-Fa-f]{1,4}:){,4}[0-9A-Fa-f]{1,4})?::(?:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}|(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))|(?:(?:[0-9A-Fa-f]{1,4}:){,5}[0-9A-Fa-f]{1,4})?::[0-9A-Fa-f]{1,4}|(?:(?:[0-9A-Fa-f]{1,4}:){,6}[0-9A-Fa-f]{1,4})?::)|v[0-9A-Fa-f]+\\.(?:[a-zA-Z0-9_.~-]|[!$&'()*+,;=]|:)+)\\]|(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|(?:[a-zA-Z0-9_.~-]|%[0-9A-Fa-f]{2}|[!$&'()*+,;=])*)(?::[0-9]*)?(?:/(?:[a-zA-Z0-9_.~-]|%[0-9A-Fa-f]{2}|[!$&'()*+,;=]|:|@)*)*|/(?:(?:[a-zA-Z0-9_.~-]|%[0-9A-Fa-f]{2}|[!$&'()*+,;=]|:|@)+(?:/(?:[a-zA-Z0-9_.~-]|%[0-9A-Fa-f]{2}|[!$&'()*+,;=]|:|@)*)*)?|(?:[a-zA-Z0-9_.~-]|%[0-9A-Fa-f]{2}|[!$&'()*+,;=]|:|@)+(?:/(?:[a-zA-Z0-9_.~-]|%[0-9A-Fa-f]{2}|[!$&'()*+,;=]|:|@)*)*|)(?:\\?(?:(?:[a-zA-Z0-9_.~-]|%[0-9A-Fa-f]{2}|[!$&'()*+,;=]|:|@)|/|\\?)*)?(?:\\#(?:(?:[a-zA-Z0-9_.~-]|%[0-9A-Fa-f]{2}|[!$&'()*+,;=]|:|@)|/|\\?)*)?$";
+var URI = new RegExp(ORACLE_URI_PATTERN.replace(/\{,(\d+)\}/g, "{0,$1}"));
+var oracleUri = (value) => URI.test(value) || value.endsWith("\n") && URI.test(value.slice(0, -1));
+function stackReaderValidator() {
+  return stackValidator(Object.values(stack_contracts_v2_generated_default.schemas), { "date-time": oracleDateTime, uri: oracleUri });
+}
+
 // scripts/stack-operations.ts
+var READER_FIELDS = { negotiate: ["action", "request_id", "client_supported"], read_contract: ["action", "request_id", "accept", "document"] };
+function readContractAction(input, validate) {
+  if (input === null || typeof input !== "object" || Array.isArray(input) || typeof input.action !== "string" || !Object.hasOwn(READER_FIELDS, input.action)) return null;
+  const fields = READER_FIELDS[input.action];
+  if (Object.keys(input).some((k) => !fields.includes(k)))
+    return stackRefusal(typeof input.request_id === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.request_id) ? input.request_id : "invalid-request", "invalid_request", "Unknown " + input.action + " field");
+  const reader = createStackContractReader({ check: validate });
+  return input.action === "negotiate" ? reader.negotiate(input) : reader.read(input);
+}
 async function main6(argv = process.argv.slice(2)) {
   try {
-    if (argv.length !== 2 || argv[0] !== "--cwd" || !path87.isAbsolute(argv[1]))
+    if (argv.length !== 2 || argv[0] !== "--cwd" || !path88.isAbsolute(argv[1]))
       throw new StackError(
         "invalid_arguments",
         "Expected --cwd and one absolute Guild root"
@@ -67058,10 +75250,15 @@ async function main6(argv = process.argv.slice(2)) {
     } catch {
       throw new StackError("invalid_json", "Expected one JSON request");
     }
+    const contract = readContractAction(input, stackReaderValidator());
+    if (contract !== null) {
+      process.stdout.write(JSON.stringify(contract) + "\n");
+      return 0;
+    }
     const facade = new StackFacade({
       root: argv[1],
-      managed: loadManagedClaudeRuntime(argv[1], path87.resolve(__dirname, "../.."), stackValidator()),
-      packageRoot: path87.resolve(__dirname, "../.."),
+      managed: loadManagedClaudeRuntime(argv[1], path88.resolve(__dirname, "../.."), stackValidator()),
+      packageRoot: path88.resolve(__dirname, "../.."),
       validate: stackValidator()
     });
     const output = JSON.stringify(facade.dispatch(input));
@@ -67093,5 +75290,6 @@ if (require.main === module)
   });
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  main
+  main,
+  readContractAction
 });

@@ -81,15 +81,17 @@ export function isRfc3339(v: string): boolean {
   return true;
 }
 
+/** Epoch microseconds of an RFC 3339 instant; callers check `isRfc3339` first. */
+export function traceInstantMicros(t: string): bigint {
+  const m = TIME_RE.exec(t)!;
+  const frac = /\.(\d+)/.exec(t.slice(19))?.[1] ?? "";
+  const whole = BigInt(Date.parse(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}${t.slice(19).replace(/^\.\d+/, "")}`));
+  return whole * 1000n + BigInt((frac + "000000").slice(0, 6));
+}
+
 /** Microsecond-precision instant order (the frozen verifier compares datetimes, not ms). */
 export function compareTraceInstants(a: string, b: string): number {
-  const micros = (t: string): bigint => {
-    const m = TIME_RE.exec(t)!;
-    const frac = /\.(\d+)/.exec(t.slice(19))?.[1] ?? "";
-    const whole = BigInt(Date.parse(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}${t.slice(19).replace(/^\.\d+/, "")}`));
-    return whole * 1000n + BigInt((frac + "000000").slice(0, 6));
-  };
-  const d = micros(a) - micros(b);
+  const d = traceInstantMicros(a) - traceInstantMicros(b);
   return d < 0n ? -1 : d > 0n ? 1 : 0;
 }
 
@@ -168,65 +170,65 @@ export function validateTraceAnalysisV3Shape(value: unknown): TraceValidationVer
 const USAGE_COUNTERS = ["input_inclusive", "output", "cache_read_subset", "cache_write_subset", "total"] as const;
 const hasKeys = (o: Record<string, unknown>, keys: readonly string[]) => keys.every((k) => own(o, k));
 
-function coverageRules(c: any, require: (ok: boolean, msg: string) => void): void {
+function coverageRules(c: any, assertRule: (ok: boolean, msg: string) => void): void {
   if (c.eligible !== null) {
-    require(c.covered <= c.eligible, "covered exceeds eligible");
-    if (c.missing !== null) require(c.covered + c.missing === c.eligible, "eligible must equal covered plus missing; excluded is outside eligible");
+    assertRule(c.covered <= c.eligible, "covered exceeds eligible");
+    if (c.missing !== null) assertRule(c.covered + c.missing === c.eligible, "eligible must equal covered plus missing; excluded is outside eligible");
   }
-  if (c.state === "complete") require(c.eligible !== null && c.covered === c.eligible && c.missing === 0, "complete requires known full coverage");
-  else require(Boolean(c.reason), "incomplete coverage needs reason");
-  if (c.state === "unavailable") require(c.covered === 0, "unavailable coverage cannot have covered samples");
+  if (c.state === "complete") assertRule(c.eligible !== null && c.covered === c.eligible && c.missing === 0, "complete requires known full coverage");
+  else assertRule(Boolean(c.reason), "incomplete coverage needs reason");
+  if (c.state === "unavailable") assertRule(c.covered === 0, "unavailable coverage cannot have covered samples");
 }
 
 /** Python math.isclose(a, b, abs_tol=1e-12) with its default rel_tol=1e-9. */
 const isClose = (a: number, b: number) => Math.abs(a - b) <= Math.max(1e-9 * Math.max(Math.abs(a), Math.abs(b)), 1e-12);
 
-function usageRules(u: any, require: (ok: boolean, msg: string) => void): void {
-  coverageRules(u.coverage, require);
-  if (u.coverage.state === "unavailable") require(USAGE_COUNTERS.every((k) => u[k] === null), "unavailable usage must report null counters, not zero");
+function usageRules(u: any, assertRule: (ok: boolean, msg: string) => void): void {
+  coverageRules(u.coverage, assertRule);
+  if (u.coverage.state === "unavailable") assertRule(USAGE_COUNTERS.every((k) => u[k] === null), "unavailable usage must report null counters, not zero");
   if (u.input_inclusive !== null) {
-    for (const k of ["cache_read_subset", "cache_write_subset"]) require(u[k] === null || u[k] <= u.input_inclusive, "cache must be subset of inclusive input");
+    for (const k of ["cache_read_subset", "cache_write_subset"]) assertRule(u[k] === null || u[k] <= u.input_inclusive, "cache must be subset of inclusive input");
   }
   const expected = u.input_inclusive === null || u.output === null ? null : u.input_inclusive + u.output;
-  require(u.total === expected, "total must be input plus output; cache is not additive");
-  if (u.cost_basis === "unavailable") require(u.cost_usd === null, "unavailable cost must be null");
-  if (u.cost_basis !== "unavailable") require(u.cost_usd !== null, "available cost basis requires value");
-  if (u.cost_basis === "derived_estimate") require(Boolean(u.pricing_version), "derived estimate needs pricing version");
+  assertRule(u.total === expected, "total must be input plus output; cache is not additive");
+  if (u.cost_basis === "unavailable") assertRule(u.cost_usd === null, "unavailable cost must be null");
+  if (u.cost_basis !== "unavailable") assertRule(u.cost_usd !== null, "available cost basis requires value");
+  if (u.cost_basis === "derived_estimate") assertRule(Boolean(u.pricing_version), "derived estimate needs pricing version");
   if (u.granularity === "native_session") {
-    require(u.inclusion === "session_cumulative" && u.usage_semantics === "provider_session_only.v1", "session accounting cannot claim leaf semantics");
-    require(USAGE_COUNTERS.every((k) => u[k] === null), "session-only cost does not synthesize normalized leaf tokens");
-    require(u.cost_basis === "native_estimate" || u.cost_basis === "unavailable", "native session never measured billing");
+    assertRule(u.inclusion === "session_cumulative" && u.usage_semantics === "provider_session_only.v1", "session accounting cannot claim leaf semantics");
+    assertRule(USAGE_COUNTERS.every((k) => u[k] === null), "session-only cost does not synthesize normalized leaf tokens");
+    assertRule(u.cost_basis === "native_estimate" || u.cost_basis === "unavailable", "native session never measured billing");
     if (u.cost_usd !== null) {
-      require(
+      assertRule(
         u.native_baseline_usd !== null && u.native_cumulative_usd !== null && u.native_cumulative_usd >= u.native_baseline_usd &&
           isClose(u.cost_usd, u.native_cumulative_usd - u.native_baseline_usd),
         "session delta needs non-reset baseline",
       );
     }
-  } else require(u.inclusion !== "session_cumulative", "leaf cannot claim cumulative session inclusion");
+  } else assertRule(u.inclusion !== "session_cumulative", "leaf cannot claim cumulative session inclusion");
 }
 
-function walkRules(o: unknown, require: (ok: boolean, msg: string) => void, level = 0): void {
-  if (level > 32) return require(false, "object depth exceeds validation budget");
-  if (Array.isArray(o)) { for (const x of o) walkRules(x, require, level + 1); return; }
+function walkRules(o: unknown, assertRule: (ok: boolean, msg: string) => void, level = 0): void {
+  if (level > 32) return assertRule(false, "object depth exceeds validation budget");
+  if (Array.isArray(o)) { for (const x of o) walkRules(x, assertRule, level + 1); return; }
   if (!isObj(o)) return;
-  if (hasKeys(o, ["eligible", "covered", "excluded", "missing", "state", "reason", "exclusion_reasons"])) coverageRules(o, require);
+  if (hasKeys(o, ["eligible", "covered", "excluded", "missing", "state", "reason", "exclusion_reasons"])) coverageRules(o, assertRule);
   if (hasKeys(o, ["lifecycle", "outcome", "acceptance", "observability"])) {
-    if (o["outcome"] === "succeeded") require(o["acceptance"] === "verified", "success requires verified acceptance");
-    if (o["lifecycle"] === "closed") require(o["outcome"] !== "pending" && o["outcome"] !== "unknown", "closed cannot have pending/unknown outcome");
+    if (o["outcome"] === "succeeded") assertRule(o["acceptance"] === "verified", "success requires verified acceptance");
+    if (o["lifecycle"] === "closed") assertRule(o["outcome"] !== "pending" && o["outcome"] !== "unknown", "closed cannot have pending/unknown outcome");
   }
   if (hasKeys(o, ["start", "end", "duration_ms", "clock"])) {
-    require(o["end"] === null || compareTraceInstants(o["end"] as string, o["start"] as string) >= 0, "interval cannot end before start");
-    require(o["duration_ms"] === null || (o["clock"] as Record<string, unknown>)["basis"] !== "unknown", "unknown clock cannot claim duration");
+    assertRule(o["end"] === null || compareTraceInstants(o["end"] as string, o["start"] as string) >= 0, "interval cannot end before start");
+    assertRule(o["duration_ms"] === null || (o["clock"] as Record<string, unknown>)["basis"] !== "unknown", "unknown clock cannot claim duration");
   }
   if (hasKeys(o, ["source_id", "run_id", "execution_id", "host_session_id", "attempt_id", "logical_task_id", "request_id"])) {
-    require(o["attempt_id"] === null || o["logical_task_id"] !== null, "attempt requires logical task");
+    assertRule(o["attempt_id"] === null || o["logical_task_id"] !== null, "attempt requires logical task");
   }
   if (hasKeys(o, ["provider", "model", "status", "reason"])) {
-    if (o["status"] === "observed") require(o["model"] !== null, "observed identity needs observed model");
-    if (o["status"] === "unavailable") require(o["model"] === null && Boolean(o["reason"]), "unavailable observed identity needs null model and reason");
+    if (o["status"] === "observed") assertRule(o["model"] !== null, "observed identity needs observed model");
+    if (o["status"] === "unavailable") assertRule(o["model"] === null && Boolean(o["reason"]), "unavailable observed identity needs null model and reason");
   }
-  for (const x of Object.values(o)) walkRules(x, require, level + 1);
+  for (const x of Object.values(o)) walkRules(x, assertRule, level + 1);
 }
 
 /** Structural then semantic validation; semantic rules run only on a structurally valid event. */
@@ -235,15 +237,15 @@ export function validateTraceAnalysisV3(value: unknown): TraceValidationVerdict 
   if (!structural.ok) return structural;
   const v = value as TraceAnalysisV3;
   const errors: string[] = [];
-  const require = (ok: boolean, msg: string) => { if (!ok) errors.push(msg); };
-  walkRules(v, require);
+  const assertRule = (ok: boolean, msg: string) => { if (!ok) errors.push(msg); };
+  walkRules(v, assertRule);
   const l = v.lineage;
-  require(v.payload_ref === null || v.payload_ref.source_id === l.source_id, "lineage-owned evidence recorded by another source");
-  if (v.event_class === "request_started" || v.event_class === "request_completed") require(l.request_id !== null, "request event missing request id");
-  if (v.usage) usageRules(v.usage, require);
-  if (v.usage && v.usage.cost_basis === "derived_estimate") require(v.observed_identity.status === "observed", "derived model pricing needs observed model, not requested fallback");
+  assertRule(v.payload_ref === null || v.payload_ref.source_id === l.source_id, "lineage-owned evidence recorded by another source");
+  if (v.event_class === "request_started" || v.event_class === "request_completed") assertRule(l.request_id !== null, "request event missing request id");
+  if (v.usage) usageRules(v.usage, assertRule);
+  if (v.usage && v.usage.cost_basis === "derived_estimate") assertRule(v.observed_identity.status === "observed", "derived model pricing needs observed model, not requested fallback");
   if (v.observed_identity.status === "unavailable") {
-    require(v.observed_identity.model === null && Boolean(v.observed_identity.reason), "unobserved model cannot be requested-model fallback");
+    assertRule(v.observed_identity.model === null && Boolean(v.observed_identity.reason), "unobserved model cannot be requested-model fallback");
   }
   return errors.length === 0 ? { ok: true } : { ok: false, errors };
 }
