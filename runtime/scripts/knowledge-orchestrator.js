@@ -28145,13 +28145,16 @@ __export(knowledge_orchestrator_exports, {
   FALLBACK_ROOT_TOPIC_NAME: () => FALLBACK_ROOT_TOPIC_NAME,
   FALLBACK_ROOT_TOPIC_SEED: () => FALLBACK_ROOT_TOPIC_SEED,
   KnowledgePublicationRefused: () => KnowledgePublicationRefused,
+  UNKNOWN_GRAPH_PROJECT: () => UNKNOWN_GRAPH_PROJECT,
   buildFileBackedSeams: () => buildFileBackedSeams,
+  carriedForwardSubset: () => carriedForwardSubset,
   deriveFallbackRootTopicName: () => deriveFallbackRootTopicName,
   discoverFilePaths: () => discoverFilePaths,
   emitRound1Candidates: () => emitRound1Candidates,
   emitRound2Candidates: () => emitRound2Candidates,
   findOrphanWikiPages: () => findOrphanWikiPages,
   maybeSynthesizeFallbackRootTopic: () => maybeSynthesizeFallbackRootTopic,
+  resolveGraphProject: () => resolveGraphProject,
   runKnowledgeStages: () => runKnowledgeStages
 });
 module.exports = __toCommonJS(knowledge_orchestrator_exports);
@@ -30513,6 +30516,44 @@ var KnowledgePublicationRefused = class extends Error {
   reason;
 };
 var FALLBACK_ROOT_TOPIC_SEED = "project-knowledge";
+var LEGACY_PLACEHOLDER_PROJECT = { name: "guild", description: "Guild plugin self-build" };
+var KNOWLEDGE_TIER_NODE_TYPES = /* @__PURE__ */ new Set(["topic", "concept", "claim", "entity", "wiki_page", "diagram"]);
+var KNOWLEDGE_TIER_EDGE_TYPES = /* @__PURE__ */ new Set([
+  "subtopic_of",
+  "relates_to",
+  "evidenced_by",
+  "belongs_to_domain",
+  "mentions",
+  "defines"
+]);
+function carriedForwardSubset(g) {
+  const marked = (x) => {
+    const r = x;
+    return r.extractor === STRUCTURAL_EXTRACTOR || r.structural === true;
+  };
+  const k4Domains = new Set(g.edges.filter((e) => e.type === "belongs_to_domain").map((e) => e.target));
+  const dropped = /* @__PURE__ */ new Set();
+  const nodes = g.nodes.filter((n) => {
+    const knowledge = KNOWLEDGE_TIER_NODE_TYPES.has(n.type) || n.type === "domain" && k4Domains.has(n.id);
+    if (knowledge && !marked(n)) {
+      dropped.add(n.id);
+      return false;
+    }
+    return true;
+  });
+  const edges = g.edges.filter(
+    (e) => marked(e) || !KNOWLEDGE_TIER_EDGE_TYPES.has(e.type) && !dropped.has(e.source) && !dropped.has(e.target)
+  );
+  return { nodes, edges };
+}
+var UNKNOWN_GRAPH_PROJECT = { name: "unknown", description: "" };
+function resolveGraphProject(prior) {
+  const p = prior;
+  if (p && typeof p.name === "string" && p.name.trim().length > 0 && typeof p.description === "string" && !(p.name === LEGACY_PLACEHOLDER_PROJECT.name && p.description === LEGACY_PLACEHOLDER_PROJECT.description)) {
+    return { name: p.name, description: p.description };
+  }
+  return { ...UNKNOWN_GRAPH_PROJECT };
+}
 var FALLBACK_ROOT_TOPIC_NAME = "Project Knowledge";
 function deriveFallbackRootTopicName(repoRoot) {
   const base = path70.basename((repoRoot ?? "").replace(/[/\\]+$/, "")).trim();
@@ -30927,7 +30968,7 @@ async function runKnowledgeStages(repoRoot, filePaths, seams, opts = {}) {
     version: "guild.knowledge_graph.v2",
     kind: "knowledge",
     generated_from_commit: opts.generatedFromCommit ?? "unknown",
-    project: opts.project ?? { name: "guild", description: "Guild plugin self-build" },
+    project: opts.project ?? UNKNOWN_GRAPH_PROJECT,
     nodes: allNodes,
     edges: allEdges,
     layers: opts.structuralGraph?.layers ?? [],
@@ -31073,7 +31114,7 @@ if (require.main === module) {
           if (prior.version === "guild.knowledge_graph.v1") {
             structuralGraph = { nodes: prior.nodes, edges: prior.edges, layers: prior.layers, tour: prior.tour };
           } else if (prior.version === "guild.knowledge_graph.v2") {
-            const sub = structuralSubset({ nodes: prior.nodes, edges: prior.edges });
+            const sub = carriedForwardSubset({ nodes: prior.nodes, edges: prior.edges });
             structuralGraph = { nodes: sub.nodes, edges: sub.edges, layers: prior.layers, tour: prior.tour };
           }
         }
@@ -31082,6 +31123,9 @@ if (require.main === module) {
             runId,
             generatedAt,
             generatedFromCommit: headSha(repoRoot),
+            // #317: keep the project identity the structural stages (or a prior
+            // finalize) recorded; never stamp Guild's own name on a consumer repo.
+            project: resolveGraphProject(prior?.project),
             structuralGraph,
             base,
             basis
@@ -31161,12 +31205,15 @@ function discoverFilePaths(repoRoot) {
   FALLBACK_ROOT_TOPIC_NAME,
   FALLBACK_ROOT_TOPIC_SEED,
   KnowledgePublicationRefused,
+  UNKNOWN_GRAPH_PROJECT,
   buildFileBackedSeams,
+  carriedForwardSubset,
   deriveFallbackRootTopicName,
   discoverFilePaths,
   emitRound1Candidates,
   emitRound2Candidates,
   findOrphanWikiPages,
   maybeSynthesizeFallbackRootTopic,
+  resolveGraphProject,
   runKnowledgeStages
 });

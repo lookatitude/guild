@@ -111,7 +111,7 @@ import {
 import { durableGuildDir } from "../lib/state/storage";
 import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
 import { GRAPH_ARTIFACT, RECALL_ARTIFACT, publishLearnArtifacts, readLearnBase, type LearnBase } from "./lib/publish";
-import { STRUCTURAL_EXTRACTOR, structuralSubset } from "./lib/structural";
+import { STRUCTURAL_EXTRACTOR } from "./lib/structural";
 import { computeLearnSourceBasis } from "./lib/paths";
 
 /** A refused publication (K03). `destination_moved` means: rebuild and retry. */
@@ -226,6 +226,94 @@ export interface RunKnowledgeResult {
  * Constant (not corpus-derived) so the id is stable across every topic-less run.
  */
 export const FALLBACK_ROOT_TOPIC_SEED = "project-knowledge";
+
+/**
+ * The placeholder every finalized graph carried before #317: Guild's own
+ * identity, written into consumer projects because the CLI never passed
+ * `opts.project`. A prior graph that still holds it is repaired, not trusted.
+ */
+const LEGACY_PLACEHOLDER_PROJECT = { name: "guild", description: "Guild plugin self-build" } as const;
+
+/** Node types only the knowledge tier emits (mirrors schema.ts KNOWLEDGE_NODE_TYPES_V2). */
+const KNOWLEDGE_TIER_NODE_TYPES = new Set(["topic", "concept", "claim", "entity", "wiki_page", "diagram"]);
+/** Edge types only the knowledge tier emits (schema.ts EDGE_TYPES_V2 minus EDGE_TYPES). */
+const KNOWLEDGE_TIER_EDGE_TYPES = new Set([
+  "subtopic_of",
+  "relates_to",
+  "evidenced_by",
+  "belongs_to_domain",
+  "mentions",
+  "defines",
+]);
+
+/**
+ * The part of a finalized (v2) graph that is INPUT to the next finalize (#317):
+ * everything the knowledge tier did not emit itself. `structuralSubset` alone is
+ * not enough here, because it keeps only nodes the structural extractor marked;
+ * the analyze-structural -> assign-layers -> derive-domain pipeline writes
+ * unmarked file / function / class / flow / domain nodes, and a re-finalize
+ * that filtered on the marker silently dropped all of them.
+ *
+ * A node is knowledge-tier output when its type is one only K1-K4 emit, or it
+ * is a K4 domain. K4 emits a domain only together with a `belongs_to_domain`
+ * edge into it (taxonomy-build, SC-5), and no structural stage writes that edge,
+ * so "target of belongs_to_domain" identifies K4 domains exactly. A node the
+ * structural extractor marked is always kept. An edge is dropped when its type
+ * is knowledge-only or either endpoint was dropped.
+ */
+export function carriedForwardSubset<
+  N extends { id: string; type: string },
+  E extends { source: string; target: string; type: string },
+>(g: { nodes: N[]; edges: E[] }): { nodes: N[]; edges: E[] } {
+  const marked = (x: unknown) => {
+    const r = x as Record<string, unknown>;
+    return r.extractor === STRUCTURAL_EXTRACTOR || r.structural === true;
+  };
+  const k4Domains = new Set(g.edges.filter((e) => e.type === "belongs_to_domain").map((e) => e.target));
+  const dropped = new Set<string>();
+  const nodes = g.nodes.filter((n) => {
+    const knowledge = KNOWLEDGE_TIER_NODE_TYPES.has(n.type) || (n.type === "domain" && k4Domains.has(n.id));
+    if (knowledge && !marked(n)) {
+      dropped.add(n.id);
+      return false;
+    }
+    return true;
+  });
+  const edges = g.edges.filter(
+    (e) => marked(e) || (!KNOWLEDGE_TIER_EDGE_TYPES.has(e.type) && !dropped.has(e.source) && !dropped.has(e.target))
+  );
+  return { nodes, edges };
+}
+
+/**
+ * What `runKnowledgeStages` writes when no caller names the project. A constant,
+ * like `generated_from_commit: "unknown"`, so the stage function stays pure in
+ * its inputs (SC-8); the CLI boundary supplies the real identity.
+ */
+export const UNKNOWN_GRAPH_PROJECT = { name: "unknown", description: "" } as const;
+
+/**
+ * Project metadata for a finalized graph (#317). The structural stages name
+ * the project after its root directory (`analyze-structural`,
+ * `extract-structural`); finalize must carry that forward instead of
+ * replacing it. Returns the prior graph's own `project` when it is well formed
+ * and is not the legacy placeholder, else the neutral constant. It never
+ * derives a name from the path itself: with no prior graph the output must not
+ * depend on where the repo is checked out (SC-8, cross-trigger byte-identity).
+ */
+export function resolveGraphProject(prior: unknown): { name: string; description: string } {
+  const p = prior as { name?: unknown; description?: unknown } | null | undefined;
+  if (
+    p &&
+    typeof p.name === "string" &&
+    p.name.trim().length > 0 &&
+    typeof p.description === "string" &&
+    !(p.name === LEGACY_PLACEHOLDER_PROJECT.name && p.description === LEGACY_PLACEHOLDER_PROJECT.description)
+  ) {
+    return { name: p.name, description: p.description };
+  }
+  return { ...UNKNOWN_GRAPH_PROJECT };
+}
 /** Generic display name — used only when the repo root yields no usable basename. */
 export const FALLBACK_ROOT_TOPIC_NAME = "Project Knowledge";
 
@@ -1055,7 +1143,7 @@ export async function runKnowledgeStages(
     version: "guild.knowledge_graph.v2",
     kind: "knowledge",
     generated_from_commit: opts.generatedFromCommit ?? "unknown",
-    project: opts.project ?? { name: "guild", description: "Guild plugin self-build" },
+    project: opts.project ?? UNKNOWN_GRAPH_PROJECT,
     nodes: allNodes,
     edges: allEdges,
     layers: opts.structuralGraph?.layers ?? [],
@@ -1276,9 +1364,10 @@ if (require.main === module) {
           if (prior.version === "guild.knowledge_graph.v1") {
             structuralGraph = { nodes: prior.nodes, edges: prior.edges, layers: prior.layers, tour: prior.tour };
           } else if (prior.version === "guild.knowledge_graph.v2") {
-            // A v2 graph already carries the knowledge tier; only its structural
-            // layer is input, so a re-finalize never drops structural nodes.
-            const sub = structuralSubset({ nodes: prior.nodes, edges: prior.edges });
+            // A v2 graph already carries the knowledge tier. Everything that tier
+            // did not emit is input, marked by the structural extractor or not
+            // (#317), so a re-finalize never drops file / function / flow nodes.
+            const sub = carriedForwardSubset({ nodes: prior.nodes, edges: prior.edges });
             structuralGraph = { nodes: sub.nodes, edges: sub.edges, layers: prior.layers, tour: prior.tour };
           }
         }
@@ -1294,6 +1383,9 @@ if (require.main === module) {
             runId,
             generatedAt,
             generatedFromCommit: headSha(repoRoot),
+            // #317: keep the project identity the structural stages (or a prior
+            // finalize) recorded; never stamp Guild's own name on a consumer repo.
+            project: resolveGraphProject(prior?.project),
             structuralGraph,
             base,
             basis,

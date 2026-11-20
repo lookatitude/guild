@@ -22,6 +22,8 @@ import {
   runKnowledgeStages,
   buildFileBackedSeams,
   emitRound1Candidates,
+  resolveGraphProject,
+  carriedForwardSubset,
   type KnowledgeFilePaths,
   type KnowledgeLLMSeams,
   type RunKnowledgeOptions,
@@ -1099,4 +1101,132 @@ describe("I — SC-3 K2 dual-dir: finalize indexes both .guild/wiki/ and docs/kn
     },
     30000
   );
+});
+
+// ---------------------------------------------------------------------------
+// Section J — #317: finalize keeps the project's identity and its code structure
+// ---------------------------------------------------------------------------
+
+describe("J — #317: project identity and structure survive finalize", () => {
+  // The compiled entry consumers run; process.execPath is `node` here (test-preload).
+  const ORCHESTRATOR = path.join(__dirname, "..", "..", "runtime", "scripts", "knowledge-orchestrator.js");
+  const graphOf = (dir: string) =>
+    JSON.parse(fs.readFileSync(path.join(dir, ".guild", "indexes", "knowledge-graph.json"), "utf8"));
+  const finalizeCli = (dir: string) => {
+    const r = Bun.spawnSync([process.execPath, ORCHESTRATOR, "--phase=finalize", "--cwd", dir, "--run-id", "run-j"], {
+      cwd: dir,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    if (r.exitCode !== 0) throw new Error(`finalize failed: ${r.stderr.toString()}`);
+  };
+
+  test("J1: resolveGraphProject carries a well-formed prior project", () => {
+    expect(resolveGraphProject({ name: "acme", description: "widgets" })).toEqual({ name: "acme", description: "widgets" });
+  });
+
+  test("J2: resolveGraphProject falls back to the neutral constant, never to a path", () => {
+    for (const prior of [null, undefined, {}, { name: "", description: "x" }, { name: "acme" }, "acme", 7]) {
+      expect(resolveGraphProject(prior)).toEqual({ name: "unknown", description: "" });
+    }
+  });
+
+  test("J3: resolveGraphProject repairs the legacy placeholder", () => {
+    expect(resolveGraphProject({ name: "guild", description: "Guild plugin self-build" })).toEqual({
+      name: "unknown",
+      description: "",
+    });
+    // A project that really is called "guild" keeps its own description.
+    expect(resolveGraphProject({ name: "guild", description: "the plugin" })).toEqual({
+      name: "guild",
+      description: "the plugin",
+    });
+  });
+
+  test(
+    "J4: runKnowledgeStages without opts.project writes the neutral constant, never Guild's own name",
+    async () => {
+      const dir = mkTmpRepo();
+      scaffoldFixtureRepo(dir);
+      await runKnowledgeStages(dir, { codeRelPaths: CODE_PATHS, docRelPaths: DOC_PATHS }, NOOP_SEAMS, { runId: "run-j4" });
+      expect(graphOf(dir).project).toEqual({ name: "unknown", description: "" });
+    },
+    30000
+  );
+
+  test(
+    "J5: CLI finalize on a structural graph, then again on the v2 result, keeps project and structure",
+    () => {
+      const dir = mkTmpRepo();
+      scaffoldFixtureRepo(dir);
+      const indexes = path.join(dir, ".guild", "indexes");
+      fs.mkdirSync(indexes, { recursive: true });
+      const fileNode = {
+        id: `file:${CODE_PATHS[0]}`,
+        type: "file",
+        name: path.basename(CODE_PATHS[0]),
+        source_refs: [CODE_PATHS[0]],
+        confidence: "high",
+      };
+      fs.writeFileSync(
+        path.join(indexes, "knowledge-graph.json"),
+        JSON.stringify({
+          version: "guild.knowledge_graph.v1",
+          kind: "codebase",
+          generated_from_commit: "unknown",
+          project: { name: "acme-widgets", description: "A widget shop." },
+          nodes: [fileNode],
+          edges: [],
+          layers: [{ id: "layer:core", name: "Core", description: "", nodeIds: [fileNode.id] }],
+          tour: [],
+        })
+      );
+
+      finalizeCli(dir);
+      const first = graphOf(dir);
+      expect(first.version).toBe("guild.knowledge_graph.v2");
+      expect(first.project).toEqual({ name: "acme-widgets", description: "A widget shop." });
+      expect(first.nodes.some((n: { id: string }) => n.id === fileNode.id)).toBe(true);
+
+      // The second finalize starts from a v2 graph: structure and identity must survive.
+      finalizeCli(dir);
+      const second = graphOf(dir);
+      expect(second.project).toEqual({ name: "acme-widgets", description: "A widget shop." });
+      expect(second.nodes.some((n: { id: string }) => n.id === fileNode.id)).toBe(true);
+      expect(second.layers.length).toBe(1);
+      // Same inputs, same judgments: the second finalize reproduces the first exactly.
+      expect(JSON.stringify(second)).toBe(JSON.stringify(first));
+    },
+    60000
+  );
+
+  test("J6: carriedForwardSubset keeps unmarked structure and drops only knowledge-tier output", () => {
+    const nodes = [
+      { id: "file:a.ts", type: "file" },
+      { id: "function:a.ts:f", type: "function" },
+      { id: "flow:a.ts", type: "flow" },
+      { id: "domain:src", type: "domain" }, // derive-domain: no belongs_to_domain edge
+      { id: "domain:billing", type: "domain" }, // K4: target of belongs_to_domain
+      { id: "topic:t1", type: "topic" },
+      { id: "claim:c1", type: "claim" },
+      { id: "wiki_page:w.md", type: "wiki_page" },
+      { id: "concept:kept", type: "concept", structural: true }, // collided with a structural symbol
+    ];
+    const edges = [
+      { source: "file:a.ts", target: "function:a.ts:f", type: "contains" },
+      { source: "domain:src", target: "flow:a.ts", type: "contains_flow" },
+      { source: "topic:t1", target: "domain:billing", type: "belongs_to_domain" },
+      { source: "claim:c1", target: "file:a.ts", type: "evidenced_by" },
+      { source: "wiki_page:w.md", target: "file:a.ts", type: "related" }, // dropped by endpoint
+    ];
+    const sub = carriedForwardSubset({ nodes, edges });
+    expect(sub.nodes.map((n) => n.id)).toEqual([
+      "file:a.ts",
+      "function:a.ts:f",
+      "flow:a.ts",
+      "domain:src",
+      "concept:kept",
+    ]);
+    expect(sub.edges.map((e) => e.type)).toEqual(["contains", "contains_flow"]);
+  });
 });
