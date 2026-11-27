@@ -29,7 +29,7 @@ You produce the **explore artifact only**. You do NOT write the PRD (that is
 
 ## Required inputs
 - The user's product idea (verbatim prompt + any clarifying answers).
-- The canonical shape: `guild.explore.v1` (`"$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/scripts/lib/explore-schema.ts"`),
+- The canonical shape: `guild.explore.v1` (`${CLAUDE_PLUGIN_ROOT}/scripts/lib/explore-schema.ts`),
   whose `EXPLORE_V1_EXAMPLE` is the golden shape to mirror.
 
 ## Output contract — `guild.explore.v1`

@@ -653,6 +653,7 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // guild:using-guild` resolves. command-src/skill-src re-extracted in the same commit.
   // Hardened the same day: the token sits in single quotes (nothing in a root is evaluated), the
   // non-substituting fallback reads ${CLAUDE_PLUGIN_ROOT-}, and the whole path is double-quoted.
+  // Prose mentions of the root (not executed) keep the bare ${CLAUDE_PLUGIN_ROOT} token.
   commands: "5aa9dc061a8476b488089d27c4458069dfcf84e4",
   // Re-ratified 2026-09-14 (T01 pattern lock): using-guild absorbed the principles
   // body, the glossary one-liner and "bare /guild is T0" (KTD25); no other skill changed.
@@ -751,7 +752,7 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified 2026-10-25 (v3.2 text): create-skill and team-compose drop the explicit --write-registry
   // step (discovery reads the definition files directly). ANTI-VACUITY: check-surface-pins was RED.
   // Re-ratified 2026-11-27 (#289, plugin-root resolution): DELIBERATE mechanical rewrite of the (see commands above; skills tree: same change)
-  skills: "91f9cf18dda4fecaf133b993fc486eea038d83b6",
+  skills: "f6217d1cb01dd4c53b1d5c8905764972b4b762af",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

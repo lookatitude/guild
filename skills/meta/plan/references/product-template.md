@@ -28,7 +28,7 @@ it writes only under the run's `.guild/explore/` and `.guild/define/` artifact d
 - Planning lanes, composing a team, or editing code / runtime files.
 
 ## Available templates
-The product templates live at **`"$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/templates/products/<id>.template.json"`**
+The product templates live at **`${CLAUDE_PLUGIN_ROOT}/templates/products/<id>.template.json`**
 (each a `guild.template.v1`). Discover the set with:
 
 ```
@@ -77,7 +77,7 @@ validators.
 Both are **seeds**: they are deliberately generic (the template's archetype defaults). Hand
 them to `guild:product-explore` to pressure-test the idea's specifics, then to
 `guild:product-define` to harden the PRD. The schema sources are
-`"$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/scripts/lib/{explore,define,template}-schema.ts"`.
+`${CLAUDE_PLUGIN_ROOT}/scripts/lib/{explore,define,template}-schema.ts`.
 
 ## Hard rules
 - Never edit a runtime permission, skill, or agent file — instantiation is side-effect-free

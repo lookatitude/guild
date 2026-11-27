@@ -64,6 +64,17 @@ describe("plugin-root shell lines", () => {
     expect(bad.map((f) => path.relative(ROOT, f))).toEqual([]);
   });
 
+  it("never quotes a path tail that needs shell expansion (braces, globs, ~) after the root", () => {
+    const re = /printf %s "\$\{GUILD_PLUGIN_ROOT:-\$\{r:-[^}]*\}\}"\)([^\s`'")]*)/g;
+    const offenders: string[] = [];
+    for (const f of files) {
+      for (const m of fs.readFileSync(f, "utf8").matchAll(re)) {
+        if (/[{}*?~[\]]/.test(m[1])) offenders.push(`${path.relative(ROOT, f)}: ${m[1]}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
   /** A `node` stub that records its argv, one per line, so the test sees exactly what node receives. */
   function stubBin(): { bin: string; argvFile: string } {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-stub-"));
@@ -92,7 +103,7 @@ describe("plugin-root shell lines", () => {
     shell = "bash",
   ): { argv: string[]; stderr: string } {
     const { bin, argvFile } = stubBin();
-    const cmd = substituteRoot === null ? line : line.replaceAll("${CLAUDE_PLUGIN_ROOT}", substituteRoot);
+    const cmd = substituteRoot === null ? line : line.replaceAll("${CLAUDE_PLUGIN_ROOT}", () => substituteRoot);
     const r = spawnSync(shell, ["-c", cmd], {
       encoding: "utf8",
       env: { PATH: `${bin}:/usr/bin:/bin`, ARGUMENTS: "x", ...env },
@@ -127,6 +138,8 @@ describe("plugin-root shell lines", () => {
           ["$HOME", "/opt/$HOME/guild"],
           ["$VAR and ${VAR}", "/opt/$PATH/${HOME}/guild"],
           ["double quotes", '/opt/a"b/guild'],
+          ["$$ (replace-pattern chars, literal)", "/opt/$$/guild"],
+          ["$& (replace-pattern chars, literal)", "/opt/$&/guild"],
           ["semicolon and newline-free metachars", "/opt/a;b&c|d>e/guild"],
         ];
 
