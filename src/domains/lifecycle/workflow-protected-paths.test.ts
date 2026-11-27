@@ -19,8 +19,6 @@ import {
   type CompileRequest,
   type CompileResult,
 } from "./workflow-component-compiler";
-import * as lifecycle from ".";
-import * as security from "../security";
 
 const H = (c: string) => `sha256:${c.repeat(64)}`;
 
@@ -98,11 +96,6 @@ describe("AT06 protected paths — positive", () => {
     expect([...GATE_ORDER]).toEqual(["d5", "qa", "ops", "d8"]);
   });
 
-  it("both domains expose the W02 surface through their index", () => {
-    expect(typeof lifecycle.verifyProtectedPaths).toBe("function");
-    expect(typeof lifecycle.compileWorkflow).toBe("function");
-    expect(typeof security.classifyActionTokens).toBe("function");
-  });
 });
 
 describe("AT06 protected paths — negative controls", () => {

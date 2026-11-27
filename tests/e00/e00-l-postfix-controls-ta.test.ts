@@ -84,7 +84,7 @@ function fixture(opts: { claudeBody?: string; mangle?: (stdout: string) => strin
     ackArgv: ["node", path.join(root, "task-cell-ack.js")],
     recordLaunch: (iid, ev) => launches.set(iid, ev),
     run,
-    env: { PATH: `${bin}:${process.env["PATH"] ?? "/usr/bin:/bin"}`, HOME: process.env["HOME"] ?? root, SHELL: "/bin/zsh", LANG: "en_US.UTF-8" },
+    env: { PATH: `${bin}:${process.env["PATH"] ?? "/usr/bin:/bin"}`, HOME: process.env["HOME"] ?? root, SHELL: fs.existsSync("/bin/zsh") ? "/bin/zsh" : "/bin/sh", LANG: "en_US.UTF-8" },
     // DECLARED activation stub: a source checkout is refused real activation (L Q4).
     activate: () => ({ args: ["--plugin-dir", stubPlugin], pluginRoot: stubPlugin }),
   });
@@ -155,7 +155,8 @@ describe.skipIf(!tmuxAvailable)("P1 · ready() requires the declared host, not a
     expect(spawn(f).ok).toBe(true);
     const id = f.port.paneIdentity("i1")!;
     // Anti-vacuity: the pane's foreground is a non-shell process (a shell-handoff-only rule would call this ready).
-    await until(() => tmuxOn(f.shim, ["display-message", "-p", "-t", id.pane_id, "#{pane_current_command}"]).stdout.trim() === "sleep");
+    // (Process tree, not #{pane_current_command}: Linux dash keeps `sh -c` as the pane's foreground.)
+    await until(() => treeComms(id.pane_pid).includes("sleep"));
     for (let i = 0; i < 10; i++) {
       const r = f.port.ready({ instance_id: "i1", run_id: RUN });
       expect(r.ok).toBe(false);
@@ -176,7 +177,7 @@ describe.skipIf(!tmuxAvailable)("P2 · a malformed post-spawn identity is a dura
       const f = fixture({ mangle });
       const out = spawn(f);
       expect(out.ok).toBe(false);
-      expect(String(out.reason)).toMatch(/^spawn_identity_unavailable: a created pane may remain live and untracked/);
+      expect(String(out.reason)).toStartWith("spawn_identity_unavailable: a created pane may remain live and untracked");
       const ev = f.launches.get("i1")!;
       expect(ev).toMatchObject({ schema_version: "guild.task_cell_launch_evidence.v1", instance_id: "i1", state: "identity_unknown", live_pane_may_remain: true, session: SESSION });
       expect(typeof ev.observed_spawn_output).toBe("string");
@@ -318,7 +319,7 @@ describe.skipIf(!tmuxAvailable)("L routing finding L-INTEGRATION-1 · a live ide
     const f = real as Fx | null;
     expect(f).not.toBeNull();
     expect({ thrown: portResult ? null : String(r.thrown?.message).slice(0, 300) }).toEqual({ thrown: null });
-    expect(String(portResult?.reason)).toMatch(/^spawn_identity_unavailable: a created pane may remain live and untracked/);
+    expect(String(portResult?.reason)).toStartWith("spawn_identity_unavailable: a created pane may remain live and untracked");
     // Reviewed C10 interface: runLane catches the typed unknown and RETURNS a truthful
     // nonterminal orphan outcome carrying the port's own reason (no raw throw).
     expect({

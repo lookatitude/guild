@@ -123,10 +123,6 @@ export * from "./write-task-run";
 // graphs are YAML data (src/surfaces/graphs/); the lifecycle domain owns
 // load / merge / validate, and the layout lint executes this export.
 export * from "./workflow-graph-overlay";
-// W01/W02: component compiler and post-expansion protected-path verifier (C8 v2).
-export * from "./workflow-component-compiler";
-export * from "./workflow-protected-paths";
-export * from "./phase-composition";
 // U-TIER (T08 rework-r2): the per-run stable lock. Exported so the dispatch
 // instance cap can make "count the run's slots" and "claim one" a single atomic
 // step rather than an observation followed by a hopeful write.
@@ -274,11 +270,42 @@ export {
 
 export * from "./stack-operations";
 
-export {default as stackContractBundle} from './stack-contracts.generated.json';
+import stackContractBundleJson from './stack-contracts.generated.json';
+import stackP05SchemasJson from "./stack-p05.schemas.json";
+import stackManagedSchemasJson from "./managed-run.schemas.json";
+import { deepFreeze as deepFreezeStack } from "../kernel";
+/** The generated contract bundle and schemas, deep-frozen at the public index (closed collections). */
+export const stackContractBundle = deepFreezeStack(stackContractBundleJson);
 
 export { loadInitiativeManifest, buildD8Input, checkInitiativeEvidenceRefs, type InitiativeEvidenceCheck, type LoadedManifest, type BuiltD8Input } from "./initiative-evidence";
-export { default as stackP05Schemas } from "./stack-p05.schemas.json";
+export const stackP05Schemas = deepFreezeStack(stackP05SchemasJson);
 
-export * from "./managed-run";
+// recoverManagedSegmentSeal stays domain-internal (no consumer outside lifecycle).
+export {
+  managedLaunchHash,
+  readManagedAttempt,
+  claimManagedAttempt,
+  reconcileManagedAttempt,
+  assertManagedBudgetAdmission,
+  managedNonceMatches,
+  runManagedWorker,
+  prepareManagedWorker,
+  readManagedWorkerRequest,
+  recordManagedWorkerAcceptance,
+  readManagedWorkerAcceptance,
+  markManagedAttemptUncertain,
+  type ManagedAttemptInput,
+  type ManagedAttemptIdentity,
+  type ManagedAttemptClaim,
+  type ManagedUsageObservation,
+  type ManagedRunOutcome,
+  type ManagedLaunchSpec,
+  type ManagedOwnedProcess,
+  type ManagedProcessPort,
+  type ManagedControlPort,
+  type ManagedWorkerPackage,
+  type ManagedWorkerRequest,
+  type ManagedWorkerAcceptance,
+} from "./managed-run";
 
-export { default as stackManagedSchemas } from "./managed-run.schemas.json";
+export const stackManagedSchemas = deepFreezeStack(stackManagedSchemasJson);

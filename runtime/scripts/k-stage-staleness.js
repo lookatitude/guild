@@ -11717,7 +11717,7 @@ ${lanes.join("\n")}
               return process.memoryUsage().heapUsed;
             },
             getFileSize(path20) {
-              const stat = statSync4(path20);
+              const stat = statSync5(path20);
               if (stat == null ? void 0 : stat.isFile()) {
                 return stat.size;
               }
@@ -11761,7 +11761,7 @@ ${lanes.join("\n")}
             }
           };
           return nodeSystem;
-          function statSync4(path20) {
+          function statSync5(path20) {
             try {
               return _fs.statSync(path20, statSyncOptions);
             } catch {
@@ -11820,7 +11820,7 @@ ${lanes.join("\n")}
               activeSession.post("Profiler.stop", (err, { profile }) => {
                 var _a;
                 if (!err) {
-                  if ((_a = statSync4(profilePath)) == null ? void 0 : _a.isDirectory()) {
+                  if ((_a = statSync5(profilePath)) == null ? void 0 : _a.isDirectory()) {
                     profilePath = _path.join(profilePath, `${(/* @__PURE__ */ new Date()).toISOString().replace(/:/g, "-")}+P${process.pid}.cpuprofile`);
                   }
                   try {
@@ -11940,7 +11940,7 @@ ${lanes.join("\n")}
                 let stat;
                 if (typeof dirent === "string" || dirent.isSymbolicLink()) {
                   const name = combinePaths(path20, entry);
-                  stat = statSync4(name);
+                  stat = statSync5(name);
                   if (!stat) {
                     continue;
                   }
@@ -11964,7 +11964,7 @@ ${lanes.join("\n")}
             return matchFiles(path20, extensions, excludes, includes, useCaseSensitiveFileNames2, process.cwd(), depth, getAccessibleFileSystemEntries, realpath);
           }
           function fileSystemEntryExists(path20, entryKind) {
-            const stat = statSync4(path20);
+            const stat = statSync5(path20);
             if (!stat) {
               return false;
             }
@@ -12006,7 +12006,7 @@ ${lanes.join("\n")}
           }
           function getModifiedTime3(path20) {
             var _a;
-            return (_a = statSync4(path20)) == null ? void 0 : _a.mtime;
+            return (_a = statSync5(path20)) == null ? void 0 : _a.mtime;
           }
           function setModifiedTime(path20, time) {
             try {
@@ -51043,11 +51043,11 @@ ${lanes.join("\n")}
             if (i < rootLength) {
               return void 0;
             }
-            const sep4 = directory.lastIndexOf(directorySeparator, i - 1);
-            if (sep4 === -1) {
+            const sep5 = directory.lastIndexOf(directorySeparator, i - 1);
+            if (sep5 === -1) {
               return void 0;
             }
-            return directory.substr(0, Math.max(sep4, rootLength));
+            return directory.substr(0, Math.max(sep5, rootLength));
           }
         }
       }
@@ -126792,7 +126792,7 @@ ${lanes.join("\n")}
           }
         }
         function createImportCallExpressionAMD(arg, containsLexicalThis) {
-          const resolve13 = factory2.createUniqueName("resolve");
+          const resolve14 = factory2.createUniqueName("resolve");
           const reject = factory2.createUniqueName("reject");
           const parameters = [
             factory2.createParameterDeclaration(
@@ -126801,7 +126801,7 @@ ${lanes.join("\n")}
               /*dotDotDotToken*/
               void 0,
               /*name*/
-              resolve13
+              resolve14
             ),
             factory2.createParameterDeclaration(
               /*modifiers*/
@@ -126818,7 +126818,7 @@ ${lanes.join("\n")}
                 factory2.createIdentifier("require"),
                 /*typeArguments*/
                 void 0,
-                [factory2.createArrayLiteralExpression([arg || factory2.createOmittedExpression()]), resolve13, reject]
+                [factory2.createArrayLiteralExpression([arg || factory2.createOmittedExpression()]), resolve14, reject]
               )
             )
           ]);
@@ -213536,8 +213536,8 @@ Additional information: BADCLIENT: Bad error code, ${badCode} not found in range
         installPackage(options) {
           this.packageInstallId++;
           const request = { kind: "installPackage", ...options, id: this.packageInstallId };
-          const promise = new Promise((resolve13, reject) => {
-            (this.packageInstalledPromise ?? (this.packageInstalledPromise = /* @__PURE__ */ new Map())).set(this.packageInstallId, { resolve: resolve13, reject });
+          const promise = new Promise((resolve14, reject) => {
+            (this.packageInstalledPromise ?? (this.packageInstalledPromise = /* @__PURE__ */ new Map())).set(this.packageInstallId, { resolve: resolve14, reject });
           });
           this.installer.send(request);
           return promise;
@@ -214044,9 +214044,9 @@ function isWithin(child, parent) {
 }
 function checkContained(root, target, options = {}) {
   const policy = options.policy ?? "resolve";
-  let realRoot;
+  let realRoot2;
   try {
-    realRoot = fs2.realpathSync(path3.resolve(root));
+    realRoot2 = fs2.realpathSync(path3.resolve(root));
   } catch {
     return refuse("root-unresolvable", `project root ${root} does not resolve`);
   }
@@ -214056,7 +214056,7 @@ function checkContained(root, target, options = {}) {
       `refusing a path spelled with a ".." segment (${target}) \u2014 parent traversal cannot be resolved before symlinks`
     );
   }
-  const abs = path3.isAbsolute(target) ? path3.resolve(target) : path3.resolve(realRoot, target);
+  const abs = path3.isAbsolute(target) ? path3.resolve(target) : path3.resolve(realRoot2, target);
   let probe = abs;
   let probeStat = null;
   for (; ; ) {
@@ -214084,7 +214084,7 @@ function checkContained(root, target, options = {}) {
       `${probe} is a symlink that does not resolve; refusing to write through it`
     );
   }
-  const rel2 = path3.relative(realRoot, realProbe);
+  const rel2 = path3.relative(realRoot2, realProbe);
   if (rel2 !== "" && escapes(rel2)) {
     return refuse("outside-root", `${abs} resolves outside the project root (${realProbe})`);
   }
@@ -214102,7 +214102,7 @@ function checkContained(root, target, options = {}) {
       } catch {
         return refuse("dangling-symlink", `${walk} is a symlink that does not resolve`);
       }
-      const segRel = path3.relative(realRoot, segReal);
+      const segRel = path3.relative(realRoot2, segReal);
       const strictlyInside = segRel !== "" && !escapes(segRel);
       if (strictlyInside) {
         return refuse("physical-symlink", `refusing \u2014 symlinked path segment: ${walk}`);
@@ -214111,7 +214111,7 @@ function checkContained(root, target, options = {}) {
   }
   const tail = path3.relative(probe, abs);
   const realPath = tail === "" ? realProbe : path3.join(realProbe, tail);
-  return Object.freeze({ contained: true, realRoot, realPath });
+  return Object.freeze({ contained: true, realRoot: realRoot2, realPath });
 }
 function prepareContainedWrite(root, target, options = {}) {
   if (hasParentSegment(target)) {
@@ -214252,8 +214252,8 @@ var import_crypto = require("crypto");
 var ts = __toESM(require_typescript());
 
 // scripts/learn/lib/paths.ts
-var fs5 = __toESM(require("fs"));
-var path7 = __toESM(require("path"));
+var fs7 = __toESM(require("fs"));
+var path9 = __toESM(require("path"));
 var import_child_process = require("child_process");
 
 // scripts/lib/state/ensure-storage-layout.ts
@@ -214367,62 +214367,58 @@ if (isProcessEntry()) {
   }
 }
 
-// scripts/learn/lib/paths.ts
-function parseCwd(argv) {
-  return parseFlag(argv, "cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
-}
-function parseFlag(argv, name) {
-  const eq = `--${name}=`;
-  for (let i = 0; i < argv.length; i++) {
-    const v = argv[i] === `--${name}` ? argv[i + 1] : argv[i].startsWith(eq) ? argv[i].slice(eq.length) : void 0;
-    if (v === void 0 && argv[i] !== `--${name}`) continue;
-    if (!v || v.startsWith("--")) throw new Error(`--${name} needs a value (--${name} <v> or --${name}=<v>)`);
-    return v;
-  }
-  return void 0;
-}
-function hasFlag(argv, name) {
-  return argv.includes(`--${name}`);
-}
-function resolveMainRepoRoot(cwd) {
+// src/domains/knowledge/source-basis.ts
+var crypto = __toESM(require("node:crypto"));
+var import_node_child_process = require("node:child_process");
+var fs5 = __toESM(require("node:fs"));
+var path7 = __toESM(require("node:path"));
+function realRoot(root) {
   try {
-    const commonDir = (0, import_child_process.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
-      cwd,
-      encoding: "utf-8"
-    }).trim();
-    const abs = path7.isAbsolute(commonDir) ? commonDir : path7.resolve(cwd, commonDir);
-    const root = path7.dirname(abs);
-    if (fs5.existsSync(root)) return root;
+    return fs5.realpathSync(root);
   } catch {
+    return path7.resolve(root);
   }
-  return path7.resolve(cwd);
 }
-function guildPaths(cwd) {
-  const repoRoot = resolveMainRepoRoot(cwd);
-  const guildDir = durableGuildDir(repoRoot);
-  const indexesDir = path7.join(guildDir, "indexes");
-  const runsDir = path7.join(guildDir, "runs");
-  return {
-    repoRoot,
-    guildDir,
-    indexesDir,
-    runsDir,
-    codebaseMap: path7.join(indexesDir, "codebase-map.json"),
-    knowledgeGraph: path7.join(indexesDir, "knowledge-graph.json"),
-    knowledgeLinks: path7.join(indexesDir, "knowledge-links.json"),
-    knowledgeRecall: path7.join(indexesDir, "knowledge-recall.json"),
-    fingerprint: path7.join(indexesDir, "understand-fingerprint.json"),
-    partialGraph: path7.join(indexesDir, "understand-partial-graph.json")
-  };
+function sourceWorktreeId(root) {
+  return `worktree-${crypto.createHash("sha256").update(realRoot(root), "utf8").digest("hex").slice(0, 32)}`;
 }
-
-// scripts/learn/lib/walk.ts
-var fs7 = __toESM(require("fs"));
-var path9 = __toESM(require("path"));
+function git(cwd, args) {
+  try {
+    return (0, import_node_child_process.execFileSync)("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  } catch {
+    return null;
+  }
+}
+function resolveSourceWorktreeRoot(cwd) {
+  const top = git(cwd, ["rev-parse", "--show-toplevel"])?.trim();
+  return realRoot(top ? top : cwd);
+}
+function readWorktreeEntry(root, rel2) {
+  if (path7.isAbsolute(rel2) || rel2.includes("\\")) return { kind: "refused" };
+  const segs = rel2.split("/");
+  if (segs.some((seg) => seg === "" || seg === "." || seg === "..")) return { kind: "refused" };
+  let cur = root;
+  for (let i = 0; i < segs.length; i++) {
+    cur = path7.join(cur, segs[i]);
+    let st;
+    try {
+      st = fs5.lstatSync(cur);
+    } catch {
+      return { kind: "absent" };
+    }
+    const last = i === segs.length - 1;
+    if (st.isSymbolicLink()) return last ? { kind: "symlink", target: fs5.readlinkSync(cur) } : { kind: "refused" };
+    if (!last && !st.isDirectory()) return { kind: "absent" };
+    if (last) return st.isFile() ? { kind: "file", bytes: fs5.readFileSync(cur) } : { kind: "refused" };
+  }
+  return { kind: "refused" };
+}
+function readContainedFile(root, rel2) {
+  const e = readWorktreeEntry(root, rel2);
+  return e.kind === "file" ? e.bytes : null;
+}
 
 // scripts/learn/lib/ignore.ts
-var fs6 = __toESM(require("fs"));
-var path8 = __toESM(require("path"));
 var DEFAULT_IGNORE_PATTERNS = Object.freeze([
   "node_modules/",
   ".git/",
@@ -214546,9 +214542,9 @@ function compile(patterns) {
 }
 function createIgnoreFilter(projectRoot) {
   const patterns = [...DEFAULT_IGNORE_PATTERNS];
-  const rootIgnore = path8.join(projectRoot, ".guildignore");
-  if (fs6.existsSync(rootIgnore)) {
-    patterns.push(...fs6.readFileSync(rootIgnore, "utf-8").split("\n"));
+  const rootIgnore = readContainedFile(projectRoot, ".guildignore");
+  if (rootIgnore) {
+    patterns.push(...rootIgnore.toString("utf-8").split("\n"));
   }
   const rules = compile(patterns);
   return {
@@ -214564,11 +214560,13 @@ function createIgnoreFilter(projectRoot) {
 }
 
 // scripts/learn/lib/walk.ts
+var fs6 = __toESM(require("fs"));
+var path8 = __toESM(require("path"));
 function registeredSubGuildPaths(repoRoot) {
   const out = /* @__PURE__ */ new Set();
   let manifest;
   try {
-    manifest = JSON.parse(fs7.readFileSync(path9.join(durableGuildDir(repoRoot), "workspace.json"), "utf8"));
+    manifest = JSON.parse(fs6.readFileSync(path8.join(durableGuildDir(repoRoot), "workspace.json"), "utf8"));
   } catch {
     return out;
   }
@@ -214583,38 +214581,107 @@ function walkRepo(repoRoot, maxFiles = 2e4) {
   const filter = createIgnoreFilter(repoRoot);
   const subGuilds = registeredSubGuildPaths(repoRoot);
   const out = [];
+  let truncated = false;
+  const unreadable = [];
+  const unsupported = [];
   const visit = (absDir) => {
-    if (out.length >= maxFiles) return;
+    if (truncated) return;
     let entries;
     try {
-      entries = fs7.readdirSync(absDir, { withFileTypes: true });
+      entries = fs6.readdirSync(absDir, { withFileTypes: true });
     } catch {
+      unreadable.push(path8.relative(repoRoot, absDir).replace(/\\/g, "/"));
       return;
     }
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const e of entries) {
-      const abs = path9.join(absDir, e.name);
-      const rel2 = path9.relative(repoRoot, abs).replace(/\\/g, "/");
+      const abs = path8.join(absDir, e.name);
+      if (path8.sep === "/" && e.name.includes("\\") || e.name.includes("\uFFFD")) {
+        unsupported.push(path8.relative(repoRoot, abs));
+        continue;
+      }
+      const rel2 = path8.relative(repoRoot, abs).replace(/\\/g, "/");
       if (e.isDirectory()) {
         if (subGuilds.has(rel2)) continue;
         if (filter.isIgnored(rel2) || filter.isIgnored(rel2 + "/")) continue;
         visit(abs);
       } else if (e.isFile()) {
         if (filter.isIgnored(rel2)) continue;
+        if (out.length >= maxFiles) {
+          truncated = true;
+          return;
+        }
         out.push(rel2);
-        if (out.length >= maxFiles) return;
       }
     }
   };
   visit(repoRoot);
   out.sort();
-  return { files: out, filter };
+  return { files: out, filter, truncated, unreadable: unreadable.sort(), unsupported: unsupported.sort() };
+}
+
+// scripts/learn/lib/paths.ts
+function parseCwd(argv) {
+  return parseFlag(argv, "cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
+}
+function parseFlag(argv, name) {
+  const eq = `--${name}=`;
+  for (let i = 0; i < argv.length; i++) {
+    const v = argv[i] === `--${name}` ? argv[i + 1] : argv[i].startsWith(eq) ? argv[i].slice(eq.length) : void 0;
+    if (v === void 0 && argv[i] !== `--${name}`) continue;
+    if (!v || v.startsWith("--")) throw new Error(`--${name} needs a value (--${name} <v> or --${name}=<v>)`);
+    return v;
+  }
+  return void 0;
+}
+function hasFlag(argv, name) {
+  return argv.includes(`--${name}`);
+}
+function resolveMainRepoRoot(cwd) {
+  try {
+    const commonDir = (0, import_child_process.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
+      cwd,
+      encoding: "utf-8"
+    }).trim();
+    const abs = path9.isAbsolute(commonDir) ? commonDir : path9.resolve(cwd, commonDir);
+    const root = path9.dirname(abs);
+    if (fs7.existsSync(root)) return root;
+  } catch {
+  }
+  return path9.resolve(cwd);
+}
+function sameDir(a, b) {
+  try {
+    return fs7.realpathSync(a) === fs7.realpathSync(b);
+  } catch {
+    return path9.resolve(a) === path9.resolve(b);
+  }
+}
+function guildPaths(cwd) {
+  const repoRoot = resolveMainRepoRoot(cwd);
+  const sourceRoot = resolveSourceWorktreeRoot(cwd);
+  const guildDir = durableGuildDir(repoRoot);
+  const indexesDir = path9.join(guildDir, "indexes");
+  const runsDir = path9.join(guildDir, "runs");
+  return {
+    repoRoot,
+    sourceRoot: sameDir(sourceRoot, repoRoot) ? repoRoot : sourceRoot,
+    guildDir,
+    indexesDir,
+    runsDir,
+    codebaseMap: path9.join(indexesDir, "codebase-map.json"),
+    knowledgeGraph: path9.join(indexesDir, "knowledge-graph.json"),
+    knowledgeLinks: path9.join(indexesDir, "knowledge-links.json"),
+    knowledgeRecall: path9.join(indexesDir, "knowledge-recall.json"),
+    fingerprint: path9.join(indexesDir, "understand-fingerprint.json"),
+    partialGraph: path9.join(indexesDir, "understand-partial-graph.json")
+  };
 }
 
 // src/domains/state/atomic-write.ts
 var fs9 = __toESM(require("fs"));
 var path11 = __toESM(require("path"));
-var crypto = __toESM(require("crypto"));
+var crypto2 = __toESM(require("crypto"));
 
 // src/domains/state/plugin-install-guard.ts
 var fs8 = __toESM(require("node:fs"));
@@ -214639,7 +214706,7 @@ function writeThroughTemp(targetPath, content, durable, pluginInstallRoot) {
   assertNotUnderPluginInstall(targetPath, pluginInstallRoot);
   const dir = path11.dirname(targetPath);
   fs9.mkdirSync(dir, { recursive: true });
-  const unique = `${process.pid}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+  const unique = `${process.pid}-${Date.now()}-${crypto2.randomBytes(4).toString("hex")}`;
   const tmpPath = path11.join(dir, `.${path11.basename(targetPath)}.tmp-${unique}`);
   if (durable) {
     const fd = fs9.openSync(tmpPath, "w");
@@ -214685,7 +214752,7 @@ function durableGuildDir2(activeRoot) {
 }
 
 // src/domains/state/index-migrate.ts
-var import_node_child_process = require("node:child_process");
+var import_node_child_process2 = require("node:child_process");
 var fs10 = __toESM(require("node:fs"));
 var path13 = __toESM(require("node:path"));
 function openDatabase(dbPath) {
@@ -214697,7 +214764,7 @@ function openDatabase(dbPath) {
 var CURRENT_SCHEMA_VERSION = 3;
 function resolveGuildRoot2(cwd) {
   try {
-    const raw = (0, import_node_child_process.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
+    const raw = (0, import_node_child_process2.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
       cwd,
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"]
@@ -215213,14 +215280,14 @@ function resolveContainedRealDir(abs, root) {
   const st = lstatSafe(abs);
   if (!st || !st.isDirectory() || st.isSymbolicLink()) return null;
   let real;
-  let realRoot;
+  let realRoot2;
   try {
     real = fs11.realpathSync(abs);
-    realRoot = fs11.realpathSync(root);
+    realRoot2 = fs11.realpathSync(root);
   } catch {
     return null;
   }
-  const rel2 = path15.relative(realRoot, real);
+  const rel2 = path15.relative(realRoot2, real);
   if (rel2 === "" || rel2.startsWith("..") || path15.isAbsolute(rel2)) return null;
   return real;
 }
@@ -215293,7 +215360,7 @@ Add yours here. This file is yours once it exists.
 var LOCK_STALE_MS = 15 * 60 * 1e3;
 
 // src/domains/state/upgrade-steps.ts
-var crypto2 = __toESM(require("node:crypto"));
+var crypto3 = __toESM(require("node:crypto"));
 var fs12 = __toESM(require("node:fs"));
 var path16 = __toESM(require("node:path"));
 var KNOWLEDGE_PREFIX = `.guild/${DURABLE_SUBTREES.knowledge}`;
@@ -215334,7 +215401,7 @@ function writeFile(ctx, abs, text) {
   fs12.writeFileSync(abs, text, "utf8");
 }
 function sha256(text) {
-  return crypto2.createHash("sha256").update(text).digest("hex");
+  return crypto3.createHash("sha256").update(text).digest("hex");
 }
 function filesUnder(dir, out = []) {
   for (const name of readdirSafe(dir)) {
@@ -216706,19 +216773,23 @@ function readKStageTree(repoRoot) {
   }
   return out;
 }
-function writeKStageBaseline(repoRoot) {
-  const tree = readKStageTree(repoRoot);
-  const store = buildKStageStore(tree);
+function writeKStageBaseline(repoRoot, sourceRoot = repoRoot) {
+  const tree = readKStageTree(sourceRoot);
+  const store = { ...buildKStageStore(tree), source_worktree_id: sourceWorktreeId(sourceRoot) };
   const storePath = kStoreFile(repoRoot);
   fs15.mkdirSync(path19.dirname(storePath), { recursive: true });
   fs15.writeFileSync(storePath, JSON.stringify(store, null, 2) + "\n", "utf8");
 }
 function runKStageStaleness(cwd) {
   let repoRoot;
+  let sourceRoot;
   try {
-    repoRoot = guildPaths(cwd).repoRoot;
+    const gp = guildPaths(cwd);
+    repoRoot = gp.repoRoot;
+    sourceRoot = gp.sourceRoot;
   } catch {
     repoRoot = cwd;
+    sourceRoot = cwd;
   }
   const storePath = kStoreFile(repoRoot);
   if (!fs15.existsSync(storePath)) {
@@ -216750,7 +216821,20 @@ function runKStageStaleness(cwd) {
       reason: "K-stage baseline unreadable \u2014 treat all stages as stale"
     };
   }
-  const current = readKStageTree(repoRoot);
+  if (stored.source_worktree_id !== sourceWorktreeId(sourceRoot)) {
+    return {
+      k1: true,
+      k2: true,
+      k3: true,
+      k4: true,
+      k5: true,
+      k6: true,
+      structuralSkip: false,
+      knowledgeTierClobbered: knowledgeTierClobbered(repoRoot),
+      reason: "K-stage baseline names no source worktree or another one \u2014 treat all stages as stale"
+    };
+  }
+  const current = readKStageTree(sourceRoot);
   const delta = analyzeHashDelta(stored, current);
   const result = classifyKStages(delta, stored, current);
   return withKnowledgeTierClobber(result, repoRoot);
@@ -216761,12 +216845,16 @@ function main() {
   ensureStorageLayout(cwd, { detectOnly: true });
   if (hasFlag(argv, "baseline")) {
     let repoRoot;
+    let sourceRoot;
     try {
-      repoRoot = guildPaths(cwd).repoRoot;
+      const gp = guildPaths(cwd);
+      repoRoot = gp.repoRoot;
+      sourceRoot = gp.sourceRoot;
     } catch {
       repoRoot = cwd;
+      sourceRoot = cwd;
     }
-    writeKStageBaseline(repoRoot);
+    writeKStageBaseline(repoRoot, sourceRoot);
     process.stderr.write(
       `[k-stage-staleness] baseline written \u2192 ${path19.join(durableGuildDir2(repoRoot), "indexes", "kstage-fingerprint.json")}
 `

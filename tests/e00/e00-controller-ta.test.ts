@@ -32,6 +32,8 @@ import { closeRunBinding } from "../../src/domains/lifecycle";
 import {
   FIXED_NOW, PLUGIN, acceptLane, driveLane, expectRefusal, makeRuntime, requireExport, requireMethod,
   sha256, teardownOwned, tempRoot, walkFiles, type TempRoot,
+  hostBootSession,
+  controllerProcessStart,
 } from "./support/e00-harness";
 import { writeApprovedTeam } from "./support/team-authority-fixture";
 
@@ -55,8 +57,8 @@ function treeDigest(dir: string): string {
 function selfIdentity() {
   return {
     pid: process.pid,
-    process_start: execFileSync("ps", ["-o", "lstart=", "-p", String(process.pid)], { encoding: "utf8" }).trim(),
-    boot_session: execFileSync("sysctl", ["-n", "kern.bootsessionuuid"], { encoding: "utf8" }).trim(),
+    process_start: controllerProcessStart(process.pid),
+    boot_session: hostBootSession(),
   };
 }
 

@@ -53,7 +53,6 @@ import {
   closeRunBinding,
   initializeRunBindingExclusion,
   mintRunBinding,
-  PRIVATE_BINDING_MODE,
   readRunBindingRecord,
   runBindingPath,
   withRunBindingExclusion,
@@ -1253,7 +1252,7 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
       if(env.fs.mkdirExclusive ? !env.fs.mkdirExclusive(own) : env.fs.exists(own))throw new Error("reserved run identity is occupied");
       if(!env.fs.mkdirExclusive)env.fs.mkdirp(own);
       for(const dir of plan.directories)env.fs.mkdirp(path.join(plan.root,dir));
-      for(const file of plan.files){const abs=path.join(plan.root,file.path);if(env.fs.exists(abs))throw new Error("staged target is occupied");if(env.fs.writeFileExclusive){if(!env.fs.writeFileExclusive(abs,file.bytes,abs===runBindingPath(plan.root,plan.run_id)?PRIVATE_BINDING_MODE:undefined))throw new Error("staged target is occupied");}else env.fs.writeFile(abs,file.bytes);}
+      for(const file of plan.files){const abs=path.join(plan.root,file.path);if(env.fs.exists(abs))throw new Error("staged target is occupied");if(env.fs.writeFileExclusive){if(!env.fs.writeFileExclusive(abs,file.bytes,abs===runBindingPath(plan.root,plan.run_id)?0o600:undefined))throw new Error("staged target is occupied");}else env.fs.writeFile(abs,file.bytes);}
       env.initializeRunBindingExclusion?.(plan.root,plan.run_id);
       return plan.run_id;
     },

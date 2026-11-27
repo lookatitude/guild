@@ -25,7 +25,7 @@ import * as path from "path";
 import { recordControllerLoss, taskCellPaths } from "../../src/domains/dispatch";
 import { processStartOf } from "../../scripts/lib/host/tmux-backend";
 import { tmuxLossTeardown } from "../../scripts/task-cell-controller";
-import { FIXED_NOW, driveLane, makeRuntime, teardownOwned, tempRoot, type TempRoot } from "./support/e00-harness";
+import { FIXED_NOW, driveLane, makeRuntime, teardownOwned, tempRoot, type TempRoot, hostBootSession } from "./support/e00-harness";
 import { installTmuxShim, resolveRealTmux } from "./tc/tmux-shim";
 
 afterEach(teardownOwned);
@@ -64,7 +64,7 @@ function plantDeadClaim(root: TempRoot) {
     oracle_plan_decision: { path: "oracle-plan/build.decision.json", sha256: "b".repeat(64) },
     lead_binding_id: "lead-binding-e00", root_id: "fixture", source_id: "source:fixture", root_fingerprint: "c".repeat(64),
     source_revision: null, controller_instance_id: "ctl-cr11", pid: 2 ** 22 - 3, process_start: "Thu Jan  1 00:00:00 1970",
-    boot_session: execFileSync("sysctl", ["-n", "kern.bootsessionuuid"], { encoding: "utf8" }).trim(), operator_uid: process.getuid?.() ?? 0,
+    boot_session: hostBootSession(), operator_uid: process.getuid?.() ?? 0,
     package_identity: null, package_release_version: null, package_current_package: null, package_root: null,
     worker_trust_policy: "cooperative_local", provider: "cooperative_local", host_profile_id: null, started_at: FIXED_NOW,
   }, null, 2) + "\n", { flag: "wx" });

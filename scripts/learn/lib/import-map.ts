@@ -14,6 +14,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { analyzeSource } from "./extract";
 import { detectLanguage } from "./languages";
+import { effectiveAliasOptions, loadTsconfigChain } from "./tsconfig-chain";
+
 
 export interface ImportEdge {
   from: string; // repo-relative
@@ -23,12 +25,9 @@ export interface ImportEdge {
 
 const JS_EXTS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 
-function fileExists(p: string): boolean {
-  try {
-    return fs.statSync(p).isFile();
-  } catch {
-    return false;
-  }
+/** K01: a candidate exists only if it is in the scanned inventory. */
+function inventoryExists(repoRoot: string, known: Set<string>): (abs: string) => boolean {
+  return (abs) => known.has(path.relative(repoRoot, abs).replace(/\\/g, "/"));
 }
 
 /** Resolve a JS/TS module specifier relative to importer; null if external. */
@@ -37,6 +36,7 @@ function resolveJs(
   spec: string,
   repoRoot: string,
   aliases: Array<{ prefix: string; targets: string[] }>,
+  fileExists: (abs: string) => boolean,
 ): { abs: string; kind: ImportEdge["kind"] } | null {
   let baseDir: string | null = null;
   let kind: ImportEdge["kind"] = "static";
@@ -53,7 +53,7 @@ function resolveJs(
         for (const t of a.targets) {
           const tt = t.endsWith("*") ? t.slice(0, -1) : t;
           const cand = path.resolve(repoRoot, tt + rest);
-          const hit = resolveJsFile(cand);
+          const hit = resolveJsFile(cand, fileExists);
           if (hit) return { abs: hit, kind: "alias" };
         }
       }
@@ -62,11 +62,11 @@ function resolveJs(
   }
 
   const target = path.resolve(baseDir, spec);
-  const hit = resolveJsFile(target);
+  const hit = resolveJsFile(target, fileExists);
   return hit ? { abs: hit, kind } : null;
 }
 
-function resolveJsFile(target: string): string | null {
+function resolveJsFile(target: string, fileExists: (abs: string) => boolean): string | null {
   if (fileExists(target)) return target;
   for (const e of JS_EXTS) if (fileExists(target + e)) return target + e;
   for (const e of JS_EXTS) {
@@ -77,27 +77,14 @@ function resolveJsFile(target: string): string | null {
 }
 
 export function loadTsAliases(repoRoot: string): Array<{ prefix: string; targets: string[] }> {
-  const tsconfigPath = path.join(repoRoot, "tsconfig.json");
-  try {
-    const raw = fs
-      .readFileSync(tsconfigPath, "utf8")
-      .replace(/\/\/.*$/gm, "")
-      .replace(/\/\*[\s\S]*?\*\//g, "");
-    const cfg = JSON.parse(raw);
-    const co = cfg.compilerOptions ?? {};
-    const baseUrl = co.baseUrl ?? ".";
-    const paths = co.paths ?? {};
-    const out: Array<{ prefix: string; targets: string[] }> = [];
-    for (const [k, v] of Object.entries(paths)) {
-      out.push({
-        prefix: k,
-        targets: (v as string[]).map((t) => path.join(baseUrl, t)),
-      });
-    }
-    return out;
-  } catch {
-    return [];
-  }
+  // K01: the contained, symlink-free extends chain (bound into the source basis).
+  const eff = effectiveAliasOptions(loadTsconfigChain(repoRoot));
+  if (!eff.paths) return [];
+  const base = eff.baseUrl ?? eff.pathsDir ?? ".";
+  return Object.entries(eff.paths).map(([k, v]) => ({
+    prefix: k,
+    targets: (Array.isArray(v) ? v : []).filter((t) => typeof t === "string").map((t) => path.join(base, t)),
+  }));
 }
 
 /**
@@ -132,7 +119,7 @@ export function buildImportMap(
         const resolved = resolvePython(rel, imp.source, known);
         pushEdge(edges, seen, rel, resolved, "static");
       } else {
-        const r = resolveJs(abs, imp.source, repoRoot, aliases);
+        const r = resolveJs(abs, imp.source, repoRoot, aliases, inventoryExists(repoRoot, known));
         if (!r) continue;
         const toRel = path.relative(repoRoot, r.abs).replace(/\\/g, "/");
         if (known.has(toRel)) pushEdge(edges, seen, rel, toRel, r.kind);
@@ -170,7 +157,7 @@ export function resolveImportSpec(
   }
   if (lang === "typescript" || lang === "javascript") {
     const abs = path.join(repoRoot, importerRel);
-    const r = resolveJs(abs, spec, repoRoot, aliases);
+    const r = resolveJs(abs, spec, repoRoot, aliases, inventoryExists(repoRoot, known));
     if (!r) return null;
     const to = path.relative(repoRoot, r.abs).replace(/\\/g, "/");
     if (!known.has(to) || to === from) return null;

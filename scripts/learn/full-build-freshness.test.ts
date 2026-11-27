@@ -22,6 +22,7 @@ import * as path from "path";
 import { execFileSync } from "child_process";
 
 import { structuralSubset } from "./lib/structural";
+import { publishLearnArtifacts } from "./lib/publish";
 import type { GraphEdge, GraphNode } from "./lib/schema";
 
 const SCRIPTS_DIR = path.resolve(__dirname, "..");
@@ -82,7 +83,12 @@ describe("I15 — full build uses the live tree and prunes on rebuild (real CLI)
       { source: "concept:notes:pruning", target: "function:src/doomed.ts:gone",
         type: "relates_to", direction: "out", weight: 1 },
     );
-    fs.writeFileSync(KG(repo), JSON.stringify(g, null, 2));
+    // K03: plant through the publisher (a direct write to the export is never adopted).
+    const planted = publishLearnArtifacts(
+      { indexesDir: path.dirname(KG(repo)), repoRoot: repo, sourceRoot: repo },
+      { channels: ["semantic_graph"], build: () => ({ "knowledge-graph.json": g }) },
+    );
+    expect(planted.status).toBe("published");
 
     // Mutate the live tree: DELETE doomed.ts, DESCOPE descoped.ts (via
     // .guildignore — walkRepo's ignore surface), ADD added.ts, CHANGE kept.ts's

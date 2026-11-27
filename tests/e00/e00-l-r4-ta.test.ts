@@ -223,7 +223,7 @@ describe.skipIf(!tmuxAvailable || !pkgPresent)("L4-F1 · the real launcher CLI n
     const base = shimCalls(e).length;
     const r = spawnSync(BUN, ["--preload", PRELOAD, path.join(PLUGIN, "scripts", "agent-team-launcher.ts"), "--team", path.join(e.root, ".guild", "team", "e00-lr4.yaml"), "--cwd", e.root, "--run-id", RUN], {
       cwd: e.root, encoding: "utf8", timeout: 180000,
-      env: { PATH: `${e.bin}:${process.env["PATH"] ?? "/usr/bin:/bin"}`, HOME: process.env["HOME"] ?? e.root, SHELL: "/bin/zsh", LANG: "en_US.UTF-8",
+      env: { PATH: `${e.bin}:${process.env["PATH"] ?? "/usr/bin:/bin"}`, HOME: process.env["HOME"] ?? e.root, SHELL: fs.existsSync("/bin/zsh") ? "/bin/zsh" : "/bin/sh", LANG: "en_US.UTF-8",
         GUILD_DISPATCH_APPROVAL_OVERRIDE: "E00-T0 r4 fixture: approval verification is pinned separately",
         E00_ACTIVATION_STUB_ROOT: PKG, [KEY]: bindingRef, [ALIAS]: "e00-alias-canary" },
     });

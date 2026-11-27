@@ -43,6 +43,7 @@ import {
 } from "./team-backend";
 import { resolveClaudePluginActivation } from "./host/tmux-backend";
 import * as fs from "node:fs";
+import { spawnSync } from "node:child_process";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
@@ -108,17 +109,27 @@ function makeFakeRun(opts: {
   const calls: Array<{ cmd: string; args: string[] }> = [];
   const run: RunFn = (cmd, args) => {
     calls.push({ cmd, args });
+    // Pane identities are verified against the real process table (a live pane pid + start).
+    if (cmd === "ps") {
+      const r = spawnSync("ps", args, { encoding: "utf8", env: { ...process.env, LC_ALL: "C" } });
+      return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+    }
     const sub = args[0] ?? "";
     const ok: RunResult = { status: 0, stdout: "", stderr: "" };
     if (sub === "-V") return { ...ok, status: opts.available === false ? 1 : 0, stdout: "tmux 3.4" };
     if (sub === "has-session") return { ...ok, status: opts.hasSession ? 0 : 1 };
     if (sub === "list-windows") return { ...ok, stdout: (opts.windows ?? []).join("\n") + "\n" };
     if (sub === "display-message") return { ...ok, stdout: (opts.sessionName ?? "sess") + "\n" };
+    // The credential probe: tmux's exact answer for an unset variable.
+    if (sub === "show-environment") return { status: 1, stdout: "", stderr: "unknown variable: GUILD_RUN_BINDING_REF\n" };
+    if (opts.failOn && opts.failOn(sub)) return { status: 1, stdout: "", stderr: "boom" };
+    // The creating command prints its identity (CREATE_IDENTITY_FORMAT).
+    if (sub === "new-session" || sub === "new-window") return { ...ok, stdout: "$1 @1 77 1793000000\n" };
     if (sub === "list-panes") {
-      const lines = (opts.panes ?? []).map(([i, id, t]) => `${i}\t${id}\t${t}`).join("\n");
+      // Capture format: server pid + start, window, pane id, pane pid (this live process), title.
+      const lines = (opts.panes ?? []).map(([, id, t]) => `77 1793000000 @1 ${id} ${process.pid} ${t}`).join("\n");
       return { ...ok, stdout: lines + "\n" };
     }
-    if (opts.failOn && opts.failOn(sub)) return { status: 1, stdout: "", stderr: "boom" };
     return ok;
   };
   return { run, calls };
@@ -157,7 +168,7 @@ describe("TmuxTeamBackend.plan() — pure composition", () => {
     const backend = tmuxBackend();
     const { commands } = backend.plan(req({ mode: "new-session", targetName: "guild-demo" }));
     const displays = commands.map((c) => c.display);
-    expect(displays.some((d) => /^tmux new-session -d -s guild-demo/.test(d))).toBe(true);
+    expect(displays.some((d) => /^tmux new-session -d -P -F '[^']*' -s guild-demo /.test(d))).toBe(true);
     expect(displays.filter((d) => d.startsWith("tmux split-window -t guild-demo"))).toHaveLength(3);
     expect(displays.some((d) => d === "tmux select-layout -t guild-demo tiled")).toBe(true);
     expect(displays.some((d) => d.startsWith("tmux select-window"))).toBe(false);
@@ -168,7 +179,7 @@ describe("TmuxTeamBackend.plan() — pure composition", () => {
     const backend = tmuxBackend();
     const { commands } = backend.plan(req({ mode: "in-session", targetName: "guild-demo" }));
     const displays = commands.map((c) => c.display);
-    expect(displays.some((d) => d.startsWith("tmux new-window -n guild-demo"))).toBe(true);
+    expect(displays.some((d) => /^tmux new-window -P -F '[^']*' -n guild-demo /.test(d))).toBe(true);
     expect(displays.some((d) => d === "tmux select-window -t guild-demo")).toBe(true);
     expect(displays.some((d) => d.startsWith("tmux new-session"))).toBe(false);
   });
@@ -234,10 +245,11 @@ describe("TmuxTeamBackend.spawn() — execution + teardown", () => {
     expect(outcome.orchestratorPaneId).toBe("%0");
     // "orchestrator" is never ALSO reported as a teammate pane.
     expect(outcome.teammatePaneIds["orchestrator"]).toBeUndefined();
-    // The last call is the list-panes collection, scoped to this session/window
-    // (no `-a`, which would list panes server-wide across other sessions too).
-    expect(calls[calls.length - 1].args[0]).toBe("list-panes");
-    expect(calls[calls.length - 1].args).not.toContain("-a");
+    // The pane collection is scoped to the created window (no `-a`, which would list
+    // panes server-wide across other sessions too).
+    const collect = calls.filter((c) => c.args[0] === "list-panes");
+    expect(collect.length).toBeGreaterThan(0);
+    for (const c of collect) expect(c.args).not.toContain("-a");
   });
 
   it("failure (new-session): tears down with kill-session and returns ok:false", () => {
@@ -248,8 +260,10 @@ describe("TmuxTeamBackend.spawn() — execution + teardown", () => {
     expect(outcome.ok).toBe(false);
     expect(outcome.failedCommand?.display).toMatch(/^tmux split-window/);
     expect(outcome.stderr).toBe("boom");
-    expect(calls.some((c) => c.args[0] === "kill-session" && c.args.includes("guild-demo"))).toBe(true);
-    expect(calls.some((c) => c.args[0] === "kill-window")).toBe(false);
+    // Teardown is identity-bound: kill the created session ($1) only if the server is still the one that created it.
+    const kills = calls.filter((c) => c.args[0] === "if-shell").map((c) => c.args[c.args.length - 1]);
+    expect(kills).toContain("kill-session -t $1");
+    expect(kills.some((k) => k.startsWith("kill-window"))).toBe(false);
   });
 
   it("failure (in-session): tears down with kill-window only (never the session)", () => {
@@ -258,8 +272,9 @@ describe("TmuxTeamBackend.spawn() — execution + teardown", () => {
     const plan = backend.plan(req({ mode: "in-session", targetName: "guild-demo" }));
     const outcome = backend.spawn(plan);
     expect(outcome.ok).toBe(false);
-    expect(calls.some((c) => c.args[0] === "kill-window" && c.args.includes("guild-demo"))).toBe(true);
-    expect(calls.some((c) => c.args[0] === "kill-session")).toBe(false);
+    const kills = calls.filter((c) => c.args[0] === "if-shell").map((c) => c.args[c.args.length - 1]);
+    expect(kills).toContain("kill-window -t @1");
+    expect(kills.some((k) => k.startsWith("kill-session"))).toBe(false);
   });
 });
 

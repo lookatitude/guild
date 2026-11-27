@@ -2,17 +2,17 @@
   "schema_version": "guild.e00_t0_frozen_pins.v1",
   "purpose": "EAT07/CD15: frozen guild-stack contracts and the old closeout run stay byte-identical",
   "recorded_at": "2026-10-26",
-  "digest_rule": "sha256 over sorted '<relpath>:<sha256>' lines joined by newline; regular files only, symlinks skipped",
+  "digest_rule": "sha256 over sorted '<relpath>:<sha256>' lines joined by newline; regular files only, symlinks and __pycache__/ (python bytecode caches) skipped",
   "pins": [
     {
       "tree": "contracts/guild-stack/v1",
-      "files": 70,
-      "digest": "e00d9004f5cf2c441499e741ff84b1bae43d874dbf3bde2370bd1623b0943036"
+      "files": 68,
+      "digest": "b64bf92c90be85ea7baf1277eb695fc966f954f8725a662e56d77548b4b65254"
     },
     {
       "tree": "contracts/guild-stack/v2",
-      "files": 48,
-      "digest": "6f783a7bc47a09a82e59cd7b3f330517d284d83f1ba6fef9cdce2f4b6d7a6bee"
+      "files": 46,
+      "digest": "be3c0c6af8cb5de84b766109572e2268e3456d83e384082b2d77c5a37a9c8954"
     },
     {
       "tree": ".guild/runs/run-20261026-013317-composable-workflows-trace-lifecycle-knowledge/task-cells",
@@ -24,5 +24,6 @@
       "files": 4,
       "digest": "6c860c3edef682371b20cf97ed2c315dd767bd81e9587d9e43c1f8a52f9429cf"
     }
-  ]
+  ],
+  "digest_rule_revised": "2026-11-05 (CW-10): __pycache__ excluded; v1/v2 re-pinned over the same contract source bytes (v2 recomputed from the A02 freeze receipt per-file sha256s)"
 }

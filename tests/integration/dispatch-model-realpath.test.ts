@@ -113,11 +113,11 @@ function makeLaunchableTmuxBin(root: string): string {
       "  has-session) exit 1;;",
       "  list-windows) exit 0;;",
       // The backend's pre/post-create credential probe: tmux's canonical answer for an unset
-      // variable, for the exact named query only. Any other show-environment form stays an
+      // variable, for the exact global and session (-t) queries only. Any other show-environment form stays an
       // empty status-0 answer, which the backend refuses as unverifiable.
       "  show-environment)",
       `    printf '%s\\n' "$*" >> ${JSON.stringify(logPath)}`,
-      '    if [ "$#" -eq 3 ] && [ "$2" = "-g" ] && [ "$3" = "GUILD_RUN_BINDING_REF" ]; then',
+      '    if { [ "$#" -eq 3 ] && [ "$2" = "-g" ] && [ "$3" = "GUILD_RUN_BINDING_REF" ]; } || { [ "$#" -eq 4 ] && [ "$2" = "-t" ] && [ "$4" = "GUILD_RUN_BINDING_REF" ]; } || { [ "$#" -eq 2 ] && [ "$2" = "GUILD_RUN_BINDING_REF" ]; }; then',
       "      printf 'unknown variable: GUILD_RUN_BINDING_REF\\n' >&2; exit 1",
       "    fi",
       "    exit 0;;",

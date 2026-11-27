@@ -2395,7 +2395,9 @@ export class TmuxTaskCellWorkerPort implements TaskCellWorkerPort {
       const argv = args.stdout.trim();
       const at = argv.indexOf(` ${hostArg}`);
       const bounded = at >= 0 && (argv.length === at + hostArg.length + 1 || /\s/.test(argv[at + hostArg.length + 1]!));
-      if (bounded && name.length > 0 && !LAUNCH_SHELLS.has(name)) return { pid, comm: name };
+      // Linux names a #! script's process after the script (comm), so its interpreter in argv[0] decides shell-ness too.
+      const argv0 = path.basename(argv.split(/\s+/)[0] ?? "").replace(/^-/, "");
+      if (bounded && name.length > 0 && !LAUNCH_SHELLS.has(name) && !LAUNCH_SHELLS.has(argv0)) return { pid, comm: name };
     }
     return "absent";
   }

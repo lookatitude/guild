@@ -415,7 +415,7 @@ function cutLiteralPrefixTail(s: string, privateLiterals: readonly string[]): st
   return s;
 }
 
-interface ScrubbedPayload { content: string; truncated: boolean; redacted: boolean; original_bytes: number }
+export interface ScrubbedPayload { content: string; truncated: boolean; redacted: boolean; original_bytes: number }
 
 function scrubPayload(raw: string, maxBytes: number, privateLiterals: readonly string[]): ScrubbedPayload | null {
   const original_bytes = Buffer.byteLength(raw, "utf8");
@@ -434,6 +434,15 @@ function scrubPayload(raw: string, maxBytes: number, privateLiterals: readonly s
   return { content: cur, truncated, redacted, original_bytes };
 }
 
+
+/**
+ * The capture scrubber for other producers (K05 recall telemetry): scrub to a
+ * fixed point, truncate to `maxBytes` (JSON-encoded), scrub again. Null means
+ * the text cannot be inspected or does not converge; the caller withholds it.
+ */
+export function scrubTraceText(raw: string, maxBytes: number, privateLiterals: readonly string[] = []): ScrubbedPayload | null {
+  return scrubPayload(raw, maxBytes, privateLiterals);
+}
 
 function hiddenReasoningKeysIn(v: unknown): string[] {
   const found: string[] = [];

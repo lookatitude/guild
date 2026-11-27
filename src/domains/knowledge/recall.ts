@@ -84,6 +84,15 @@ import { emitTraceEvent } from "../telemetry";
 import { makeAnalysisTraceEvent, makeRecallEvent, makeRecallDecisionEvent } from "../telemetry";
 import { durableGuildDir } from "../state";
 import { phaseStartRecall } from "./phase-start";
+import { scrubTraceText } from "../telemetry";
+import {
+  instrumentRetrieval,
+  recordKnowledgeUse,
+  type ConsumerKind,
+  type RetrievalContext,
+  type RetrievalStatus,
+  type UseCapture,
+} from "./retrieval-ledger";
 
 // Re-export so existing importers (`recall.ts` was the original home of the scorer)
 // keep resolving `ingestImportanceScore` from here; canonical impl now in ingest-importance.ts.
@@ -127,6 +136,8 @@ export interface RecallResult {
    * recall path (gate on, the default).
    */
   recallBeforeRead?: boolean;
+  /** K05: the retrieval record this call wrote; absent when no run is known or capture failed. */
+  retrieval?: { query_id: string; use_capture: UseCapture; status: RetrievalStatus; generation: string | null };
 }
 
 export interface RecallOpts {
@@ -181,6 +192,13 @@ export interface RecallOpts {
    * "success"/"failure" so recall-stats can compute precision.
    */
   laneOutcome?: "success" | "failure" | "unknown";
+  /**
+   * K05: how this call's retrieval record is labelled. Recorded only when a run
+   * is known (runDir or runId). Default: entry `recall_api`, use capture supported.
+   */
+  /** Internal (K05): receives the sha256 of the recall export bytes the KG branch read. */
+  _onRecallExportRead?: (sha256: string) => void;
+  retrieval?: Partial<Pick<RetrievalContext, "entry_point" | "use_capture" | "identity" | "query_id" | "capture_preview" | "private_literals" | "clock" | "launch_path">>;
 }
 
 /** G10: default read-skip threshold (mirrors config-defaults models.recallScoreThreshold). */
@@ -522,6 +540,7 @@ function kgQueryBranch(
   runDir?: string,
   runId?: string,
   category?: string,
+  onExportRead?: (sha256: string) => void,
 ): RecallResult | null {
   // METRIC 6: read the recall projection, not the raw knowledge-graph
   const projPath = path.join(durableGuildDir(cwd), "indexes", "knowledge-recall.json");
@@ -529,7 +548,14 @@ function kgQueryBranch(
 
   let proj: KnowledgeLinksDoc | null = null;
   try {
-    proj = JSON.parse(fs.readFileSync(projPath, "utf8")) as KnowledgeLinksDoc;
+    const bytes = fs.readFileSync(projPath);
+    // K05: the exact bytes this query read bind its retrieval record to a generation.
+    try {
+      onExportRead?.(`sha256:${crypto.createHash("sha256").update(bytes).digest("hex")}`);
+    } catch {
+      /* telemetry never changes the KG result */
+    }
+    proj = JSON.parse(bytes.toString("utf8")) as KnowledgeLinksDoc;
   } catch {
     return null;
   }
@@ -862,6 +888,59 @@ function corpusForcesIdentifierBypass(
  *         "combined"                     when both contribute.
  */
 export function recall(query: string, opts: RecallOpts): RecallResult {
+  const runDir = opts.runDir ?? (opts.runId ? path.join(durableGuildDir(opts.cwd), "runs", opts.runId) : undefined);
+  if (!runDir) return recallUninstrumented(query, opts);
+  const r = opts.retrieval ?? {};
+  const taskId = process.env["GUILD_TASK_ID"] ?? process.env["GUILD_LANE_ID"];
+  const ctx: RetrievalContext = {
+    runDir: path.resolve(runDir),
+    run_id: opts.runId ?? path.basename(runDir),
+    entry_point: r.entry_point ?? "recall_api",
+    mode: opts.category ? "recall_category" : "recall",
+    use_capture: r.use_capture ?? "supported",
+    // The generation is named only from the bytes the KG branch actually read.
+    indexesDir: path.join(durableGuildDir(opts.cwd), "indexes"),
+    ...(taskId ? { task_id: taskId } : {}),
+    ...(r.identity ? { identity: r.identity } : {}),
+    ...(r.query_id ? { query_id: r.query_id } : {}),
+    ...(r.capture_preview ? { capture_preview: true } : {}),
+    ...(r.private_literals ? { private_literals: r.private_literals } : {}),
+    ...(r.clock ? { clock: r.clock } : {}),
+    ...(r.launch_path ? { launch_path: r.launch_path } : {}),
+  };
+  let exportRead: string | null = null;
+  const done = instrumentRetrieval(
+    query,
+    ctx,
+    () => recallUninstrumented(query, { ...opts, _onRecallExportRead: (s) => { exportRead = s; opts._onRecallExportRead?.(s); } }),
+    (res) => res.chunks.map((c) => ({ ref: c.source_path, content: c.rendered })),
+    () => ({ recall_export_sha256: exportRead }),
+  );
+  if (!done.record) return done.result;
+  return {
+    ...done.result,
+    retrieval: {
+      query_id: done.record.query_id,
+      use_capture: done.record.use_capture,
+      status: done.record.outcome.status,
+      generation: done.record.generation.generation,
+    },
+  };
+}
+
+/** Recall telemetry keeps only scrubbed, bounded query text (K05 / AT20). */
+function scrubbedQueryText(query: string, maxBytes: number, literals: readonly string[]): string {
+  if (Buffer.byteLength(query, "utf8") > 64 * 1024) return "<withheld>";
+  return scrubTraceText(query, maxBytes, literals)?.content ?? "<withheld>";
+}
+
+/** Query hash for recall telemetry, over the scrubbed text so a detected secret leaves no fingerprint. */
+function scrubbedQueryHash(query: string, literals: readonly string[]): string {
+  if (Buffer.byteLength(query, "utf8") > 64 * 1024) return hashQuery("<withheld>");
+  return hashQuery(scrubTraceText(query, 6 * 64 * 1024, literals)?.content ?? "<withheld>");
+}
+
+function recallUninstrumented(query: string, opts: RecallOpts): RecallResult {
   const {
     cwd,
     category,
@@ -943,7 +1022,7 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
   // tokens, additive). Only the wiki file sweep is gated by structuralAnswered.
   const kgResult: RecallResult | null = _kgDisabled
     ? null
-    : kgQueryBranch(query, cwd, limit, runDir, runId, category);
+    : kgQueryBranch(query, cwd, limit, runDir, runId, category, opts._onRecallExportRead);
 
   // ── Combine structural + wiki + KG into ONE protected bundle ───────────────
   const structuralChunks = structuralResult?.chunks ?? [];
@@ -1000,6 +1079,8 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
   // from real receipts (G10 FIX-G10-r2 finding 2). Fall back to GUILD_LANE_ID for
   // any host that sets that instead.
   const _laneId = process.env["GUILD_TASK_ID"] ?? process.env["GUILD_LANE_ID"] ?? "";
+  const _literals = opts.retrieval?.private_literals ?? [];
+  const _queryHash = scrubbedQueryHash(query, _literals);
 
   // Branch label shared by both trace emits below.
   const _traceBranch = allChunks.length === 0
@@ -1023,7 +1104,7 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
         actor_type: "agent",
         actor_id: _laneId || "main",
         span_id: _spanId,
-        prompt_hash: hashQuery(query),
+        prompt_hash: _queryHash,
         redaction: "omitted",
         status: "ok",
       }),
@@ -1039,7 +1120,7 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
         actor_id: "guild-recall",
         span_id: `${_spanId}-result`,
         parent_span_id: _spanId,
-        prompt_hash: hashQuery(query),
+        prompt_hash: _queryHash,
         redaction: "omitted",
         status: allChunks.length > 0 ? "ok" : "incomplete",
         duration_ms: Date.now() - _traceStart,
@@ -1064,7 +1145,7 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
         ts: new Date().toISOString(),
         run_id: runId ?? "",
         lane_id: _laneId,
-        query: query.slice(0, 200), // truncate long queries in the trace
+        query: scrubbedQueryText(query, 200, _literals), // scrubbed and bounded; never the raw query
         branch: _traceBranch,
         chunk_count: allChunks.length,
         duration_ms: _traceDurationMs,
@@ -1089,8 +1170,8 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
         ts: new Date().toISOString(),
         run_id: runId ?? "",
         lane_id: _laneId,
-        query_hash: hashQuery(query),
-        query_preview: query.slice(0, 60),
+        query_hash: _queryHash,
+        query_preview: scrubbedQueryText(query, 60, _literals),
         branch: _traceBranch,
         top_score: topScore,
         threshold: recallScoreThreshold,
@@ -1129,6 +1210,11 @@ export function runRecallCli(): void {
   let runDir = "";
   let phase = "";
   let cellId = "";
+  let recordUse = false;
+  let useQueryId = "";
+  let useResult = -1;
+  let consumerKind = "";
+  let consumerId = "";
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -1148,6 +1234,27 @@ export function runRecallCli(): void {
     else if (arg === "--cell" && argv[i + 1]) { cellId = argv[++i]!; }
     else if (arg.startsWith("--phase=")) { phase = arg.slice("--phase=".length); }
     else if (arg.startsWith("--cell=")) { cellId = arg.slice("--cell=".length); }
+    else if (arg === "--record-use") { recordUse = true; }
+    else if (arg === "--query-id" && argv[i + 1]) { useQueryId = argv[++i]!; }
+    else if (arg === "--result" && argv[i + 1]) { useResult = /^\d{1,6}$/.test(argv[i + 1]!) ? parseInt(argv[++i]!, 10) : (i++, -1); }
+    else if (arg === "--consumer-kind" && argv[i + 1]) { consumerKind = argv[++i]!; }
+    else if (arg === "--consumer-id" && argv[i + 1]) { consumerId = argv[++i]!; }
+  }
+
+  // K05: record one explicit downstream use of a returned result. Exit 1 on refusal.
+  if (recordUse) {
+    const useRunDir = runDir || (runId ? path.join(durableGuildDir(cwd), "runs", runId) : "");
+    const res = useRunDir
+      ? recordKnowledgeUse({
+          runDir: path.resolve(useRunDir),
+          query_id: useQueryId,
+          ordinal: useResult,
+          consumer: { kind: consumerKind as ConsumerKind, id: consumerId },
+        })
+      : { ok: false as const, code: "invalid" as const, detail: "--run-id or --run-dir is required" };
+    process.stdout.write(JSON.stringify(res) + "\n");
+    if (!res.ok) process.exit(1);
+    return;
   }
 
   if (!query) {
@@ -1187,6 +1294,7 @@ export function runRecallCli(): void {
     category,
     limit,
     recallScoreThreshold,
+    retrieval: { entry_point: "recall_cli", use_capture: "supported" },
     ...(runId ? { runId } : {}),
     ...(runDir ? { runDir } : {}),
     ...(composite ? { composite } : {}),

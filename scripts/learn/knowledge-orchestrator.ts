@@ -94,6 +94,9 @@ import {
   makeTopicId,
   makeWikiPageId,
   KNOWLEDGE_CONFIG_DEFAULTS,
+  isKnowledgeTierRecord,
+  normalizeEdgeTypeV2,
+  type KnowledgeTierRecord,
   type GraphNode,
   type GraphEdge,
   type KnowledgeGraph,
@@ -103,12 +106,26 @@ import {
 } from "./lib/schema";
 
 import {
-  writeKnowledgeLinks,
+  buildKnowledgeRecall,
+  writeRecallProvenance,
   canonicalizeNode,
   canonicalizeEdge,
 } from "./write-knowledge-links";
 import { durableGuildDir } from "../lib/state/storage";
 import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
+import { GRAPH_ARTIFACT, RECALL_ARTIFACT, publishLearnArtifacts, readLearnBase, type LearnBase } from "./lib/publish";
+import { STRUCTURAL_EXTRACTOR } from "./lib/structural";
+import { computeLearnSourceBasis } from "./lib/paths";
+
+/** A refused publication (K03). `destination_moved` means: rebuild and retry. */
+export class KnowledgePublicationRefused extends Error {
+  constructor(
+    readonly reason: string,
+    detail: string,
+  ) {
+    super(`[knowledge] publication refused (${reason}): ${detail}`);
+  }
+}
 
 // NOTE: k-stage-staleness is NOT imported here. Staleness is the SKILL's coarse
 // gate — the skill decides run-or-skip the whole tier. The orchestrator always
@@ -169,6 +186,13 @@ export interface RunKnowledgeOptions {
    * file nodes, layer map, and dependency-BFS tour that onboarding consumes.
    */
   structuralGraph?: Pick<KnowledgeGraph, "nodes" | "edges" | "layers" | "tour">;
+  /**
+   * K03: the generation `structuralGraph` was read from. Publication refuses if
+   * the destination moved since. Absent: the current generation at write time.
+   */
+  base?: LearnBase;
+  /** K03: source basis taken before `base` and the inputs were read. Required with `base`. */
+  basis?: ReturnType<typeof computeLearnSourceBasis>;
   // NOTE: no `staleness` field. Staleness is the SKILL's decision; the
   // orchestrator always runs all stages (FIX 1 — pure finalize).
 }
@@ -205,6 +229,148 @@ export interface RunKnowledgeResult {
  * Constant (not corpus-derived) so the id is stable across every topic-less run.
  */
 export const FALLBACK_ROOT_TOPIC_SEED = "project-knowledge";
+
+/**
+ * The placeholder every finalized graph carried before #317: Guild's own
+ * identity, written into consumer projects because the CLI never passed
+ * `opts.project`. A prior graph that still holds it is repaired, not trusted.
+ */
+const LEGACY_PLACEHOLDER_PROJECT = { name: "guild", description: "Guild plugin self-build" } as const;
+
+/** Node types only the knowledge tier emits (mirrors schema.ts KNOWLEDGE_NODE_TYPES_V2). */
+const KNOWLEDGE_TIER_NODE_TYPES = new Set(["topic", "concept", "claim", "entity", "wiki_page", "diagram"]);
+/** Edge types only the knowledge tier emits (schema.ts EDGE_TYPES_V2 minus EDGE_TYPES). */
+const KNOWLEDGE_TIER_EDGE_TYPES = new Set([
+  "subtopic_of",
+  "relates_to",
+  "evidenced_by",
+  "belongs_to_domain",
+  "mentions",
+  "defines",
+]);
+
+/**
+ * The part of a finalized (v2) graph that is INPUT to the next finalize (#317):
+ * everything the knowledge tier did not emit itself. `structuralSubset` alone is
+ * not enough here, because it keeps only nodes the structural extractor marked;
+ * the analyze-structural -> assign-layers -> derive-domain pipeline writes
+ * unmarked file / function / class / flow / domain nodes, and a re-finalize
+ * that filtered on the marker silently dropped all of them.
+ *
+ * Provenance first: finalize records what it emitted in `knowledge_tier`, and a
+ * graph carrying that record drops exactly those nodes and typed edges (plus
+ * edges into a dropped node). Type is not provenance: input may hold
+ * valid concept / entity / topic / claim nodes of its own.
+ *
+ * A graph without the record (written before it existed, or rewritten by a
+ * whole-graph validator) falls back to type: a node is knowledge-tier output
+ * when its type is one only K1-K4 emit, or it is a domain with no outgoing
+ * `contains_flow` (derive-domain always writes one; K4 never does, and K4's
+ * `belongs_to_domain` edge may have been dropped by validation). An edge is
+ * dropped when its type is knowledge-only or either endpoint was dropped.
+ * Either way a node or edge the structural extractor marked is kept.
+ */
+export function carriedForwardSubset<
+  N extends { id: string; type: string },
+  E extends { source: string; target: string; type: string },
+>(g: { nodes: N[]; edges: E[]; knowledge_tier?: unknown }): { nodes: N[]; edges: E[] } {
+  const marked = (x: unknown) => {
+    const r = x as Record<string, unknown>;
+    return r.extractor === STRUCTURAL_EXTRACTOR || r.structural === true;
+  };
+  const record = readKnowledgeTier(g.knowledge_tier);
+  const flowDomains = new Set(g.edges.filter((e) => e.type === "contains_flow").map((e) => e.source));
+  const emitted = (n: N) =>
+    record
+      ? record.nodeIds.has(n.id)
+      : KNOWLEDGE_TIER_NODE_TYPES.has(n.type) || (n.type === "domain" && !flowDomains.has(n.id));
+  const dropped = new Set<string>();
+  const nodes = g.nodes.filter((n) => {
+    if (emitted(n) && !marked(n)) {
+      dropped.add(n.id);
+      return false;
+    }
+    return true;
+  });
+  const edges = g.edges.filter((e) => {
+    if (marked(e)) return true;
+    if (dropped.has(e.source) || dropped.has(e.target)) return false;
+    return record ? !record.edgeKeys.has(edgeKey(e)) : !KNOWLEDGE_TIER_EDGE_TYPES.has(e.type);
+  });
+  return { nodes, edges };
+}
+
+type EdgeLike = { source: string; target: string; type?: unknown };
+/** Typed edge identity, with the type as validateGraphV2 writes it (it dedups on type|source|target). */
+const edgeKey = (e: EdgeLike) => JSON.stringify([e.source, e.target, normalizeEdgeTypeV2(e.type)]);
+
+function readKnowledgeTier(x: unknown): { nodeIds: Set<string>; edgeKeys: Set<string> } | null {
+  if (!isKnowledgeTierRecord(x)) return null;
+  return {
+    nodeIds: new Set(x.node_ids),
+    edgeKeys: new Set(x.edges.map(([source, target, type]) => edgeKey({ source, target, type }))),
+  };
+}
+
+/**
+ * Marks a node or edge the knowledge tier produced in this finalize. A symbol
+ * key: object spreads (sanitize, autoFix, alias) keep it, JSON drops it, so it
+ * never reaches disk.
+ */
+const KNOWLEDGE_TIER = Symbol("knowledge-tier");
+export function fromKnowledgeTier<T extends object>(x: T): T {
+  return { ...x, [KNOWLEDGE_TIER]: true };
+}
+const isFromKnowledgeTier = (x: object) => (x as Record<symbol, unknown>)[KNOWLEDGE_TIER] === true;
+
+/**
+ * The record a finalize stores, computed on the validated graph: every node the
+ * knowledge tier produced (including one that won an id collision because the
+ * input's node was invalid), and every knowledge-tier edge that is not
+ * identical to an input edge. Sorted, so the graph bytes stay a pure function
+ * of their inputs (SC-8).
+ */
+export function knowledgeTierRecord(
+  validated: { nodes: { id: string }[]; edges: EdgeLike[] },
+  input: { edges: EdgeLike[] } | undefined,
+): KnowledgeTierRecord {
+  const inEdges = new Set((input?.edges ?? []).map(edgeKey));
+  const node_ids = [...new Set(validated.nodes.filter(isFromKnowledgeTier).map((n) => n.id))].sort();
+  const keys = [
+    ...new Set(validated.edges.filter(isFromKnowledgeTier).map(edgeKey).filter((k) => !inEdges.has(k))),
+  ].sort();
+  return { node_ids, edges: keys.map((k) => JSON.parse(k) as [string, string, string]) };
+}
+
+/**
+ * What `runKnowledgeStages` writes when no caller names the project. A constant,
+ * like `generated_from_commit: "unknown"`, so the stage function stays pure in
+ * its inputs (SC-8); the CLI boundary supplies the real identity.
+ */
+export const UNKNOWN_GRAPH_PROJECT = { name: "unknown", description: "" } as const;
+
+/**
+ * Project metadata for a finalized graph (#317). The structural stages name
+ * the project after its root directory (`analyze-structural`,
+ * `extract-structural`); finalize must carry that forward instead of
+ * replacing it. Returns the prior graph's own `project` when it is well formed
+ * and is not the legacy placeholder, else the neutral constant. It never
+ * derives a name from the path itself: with no prior graph the output must not
+ * depend on where the repo is checked out (SC-8, cross-trigger byte-identity).
+ */
+export function resolveGraphProject(prior: unknown): { name: string; description: string } {
+  const p = prior as { name?: unknown; description?: unknown } | null | undefined;
+  if (
+    p &&
+    typeof p.name === "string" &&
+    p.name.trim().length > 0 &&
+    typeof p.description === "string" &&
+    !(p.name === LEGACY_PLACEHOLDER_PROJECT.name && p.description === LEGACY_PLACEHOLDER_PROJECT.description)
+  ) {
+    return { name: p.name, description: p.description };
+  }
+  return { ...UNKNOWN_GRAPH_PROJECT };
+}
 /** Generic display name — used only when the repo root yields no usable basename. */
 export const FALLBACK_ROOT_TOPIC_NAME = "Project Knowledge";
 
@@ -991,12 +1157,18 @@ export async function runKnowledgeStages(
   seams: KnowledgeLLMSeams,
   opts: RunKnowledgeOptions = {}
 ): Promise<RunKnowledgeResult> {
+  // K03: the basis precedes every input read; a stage run without one takes it here.
+  // K03: basis, then destination, then inputs; publication refuses if the destination moved.
+  if (opts.base && !opts.basis) throw new Error("runKnowledgeStages: opts.base needs opts.basis taken before it was read");
+  const basis = opts.basis ?? computeLearnSourceBasis(repoRoot);
+  const startBase =
+    opts.base ?? readLearnBase({ indexesDir: path.join(durableGuildDir(repoRoot), "indexes"), repoRoot, sourceRoot: repoRoot });
   // FIX 1 (codex G-lane): no staleness, no implicit previous graph. The
   // structural snapshot is an explicit input from the preceding deep-graph run.
   // ── K1→K4: assemble all nodes + edges (deterministic order) ───────────────
   const partial = await runKnowledgeStagesK1ToK4(repoRoot, filePaths, seams);
-  const allNodes = [...(opts.structuralGraph?.nodes ?? []), ...partial.nodes];
-  const allEdges = [...(opts.structuralGraph?.edges ?? []), ...partial.edges];
+  const allNodes = [...(opts.structuralGraph?.nodes ?? []), ...partial.nodes.map(fromKnowledgeTier)];
+  const allEdges = [...(opts.structuralGraph?.edges ?? []), ...partial.edges.map(fromKnowledgeTier)];
   // DROP 1 fix: K2 suppressed entries (unclassified candidates) collected here.
   const suppressedEntries: KnowledgeSuppressedEntry[] = [...partial.k2Suppressed];
 
@@ -1007,7 +1179,7 @@ export async function runKnowledgeStages(
     { nodes: allNodes, edges: allEdges },
     { confirmCrossLinks: seams.confirmCrossLinks }
   );
-  allEdges.push(...k5Result.edges);
+  allEdges.push(...k5Result.edges.map(fromKnowledgeTier));
 
   // ── SC-3 fallback root topic (deterministic) ──────────────────────────────
   // Guarantees EVERY wiki_page has ≥1 topic-membership edge even when K4 emits
@@ -1019,8 +1191,8 @@ export async function runKnowledgeStages(
   // final topic set and the final wiki_page set (per guild-plan.md §L20).
   const fallback = maybeSynthesizeFallbackRootTopic(allNodes, repoRoot);
   if (fallback) {
-    allNodes.push(fallback.topicNode);
-    allEdges.push(...fallback.edges);
+    allNodes.push(fromKnowledgeTier(fallback.topicNode));
+    allEdges.push(...fallback.edges.map(fromKnowledgeTier));
   }
 
   // ── Assemble KnowledgeGraph v2 ─────────────────────────────────────────────
@@ -1028,7 +1200,7 @@ export async function runKnowledgeStages(
     version: "guild.knowledge_graph.v2",
     kind: "knowledge",
     generated_from_commit: opts.generatedFromCommit ?? "unknown",
-    project: opts.project ?? { name: "guild", description: "Guild plugin self-build" },
+    project: opts.project ?? UNKNOWN_GRAPH_PROJECT,
     nodes: allNodes,
     edges: allEdges,
     layers: opts.structuralGraph?.layers ?? [],
@@ -1081,13 +1253,27 @@ export async function runKnowledgeStages(
   //
   // SC-8 byte-set member 2 (knowledge-recall.json): handled by writeKnowledgeLinks
   // which also calls canonicalizeNode/canonicalizeEdge internally.
+  // K03: structural items pass through whole; the recall canonicalizer would drop
+  // `extractor`/`sp`/labels and erase the structural layer from the graph.
+  const isStructuralItem = (x: unknown) => {
+    const r = x as Record<string, unknown>;
+    return r.extractor === STRUCTURAL_EXTRACTOR || r.structural === true;
+  };
   const canonNodes = validated.nodes.map(
-    (n) => canonicalizeNode(n) as unknown as GraphNode
+    (n) => (isStructuralItem(n) ? n : (canonicalizeNode(n) as unknown as GraphNode))
   );
   const canonEdges = validated.edges.map(
-    (e) => canonicalizeEdge(e) as unknown as GraphEdge
+    (e) => (isStructuralItem(e) ? e : (canonicalizeEdge(e) as unknown as GraphEdge))
   );
-  const graph: KnowledgeGraph = { ...validated, nodes: canonNodes, edges: canonEdges };
+  // #317: record what this finalize emitted, so the next one carries forward
+  // exactly the rest (carriedForwardSubset). Added after validation, which
+  // rebuilds the graph object and would drop it.
+  const graph: KnowledgeGraph = {
+    ...validated,
+    nodes: canonNodes,
+    edges: canonEdges,
+    knowledge_tier: knowledgeTierRecord(validated, opts.structuralGraph),
+  };
 
   // ── HARD SC-3 enforcement: every wiki_page must have ≥1 topic membership ───
   // The orphan codex found passed SILENTLY because nothing enforced SC-3.
@@ -1128,21 +1314,37 @@ export async function runKnowledgeStages(
   const suppressedPath = path.join(indexesDir, "knowledge-suppressed.json");
   fs.writeFileSync(suppressedPath, JSON.stringify(suppressedDoc, null, 2) + "\n", "utf8");
 
-  // ── Write knowledge-graph.json (v2, H1-canonicalized) ─────────────────────
-  const graphPath = path.join(indexesDir, "knowledge-graph.json");
-  fs.writeFileSync(graphPath, JSON.stringify(graph, null, 2) + "\n", "utf8");
-
-  // ── K6: write-knowledge-links (nonce-free, SC-8 member 2) ─────────────────
-  // Pass canonicalized nodes/edges — writeKnowledgeLinks re-canonicalizes
-  // internally (idempotent), so no double-canonicalize risk.
+  // ── K03: publish knowledge-graph.json (v2) + knowledge-recall.json as ONE
+  // generation (semantic_graph + recall layers). The structural layer is
+  // carried in through `opts.structuralGraph`; a destination that moved since
+  // the caller read it is refused (the CLI rebuilds and retries).
   // FIX 5: knowledge-recall-provenance.json carries run_id/generated_at and is
   // INTENTIONALLY excluded from the 2-file SC-8 byte-set (sidecar only).
-  const linksResult = writeKnowledgeLinks({
-    graph: { nodes: graph.nodes, edges: graph.edges },
-    repoRoot,
+  const recall = buildKnowledgeRecall({ nodes: graph.nodes, edges: graph.edges });
+  const target = { indexesDir, repoRoot, sourceRoot: repoRoot };
+  const published = publishLearnArtifacts(target, {
+    channels: ["semantic_graph", "recall"],
+    // The semantic inputs (.guild/wiki pages, diagrams) are outside the learn
+    // source basis, so these layers cannot be proven current for it.
+    provenance: { semantic_graph: "ingested", recall: "ingested" },
+    provenanceReason: {
+      semantic_graph: "semantic inputs (.guild/wiki, diagrams) are not bound into the source basis",
+      recall: "derived from a semantic layer whose inputs are not bound into the source basis",
+    },
+    base: startBase,
+    basis,
+    build: () => ({ [GRAPH_ARTIFACT]: graph, [RECALL_ARTIFACT]: recall.bytes }),
+    rebase: false,
+  });
+  if (published.status !== "published") throw new KnowledgePublicationRefused(published.reason, published.detail);
+  const graphPath = path.join(indexesDir, GRAPH_ARTIFACT);
+  const provenancePath = writeRecallProvenance(repoRoot, {
     runId: opts.runId,
     generatedAt: opts.generatedAt,
+    nodeCount: graph.nodes.length,
+    edgeCount: recall.edgeCount,
   });
+  const linksResult = { linksPath: path.join(indexesDir, RECALL_ARTIFACT), provenancePath };
 
   return {
     graph,
@@ -1214,39 +1416,50 @@ if (require.main === module) {
       );
     } else if (phase === "finalize") {
       const seams = buildFileBackedSeams(judgmentDir);
-      const structuralGraphPath = path.join(durableGuildDir(repoRoot), "indexes", "knowledge-graph.json");
-      let structuralGraph: RunKnowledgeOptions["structuralGraph"];
-      try {
-        const prior = JSON.parse(fs.readFileSync(structuralGraphPath, "utf8")) as Partial<KnowledgeGraph>;
-        if (
-          prior.version === "guild.knowledge_graph.v1" &&
-          Array.isArray(prior.nodes) &&
-          Array.isArray(prior.edges) &&
-          Array.isArray(prior.layers) &&
-          Array.isArray(prior.tour)
-        ) {
-          structuralGraph = {
-            nodes: prior.nodes,
-            edges: prior.edges,
-            layers: prior.layers,
-            tour: prior.tour,
-          };
+      // K03: read the structural input from the pinned generation and publish
+      // against it; if another writer published first, rebuild and retry.
+      const target = { indexesDir: path.join(durableGuildDir(repoRoot), "indexes"), repoRoot, sourceRoot: repoRoot };
+      let result: RunKnowledgeResult | null = null;
+      for (let attempt = 0; attempt < 3 && !result; attempt++) {
+        const basis = computeLearnSourceBasis(repoRoot);
+        const base = readLearnBase(target);
+        let structuralGraph: RunKnowledgeOptions["structuralGraph"];
+        const prior = base.graph as Partial<KnowledgeGraph> | null;
+        if (prior && Array.isArray(prior.nodes) && Array.isArray(prior.edges) && Array.isArray(prior.layers) && Array.isArray(prior.tour)) {
+          if (prior.version === "guild.knowledge_graph.v1") {
+            structuralGraph = { nodes: prior.nodes, edges: prior.edges, layers: prior.layers, tour: prior.tour };
+          } else if (prior.version === "guild.knowledge_graph.v2") {
+            // A v2 graph already carries the knowledge tier. Everything that tier
+            // did not emit is input, marked by the structural extractor or not
+            // (#317), so a re-finalize never drops file / function / flow nodes.
+            const sub = carriedForwardSubset({ nodes: prior.nodes, edges: prior.edges, knowledge_tier: prior.knowledge_tier });
+            structuralGraph = { nodes: sub.nodes, edges: sub.edges, layers: prior.layers, tour: prior.tour };
+          }
         }
-      } catch {
-        // No structural snapshot is valid for a clean or already-v2 run.
+        // No structural snapshot is valid for a clean run.
+        // SC-12 provenance: derive generated_from_commit from HEAD at the CLI
+        // boundary (keeps runKnowledgeStages a pure function of inputs — FIX 1).
+        // headSha() returns a deterministic "unknown" when repoRoot is not a git
+        // repo / git errors, so SC-8 byte-identity holds: within one commit every
+        // run derives the same value, and a non-git fixture repo yields the same
+        // constant "unknown" across all triggers.
+        try {
+          result = await runKnowledgeStages(repoRoot, filePaths, seams, {
+            runId,
+            generatedAt,
+            generatedFromCommit: headSha(repoRoot),
+            // #317: keep the project identity the structural stages (or a prior
+            // finalize) recorded; never stamp Guild's own name on a consumer repo.
+            project: resolveGraphProject(prior?.project),
+            structuralGraph,
+            base,
+            basis,
+          });
+        } catch (err) {
+          if (!(err instanceof KnowledgePublicationRefused) || err.reason !== "destination_moved" || attempt === 2) throw err;
+        }
       }
-      // SC-12 provenance: derive generated_from_commit from HEAD at the CLI
-      // boundary (keeps runKnowledgeStages a pure function of inputs — FIX 1).
-      // headSha() returns a deterministic "unknown" when repoRoot is not a git
-      // repo / git errors, so SC-8 byte-identity holds: within one commit every
-      // run derives the same value, and a non-git fixture repo yields the same
-      // constant "unknown" across all triggers.
-      const result = await runKnowledgeStages(repoRoot, filePaths, seams, {
-        runId,
-        generatedAt,
-        generatedFromCommit: headSha(repoRoot),
-        structuralGraph,
-      });
+      if (!result) throw new Error("[knowledge] finalize did not publish");
       process.stdout.write(
         JSON.stringify(
           {

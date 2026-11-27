@@ -29,6 +29,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { checkContained, isRefused, loadYamlApi } from "../kernel";
+import { isProtoPoisonKey } from "../security";
 import {
   dispatchGate,
   proposalHashOf,
@@ -186,7 +187,6 @@ function sha256Of(value: unknown): string {
   return `sha256:${crypto.createHash("sha256").update(canonicalJson(value), "utf8").digest("hex")}`;
 }
 
-const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
 /**
  * Copy untrusted data into plain JSON values. Refuses accessors, symbols,
@@ -218,7 +218,7 @@ function detach(value: unknown, label: string, rule: PhaseCompositionRule): unkn
       const d = Object.getOwnPropertyDescriptor(v, k)!;
       if (!("value" in d)) fail(rule, `${at}.${k} is an accessor`);
       if (isArr && !/^(0|[1-9][0-9]*)$/.test(k)) fail(rule, `${at} has a non-index key '${k}'`);
-      if (!isArr && FORBIDDEN_KEYS.has(k)) fail(rule, `${at} has a forbidden key '${k}'`);
+      if (!isArr && isProtoPoisonKey(k)) fail(rule, `${at} has a forbidden key '${k}'`);
       const child = walk(d.value, `${at}.${k}`, depth + 1);
       if (isArr) (out as unknown[])[Number(k)] = child;
       else (out as Record<string, unknown>)[k] = child;

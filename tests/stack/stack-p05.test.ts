@@ -3,8 +3,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { randomUUID, createHash } from "node:crypto";
-import { StackFacade } from "./stack-operations";
-import { stackValidator } from "../../../scripts/lib/stack-contract-validator";
+import { StackFacade } from "../../src/domains/lifecycle";
+import { stackValidator } from "../../scripts/lib/stack-contract-validator";
 function fixture(kind = "project") {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "stack-facade-"));
     const root = path.join(dir, "project"), pkg = path.join(dir, "package");

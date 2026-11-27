@@ -1,13 +1,14 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { it, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 it("native Claude builder pins no-tools safe settings, explicit model/session and honest threshold while zero/codex refuse",async()=>{
  const api=await import("./managed-claude");const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),"guild-claude-plan-")));
- try{const input={sourceRoot:root,host_id:"claude-code-cli",model:"claude-haiku-4-5-20251001",brief:"Reply with READY only.",max_usd:0.01,max_duration_ms:30000,native_session_id:"71da0f7c-1234-4567-9123-72a6534fb176",operation:"run.start",qualification:"probe"};const plan=api.buildManagedClaudeLaunch(input);
+ try{const bin=path.join(root,"claude-fixture-binary");fs.writeFileSync(bin,"fixture host binary\n");const profile=Object.freeze({...api.MANAGED_CLAUDE_PROFILE,binary:bin,binary_sha256:"sha256:"+createHash("sha256").update(fs.readFileSync(bin)).digest("hex")});const input={sourceRoot:root,host_id:"claude-code-cli",model:"claude-haiku-4-5-20251001",brief:"Reply with READY only.",max_usd:0.01,max_duration_ms:30000,native_session_id:"71da0f7c-1234-4567-9123-72a6534fb176",operation:"run.start",qualification:"probe"};const plan=api.buildManagedClaudeLaunch(input,profile);
  expect(plan.classification).toBe("qualification_probe");expect(plan.strict_usd_qualified).toBe(false);expect(plan.budget_mode).toBe("native_estimated_spend_threshold");expect(plan.args).toContain("--safe-mode");expect(plan.args).toContain("--restricted");expect(plan.args).not.toContain("--bare");expect(plan.args).not.toContain("--no-session-persistence");expect(plan.args[plan.args.indexOf("--tools")+1]).toBe("");expect(plan.args[plan.args.indexOf("--setting-sources")+1]).toBe("");expect(plan.args[plan.args.indexOf("--session-id")+1]).toBe(input.native_session_id);expect(plan.args[plan.args.indexOf("--max-budget-usd")+1]).toBe("0.01");expect(Object.keys(plan.env).some(key=>/TOKEN|API_KEY|GUILD_RUN_ID|CLAUDECODE/.test(key))).toBe(false);
- expect(()=>api.buildManagedClaudeLaunch({...input,max_usd:0})).toThrow();expect(()=>api.buildManagedClaudeLaunch({...input,host_id:"codex-cli"})).toThrow();expect(()=>api.buildManagedClaudeLaunch({...input,model:"some-alias"})).toThrow();
+ expect(()=>api.buildManagedClaudeLaunch({...input,max_usd:0},profile)).toThrow();expect(()=>api.buildManagedClaudeLaunch({...input,host_id:"codex-cli"},profile)).toThrow();expect(()=>api.buildManagedClaudeLaunch({...input,model:"some-alias"},profile)).toThrow();
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
 it("native result parser retains safe session/model/estimate provenance and treats reset/truncation as unknown",async()=>{

@@ -74,11 +74,17 @@ function cell(taskId: string, attempt = 1) {
     ...(attempt > 1 ? { previousAttemptId: `${taskId}.att${attempt - 1}`, retryReason: "e00 h-abs native ambiguity fixture" } : {}),
   });
 }
-/** The logical spelling of a physical temp root (macOS /var -> /private/var); the root itself when none exists. */
+/**
+ * A logical spelling of a physical temp root: macOS /var -> /private/var, or (no such
+ * platform alias, e.g. Linux /tmp) an owned symlink to the root.
+ */
 function logicalOf(root: string): string {
   const phys = fs.realpathSync(root);
   const logical = phys.startsWith("/private/var/") ? phys.slice("/private".length) : phys;
-  return fs.existsSync(logical) && fs.realpathSync(logical) === phys ? logical : root;
+  if (logical !== phys && fs.existsSync(logical) && fs.realpathSync(logical) === phys) return logical;
+  const alias = path.join(ownedTempDir("guild-e00-habs-logical-"), "root");
+  fs.symlinkSync(phys, alias);
+  return alias;
 }
 function fixture(o: { canary?: string; layout?: boolean; extraTask?: string; secondAttempt?: boolean; legacy?: boolean } = {}): Fx {
   const root = ownedTempDir("guild-e00-habs-");
@@ -132,7 +138,7 @@ function producerRef(portCwd: string, rel: string, taskId = "task-001"): string 
     resolveDefinition: (inst: { worker_role: string }) => resolveAdoptedDefinition(portCwd, inst.worker_role),
     receiptPath: (inst: { worker_role: string; logical_task_id: string }) => path.join(portCwd, ".guild", "runs", RUN_ID, "handoffs", `${inst.worker_role}-${inst.logical_task_id}.md`),
     ackArgv: ["node", path.join(aside, "task-cell-ack.js")], recordLaunch: () => {}, run,
-    env: { PATH: process.env["PATH"] ?? "/usr/bin:/bin", HOME: process.env["HOME"] ?? aside, SHELL: "/bin/zsh", LANG: "en_US.UTF-8" },
+    env: { PATH: process.env["PATH"] ?? "/usr/bin:/bin", HOME: process.env["HOME"] ?? aside, SHELL: fs.existsSync("/bin/zsh") ? "/bin/zsh" : "/bin/sh", LANG: "en_US.UTF-8" },
     activate: () => ({ args: ["--plugin-dir", stubPlugin], pluginRoot: stubPlugin }),
   } as never);
   const inst = { instance_id: `${taskId}.a1.i1`, run_id: RUN_ID, logical_task_id: taskId, worker_role: "backend", host_id: "claude-code-cli",

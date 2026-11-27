@@ -43,7 +43,8 @@ import { RunKindConflictError, checkContained, claimRunKind, isRefused, prepareC
 import { durableGuildDir } from "../state";
 import { readSessionBinding, type SessionBinding } from "../config";
 import { redactHomeDirPaths, redactKeyValueSecrets, redactTokenShapes } from "../security";
-import { LOGICAL_RUN_MANIFEST_RELPATH, readRunBindingRecord, runBindingPath, type RunBindingRecord } from "./run-binding";
+import { readRunBindingRecord, runBindingPath, type RunBindingRecord } from "./run-binding";
+import { LOGICAL_RUN_MANIFEST_RELPATH } from "./run-binding-fields";
 
 // ── Schema names ─────────────────────────────────────────────────────────────
 
@@ -295,55 +296,55 @@ const SHAPES: Record<R01SchemaName, Check> = {
 const hasKeys = (o: Record<string, unknown>, keys: string[]) => keys.every((k) => own(o, k));
 
 /** verify_contracts.py `walk`: rules keyed on object shape, applied at every depth. */
-function walkRules(value: unknown, require: (ok: boolean, msg: string) => void, level = 0): void {
-  if (level > 32) return require(false, "object depth exceeds validation budget");
-  if (Array.isArray(value)) { for (const x of value) walkRules(x, require, level + 1); return; }
+function walkRules(value: unknown, assertRule: (ok: boolean, msg: string) => void, level = 0): void {
+  if (level > 32) return assertRule(false, "object depth exceeds validation budget");
+  if (Array.isArray(value)) { for (const x of value) walkRules(x, assertRule, level + 1); return; }
   if (!isObj(value)) return;
   const o = value;
   if (hasKeys(o, ["lifecycle", "outcome", "acceptance", "observability"])) {
-    if (o["outcome"] === "succeeded") require(o["acceptance"] === "verified", "success requires verified acceptance");
-    if (o["lifecycle"] === "closed") require(o["outcome"] !== "pending" && o["outcome"] !== "unknown", "closed cannot have pending/unknown outcome");
+    if (o["outcome"] === "succeeded") assertRule(o["acceptance"] === "verified", "success requires verified acceptance");
+    if (o["lifecycle"] === "closed") assertRule(o["outcome"] !== "pending" && o["outcome"] !== "unknown", "closed cannot have pending/unknown outcome");
   }
   if (hasKeys(o, ["start", "end", "duration_ms", "clock"])) {
-    require(o["end"] === null || compareInstants(o["end"] as string, o["start"] as string) >= 0, "interval cannot end before start");
-    require(o["duration_ms"] === null || (o["clock"] as Record<string, unknown>)["basis"] !== "unknown", "unknown clock cannot claim duration");
+    assertRule(o["end"] === null || compareInstants(o["end"] as string, o["start"] as string) >= 0, "interval cannot end before start");
+    assertRule(o["duration_ms"] === null || (o["clock"] as Record<string, unknown>)["basis"] !== "unknown", "unknown clock cannot claim duration");
   }
   if (hasKeys(o, ["source_id", "run_id", "execution_id", "host_session_id", "attempt_id", "logical_task_id", "request_id"])) {
-    require(o["attempt_id"] === null || o["logical_task_id"] !== null, "attempt requires logical task");
+    assertRule(o["attempt_id"] === null || o["logical_task_id"] !== null, "attempt requires logical task");
   }
   if (hasKeys(o, ["provider", "model", "status", "reason"])) {
-    if (o["status"] === "observed") require(o["model"] !== null, "observed identity needs observed model");
-    if (o["status"] === "unavailable") require(o["model"] === null && Boolean(o["reason"]), "unavailable observed identity needs null model and reason");
+    if (o["status"] === "observed") assertRule(o["model"] !== null, "observed identity needs observed model");
+    if (o["status"] === "unavailable") assertRule(o["model"] === null && Boolean(o["reason"]), "unavailable observed identity needs null model and reason");
   }
-  for (const x of Object.values(o)) walkRules(x, require, level + 1);
+  for (const x of Object.values(o)) walkRules(x, assertRule, level + 1);
 }
 
 function semanticErrors(schema: R01SchemaName, v: any): string[] {
   const errs: string[] = [];
-  const require = (ok: boolean, msg: string) => { if (!ok) errs.push(msg); };
-  walkRules(v, require);
+  const assertRule = (ok: boolean, msg: string) => { if (!ok) errs.push(msg); };
+  walkRules(v, assertRule);
   if (schema === "logical-run") {
-    require(v.controller.source_id === v.source_id, "logical run fixed-controller owner mismatch");
-    require(v.execution_refs.every((x: Entity) => x.source_id === v.source_id && x.kind === "execution"), "foreign execution reference");
-    require(v.initial_prompt_ref === null || v.initial_prompt_ref.source_id === v.source_id, "initial prompt evidence owner mismatch");
+    assertRule(v.controller.source_id === v.source_id, "logical run fixed-controller owner mismatch");
+    assertRule(v.execution_refs.every((x: Entity) => x.source_id === v.source_id && x.kind === "execution"), "foreign execution reference");
+    assertRule(v.initial_prompt_ref === null || v.initial_prompt_ref.source_id === v.source_id, "initial prompt evidence owner mismatch");
   } else if (schema === "run-binding") {
-    require(v.controller_source_id === v.source_id, "binding controller moved to another source");
+    assertRule(v.controller_source_id === v.source_id, "binding controller moved to another source");
   } else {
     const l: Lineage = v.lineage;
     if (own(v, "authority")) {
-      require(v.authority.controller_source_id === l.source_id && v.authority.execution_id === l.execution_id && v.authority.attempt_id === l.attempt_id, "lineage/authority mismatch");
+      assertRule(v.authority.controller_source_id === l.source_id && v.authority.execution_id === l.execution_id && v.authority.attempt_id === l.attempt_id, "lineage/authority mismatch");
     }
     if (schema === "task-assignment" || schema === "task-attempt") {
-      require(l.attempt_id !== null && l.logical_task_id !== null, "assignment/attempt missing immutable identity");
+      assertRule(l.attempt_id !== null && l.logical_task_id !== null, "assignment/attempt missing immutable identity");
     }
     const owned: Array<Evidence | null> =
       schema === "execution-lineage" ? [...v.evidence, ...v.handoffs.map((h: { evidence: Evidence }) => h.evidence)]
         : schema === "execution-segment" ? [v.seal_evidence]
           : schema === "task-attempt" ? [v.assignment_ref, ...v.result_refs]
             : [];
-    require(owned.every((e) => e === null || e.source_id === l.source_id), "lineage-owned evidence recorded by another source");
+    assertRule(owned.every((e) => e === null || e.source_id === l.source_id), "lineage-owned evidence recorded by another source");
     if (schema === "task-attempt" && v.state.outcome === "succeeded") {
-      require(v.receipt_loss_reconciled && !v.uncertain_effects && v.accepted_by_controller_epoch !== null && v.acceptance_subject_hash !== null, "uncertain/unreconciled task cannot succeed");
+      assertRule(v.receipt_loss_reconciled && !v.uncertain_effects && v.accepted_by_controller_epoch !== null && v.acceptance_subject_hash !== null, "uncertain/unreconciled task cannot succeed");
     }
   }
   return errs;
@@ -772,6 +773,100 @@ export function readLogicalRunView(root: string, runId: string): LogicalRunView 
     assignments, attempts,
     goal_refs: [...goals.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
   };
+}
+
+// ── Segment seal ─────────────────────────────────────────────────────────────
+
+export const EXECUTION_SEGMENT_SEAL_SCHEMA = "guild.stack.execution_segment_seal.v1" as const;
+/** Host exit seals one segment; the logical run stays open. Immutable: a segment seals once. */
+export interface ExecutionSegmentSeal {
+  schema_version: typeof EXECUTION_SEGMENT_SEAL_SCHEMA; source_id: string; run_id: string; execution_id: string;
+  segment_revision: Hash; sealed_by: { operation_id: string; attempt_id: string; launch_hash: Hash };
+  outcome_state: "exited" | "cancelled" | "timed_out"; outcome_sha256: Hash; sealed_at: string;
+}
+const sealPath = (root: string, runId: string, executionId: string) => {
+  if (!ID_RE.test(executionId)) throw new ExecutionIdentityRefusal("record_invalid", "execution id is not an id");
+  return path.join(runDir(root, runId), LINEAGE_DIR, "seals", `${executionId}.json`);
+};
+function assertSealShape(v: unknown): asserts v is ExecutionSegmentSeal {
+  const keys = ["schema_version", "source_id", "run_id", "execution_id", "segment_revision", "sealed_by", "outcome_state", "outcome_sha256", "sealed_at"];
+  const ok = isObj(v) && Object.keys(v).length === keys.length && keys.every((k) => own(v, k))
+    && v["schema_version"] === EXECUTION_SEGMENT_SEAL_SCHEMA
+    && [v["source_id"], v["execution_id"]].every((x) => typeof x === "string" && ID_RE.test(x))
+    && typeof v["run_id"] === "string" && RUN_ID_RE.test(v["run_id"])
+    && [v["segment_revision"], v["outcome_sha256"]].every((x) => typeof x === "string" && HASH_RE.test(x))
+    && ["exited", "cancelled", "timed_out"].includes(v["outcome_state"] as string)
+    && typeof v["sealed_at"] === "string" && isRfc3339(v["sealed_at"])
+    && isObj(v["sealed_by"]) && Object.keys(v["sealed_by"]).length === 3
+    && typeof v["sealed_by"]["operation_id"] === "string" && ID_RE.test(v["sealed_by"]["operation_id"])
+    && typeof v["sealed_by"]["attempt_id"] === "string" && ID_RE.test(v["sealed_by"]["attempt_id"])
+    && typeof v["sealed_by"]["launch_hash"] === "string" && HASH_RE.test(v["sealed_by"]["launch_hash"]);
+  if (!ok) throw new ExecutionIdentityRefusal("record_invalid", "segment seal fields invalid");
+}
+
+export const EXECUTION_SEGMENT_RESERVATION_SCHEMA = "guild.stack.execution_segment_reservation.v1" as const;
+/** One operation/attempt owns a segment for its whole supervised life; immutable. */
+export interface ExecutionSegmentReservation {
+  schema_version: typeof EXECUTION_SEGMENT_RESERVATION_SCHEMA; source_id: string; run_id: string; execution_id: string;
+  segment_revision: Hash; operation_id: string; attempt_id: string; launch_hash: Hash;
+}
+const reservationPath = (root: string, runId: string, executionId: string) => {
+  if (!ID_RE.test(executionId)) throw new ExecutionIdentityRefusal("record_invalid", "execution id is not an id");
+  return path.join(runDir(root, runId), LINEAGE_DIR, "reservations", `${executionId}.json`);
+};
+function assertReservationShape(v: unknown): asserts v is ExecutionSegmentReservation {
+  const keys = ["schema_version", "source_id", "run_id", "execution_id", "segment_revision", "operation_id", "attempt_id", "launch_hash"];
+  const ok = isObj(v) && Object.keys(v).length === keys.length && keys.every((k) => own(v, k))
+    && v["schema_version"] === EXECUTION_SEGMENT_RESERVATION_SCHEMA
+    && ["source_id", "execution_id", "operation_id", "attempt_id"].every((k) => typeof v[k] === "string" && ID_RE.test(v[k] as string))
+    && typeof v["run_id"] === "string" && RUN_ID_RE.test(v["run_id"])
+    && ["segment_revision", "launch_hash"].every((k) => typeof v[k] === "string" && HASH_RE.test(v[k] as string));
+  if (!ok) throw new ExecutionIdentityRefusal("record_invalid", "segment reservation fields invalid");
+}
+function requireActiveSegmentRevision(root: string, sourceId: string, runId: string, executionId: string, revision: Hash): void {
+  const view = readLogicalRunView(root, runId);
+  if (view.kind !== "v2") throw new ExecutionIdentityRefusal("logical_run_unknown", `${runId} is not a logical v2 run`);
+  if (view.manifest.source_id !== sourceId) throw new ExecutionIdentityRefusal("record_invalid", "record source is not the run owner");
+  const e = view.executions.find((x) => x.segment.lineage.execution_id === executionId);
+  if (!e) throw new ExecutionIdentityRefusal("execution_unknown", `${runId} has no execution ${executionId}`);
+  if (e.revision !== revision) throw new ExecutionIdentityRefusal("record_invalid", "record names a different segment revision");
+  if (e.segment.admission !== "active") throw new ExecutionIdentityRefusal("record_invalid", `segment admission is ${e.segment.admission}`);
+}
+
+/** Reserve an unsealed segment for exactly one operation/attempt. A different reservation refuses record_immutable. */
+export function reserveExecutionSegment(root: string, r: ExecutionSegmentReservation): void {
+  assertReservationShape(r);
+  requireActiveSegmentRevision(root, r.source_id, r.run_id, r.execution_id, r.segment_revision);
+  if (readExecutionSegmentSeal(root, r.run_id, r.execution_id) !== null) throw new ExecutionIdentityRefusal("record_immutable", `${r.execution_id} is already sealed`);
+  publishOnce(root, reservationPath(root, r.run_id, r.execution_id), r);
+}
+
+export function readExecutionSegmentReservation(root: string, runId: string, executionId: string): ExecutionSegmentReservation | null {
+  const r = readJson<unknown>(root, reservationPath(root, runId, executionId), null);
+  if (r === null) return null;
+  assertReservationShape(r);
+  if (r.run_id !== runId || r.execution_id !== executionId) throw new ExecutionIdentityRefusal("record_location_mismatch", `reservation file ${runId}/${executionId} holds ${r.run_id}/${r.execution_id}`);
+  return r;
+}
+
+/** Seal the exact reserved segment revision. Idempotent for identical bytes; never touches the logical-run manifest. */
+export function sealExecutionSegment(root: string, seal: ExecutionSegmentSeal): void {
+  assertSealShape(seal);
+  requireActiveSegmentRevision(root, seal.source_id, seal.run_id, seal.execution_id, seal.segment_revision);
+  const r = readExecutionSegmentReservation(root, seal.run_id, seal.execution_id);
+  if (r === null || r.source_id !== seal.source_id || r.segment_revision !== seal.segment_revision || r.operation_id !== seal.sealed_by.operation_id
+    || r.attempt_id !== seal.sealed_by.attempt_id || r.launch_hash !== seal.sealed_by.launch_hash) {
+    throw new ExecutionIdentityRefusal("record_invalid", "seal does not match the segment reservation");
+  }
+  publishOnce(root, sealPath(root, seal.run_id, seal.execution_id), seal);
+}
+
+export function readExecutionSegmentSeal(root: string, runId: string, executionId: string): ExecutionSegmentSeal | null {
+  const seal = readJson<unknown>(root, sealPath(root, runId, executionId), null);
+  if (seal === null) return null;
+  assertSealShape(seal);
+  if (seal.run_id !== runId || seal.execution_id !== executionId) throw new ExecutionIdentityRefusal("record_location_mismatch", `seal file ${runId}/${executionId} holds ${seal.run_id}/${seal.execution_id}`);
+  return seal;
 }
 
 export interface GoalContribution { run_id: string; execution_id: string; logical_task_id: string; attempt_id: string }

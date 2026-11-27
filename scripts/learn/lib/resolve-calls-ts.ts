@@ -22,6 +22,8 @@
 import * as ts from "typescript";
 import * as path from "path";
 import type { ResolvedCall } from "./resolved-call";
+import { effectiveAliasOptions, loadTsconfigChain } from "./tsconfig-chain";
+import { readContainedFile } from "../../../src/domains/knowledge/source-basis";
 
 const TS_EXTS = new Set([".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"]);
 
@@ -45,14 +47,13 @@ function relpathOf(nodeId: string): string {
  * @types-free defaults below.
  */
 function aliasOptions(repoRoot: string): Pick<ts.CompilerOptions, "baseUrl" | "paths"> {
-  const configPath = path.join(repoRoot, "tsconfig.json");
-  if (!ts.sys.fileExists(configPath)) return {};
-  const read = ts.readConfigFile(configPath, ts.sys.readFile);
-  if (read.error || !read.config) return {};
-  const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, path.dirname(configPath));
+  // K01: options come from the contained, symlink-free extends chain whose bytes
+  // the source basis binds; the compiler never reads a config file itself.
+  const eff = effectiveAliasOptions(loadTsconfigChain(repoRoot));
   const opts: Pick<ts.CompilerOptions, "baseUrl" | "paths"> = {};
-  if (parsed.options.baseUrl) opts.baseUrl = parsed.options.baseUrl;
-  if (parsed.options.paths) opts.paths = parsed.options.paths;
+  const base = eff.baseUrl ?? (eff.paths ? eff.pathsDir : undefined);
+  if (base !== undefined) opts.baseUrl = path.join(repoRoot, base);
+  if (eff.paths) opts.paths = eff.paths;
   return opts;
 }
 
@@ -112,7 +113,7 @@ export function resolveTsCalls(repoRoot: string, relFiles: string[]): ResolvedCa
   const absFiles = tsRel.map((r) => path.resolve(repoRoot, r));
   const wanted = new Set(absFiles.map((a) => path.resolve(a)));
 
-  const program = ts.createProgram(absFiles, {
+  const options: ts.CompilerOptions = {
     allowJs: true,
     noLib: true,
     skipLibCheck: true,
@@ -124,7 +125,33 @@ export function resolveTsCalls(repoRoot: string, relFiles: string[]): ResolvedCa
     noEmit: true,
     // FIX G2-4: merge the repo tsconfig's baseUrl/paths so alias imports resolve.
     ...aliasOptions(repoRoot),
-  });
+  };
+  // K01: the compiler sees ONLY the scanned inventory, read contained and
+  // symlink-free. An import of anything else stays unresolved, so no byte
+  // outside the source basis can steer a call target.
+  const allowedDirs = new Set<string>();
+  for (const abs of wanted) {
+    for (let d = path.dirname(abs); !allowedDirs.has(d); d = path.dirname(d)) {
+      allowedDirs.add(d);
+      if (d === path.dirname(d)) break;
+    }
+  }
+  const readAllowed = (f: string): string | undefined => {
+    const abs = path.resolve(f);
+    if (!wanted.has(abs)) return undefined;
+    return readContainedFile(repoRoot, toRel(repoRoot, abs))?.toString("utf8");
+  };
+  const host = ts.createCompilerHost(options);
+  host.fileExists = (f) => wanted.has(path.resolve(f));
+  host.readFile = readAllowed;
+  host.directoryExists = (d) => allowedDirs.has(path.resolve(d));
+  host.getDirectories = () => [];
+  host.realpath = (p) => p;
+  host.getSourceFile = (f, lang) => {
+    const text = readAllowed(f);
+    return text === undefined ? undefined : ts.createSourceFile(f, text, lang);
+  };
+  const program = ts.createProgram(absFiles, options, host);
   const checker = program.getTypeChecker();
 
   const out: ResolvedCall[] = [];
