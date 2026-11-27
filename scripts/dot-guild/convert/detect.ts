@@ -14,7 +14,7 @@
  */
 
 import * as path from "path";
-import { knowledgeIndexReadPath } from "../../../src/domains/state";
+import { independentIndexReadPath } from "../../../src/domains/state";
 import type { Fs, DetectResult, Evidence } from "./types";
 import { parseJson, parseYaml, extractSchemaVersion } from "./seams";
 
@@ -210,7 +210,7 @@ export function detect(fs: Fs, guildDir: string): DetectResult {
     // Layout 2 keeps the registry on the cache root: read it first, the legacy copy as fallback.
     const p =
       path.basename(guildDir) === ".guild"
-        ? knowledgeIndexReadPath(path.dirname(guildDir), "initiatives-registry.yaml")
+        ? independentIndexReadPath(path.dirname(guildDir), "initiatives-registry.yaml")
         : j(path.join("indexes", "initiatives-registry.yaml"));
     const parsed = readParsed(pr, p, "yaml", true);
     const sv = svOf(parsed);

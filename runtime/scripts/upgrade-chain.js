@@ -3774,7 +3774,8 @@ function knowledgeIndexesDir(root) {
   assertClassPlacement("cache", abs, roots.durable);
   return abs;
 }
-function knowledgeIndexesReadDir(root, probe = "publication") {
+var TREE_PROBES = ["publication", "knowledge-graph.json", "knowledge-recall.json"];
+function knowledgeIndexesReadDir(root, probe = TREE_PROBES) {
   const primary = knowledgeIndexesDir(root);
   const legacy = legacyIndexesDir(root);
   const probes = typeof probe === "string" ? [probe] : probe;
@@ -3782,7 +3783,7 @@ function knowledgeIndexesReadDir(root, probe = "publication") {
   if (primary === legacy || has(primary)) return primary;
   return has(legacy) ? legacy : primary;
 }
-function knowledgeIndexReadPath(root, ...segments) {
+function independentIndexReadPath(root, ...segments) {
   const primary = path10.join(knowledgeIndexesDir(root), ...segments);
   if (fs6.existsSync(primary)) return primary;
   const legacy = path10.join(legacyIndexesDir(root), ...segments);
@@ -8966,7 +8967,7 @@ function detect2(fs17, guildDir) {
     }
   }
   {
-    const p = path22.basename(guildDir) === ".guild" ? knowledgeIndexReadPath(path22.dirname(guildDir), "initiatives-registry.yaml") : j(path22.join("indexes", "initiatives-registry.yaml"));
+    const p = path22.basename(guildDir) === ".guild" ? independentIndexReadPath(path22.dirname(guildDir), "initiatives-registry.yaml") : j(path22.join("indexes", "initiatives-registry.yaml"));
     const parsed = readParsed(pr, p, "yaml", true);
     const sv = svOf(parsed);
     if (sv) {

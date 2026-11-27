@@ -4864,7 +4864,8 @@ function knowledgeIndexesDir(root) {
   assertClassPlacement("cache", abs, roots.durable);
   return abs;
 }
-function knowledgeIndexesReadDir(root, probe = "publication") {
+var TREE_PROBES = ["publication", "knowledge-graph.json", "knowledge-recall.json"];
+function knowledgeIndexesReadDir(root, probe = TREE_PROBES) {
   const primary = knowledgeIndexesDir(root);
   const legacy = legacyIndexesDir(root);
   const probes = typeof probe === "string" ? [probe] : probe;
@@ -4873,10 +4874,7 @@ function knowledgeIndexesReadDir(root, probe = "publication") {
   return has2(legacy) ? legacy : primary;
 }
 function knowledgeIndexReadPath(root, ...segments) {
-  const primary = path12.join(knowledgeIndexesDir(root), ...segments);
-  if (fs8.existsSync(primary)) return primary;
-  const legacy = path12.join(legacyIndexesDir(root), ...segments);
-  return fs8.existsSync(legacy) ? legacy : primary;
+  return path12.join(knowledgeIndexesReadDir(root), ...segments);
 }
 
 // src/domains/state/guild-discovery.ts

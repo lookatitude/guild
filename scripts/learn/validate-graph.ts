@@ -109,7 +109,7 @@ function main(): void {
     input = JSON.parse(fs.readFileSync(0, "utf8"));
   } else {
     const inPath = parseFlag(argv, "in");
-    const resolved = inPath ? path.resolve(cwd, inPath) : gp.readPath(gp.partialGraph);
+    const resolved = inPath ? path.resolve(cwd, inPath) : gp.partialGraph;
     input = readJson(resolved);
     if (input === null) {
       process.stderr.write(`[validate] ERROR: cannot read input graph ${resolved}\n`);

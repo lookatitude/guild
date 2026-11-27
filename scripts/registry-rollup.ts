@@ -17,7 +17,7 @@ import * as path from "path";
 import { deriveInitiativeStatus, validateInitiativeManifest, type InitiativeAxes, type DerivedStatus, DERIVED_STATUS } from "./lib/initiative";
 import { durableGuildDir } from "./lib/state/storage";
 import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
-import { knowledgeIndexReadPath, knowledgeIndexesDir } from "../src/domains/state";
+import { independentIndexReadPath, knowledgeIndexesDir } from "../src/domains/state";
 
 const yaml = require("js-yaml") as { load: (s: string) => unknown; dump: (o: unknown) => string };
 
@@ -108,7 +108,7 @@ function registryFile(guildDir: string, mode: "read" | "write"): string {
   const name = "initiatives-registry.yaml";
   if (path.basename(guildDir) !== ".guild") return path.join(guildDir, "indexes", name);
   const root = path.dirname(guildDir);
-  return mode === "read" ? knowledgeIndexReadPath(root, name) : path.join(knowledgeIndexesDir(root), name);
+  return mode === "read" ? independentIndexReadPath(root, name) : path.join(knowledgeIndexesDir(root), name);
 }
 
 /**

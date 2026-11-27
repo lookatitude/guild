@@ -91,7 +91,7 @@ import { sealSet } from "../kernel";
 import * as path from "path";
 
 import type { GraphNode, GraphEdge } from "./knowledge-graph-contract";
-import { durableGuildDir, knowledgeIndexReadPath } from "../state";
+import { durableGuildDir, knowledgeIndexesReadDir } from "../state";
 
 export type { GraphNode, GraphEdge } from "./knowledge-graph-contract";
 
@@ -627,7 +627,7 @@ function indexEntryPoints(indexesDir: string, read: (p: string) => string): stri
  */
 export function resolveEntryPointConfig(src: EntryPointSources): string[] {
   const guildDir = src.guildDir ?? durableGuildDir(src.repoRoot);
-  const indexesDir = src.indexesDir ?? (src.guildDir ? path.join(guildDir, "indexes") : path.dirname(knowledgeIndexReadPath(src.repoRoot, "entry_points.json")));
+  const indexesDir = src.indexesDir ?? (src.guildDir ? path.join(guildDir, "indexes") : knowledgeIndexesReadDir(src.repoRoot));
   const read = src.readFile ?? ((p: string) => fs.readFileSync(p, "utf8"));
 
   const all = new Set<string>();

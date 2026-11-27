@@ -4772,7 +4772,7 @@ function knowledgeIndexesDir(root) {
   assertClassPlacement("cache", abs, roots.durable);
   return abs;
 }
-function knowledgeIndexReadPath(root, ...segments) {
+function independentIndexReadPath(root, ...segments) {
   const primary = path9.join(knowledgeIndexesDir(root), ...segments);
   if (fs5.existsSync(primary)) return primary;
   const legacy = path9.join(legacyIndexesDir(root), ...segments);
@@ -8112,7 +8112,7 @@ function isContainedIn(candidatePath, baseDir) {
 function initiativeIsWorkspaceScoped(workspaceRoot2, id) {
   try {
     if (!isValidInitiativeId(id)) return false;
-    const registryPath = knowledgeIndexReadPath(workspaceRoot2, "initiatives-registry.yaml");
+    const registryPath = independentIndexReadPath(workspaceRoot2, "initiatives-registry.yaml");
     if (fs12.existsSync(registryPath)) {
       try {
         const raw = fs12.readFileSync(registryPath, "utf8");

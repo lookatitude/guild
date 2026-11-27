@@ -3074,12 +3074,12 @@ var require_js_yaml = __commonJS({
 });
 
 // scripts/learn/diff-learn.ts
-var fs17 = __toESM(require("fs"));
-var path21 = __toESM(require("path"));
+var fs15 = __toESM(require("fs"));
+var path19 = __toESM(require("path"));
 
 // scripts/learn/lib/paths.ts
-var fs16 = __toESM(require("fs"));
-var path20 = __toESM(require("path"));
+var fs14 = __toESM(require("fs"));
+var path18 = __toESM(require("path"));
 var import_child_process = require("child_process");
 
 // scripts/lib/state/ensure-storage-layout.ts
@@ -3824,11 +3824,17 @@ function knowledgeIndexesDir(root) {
   assertClassPlacement("cache", abs, roots.durable);
   return abs;
 }
+var TREE_PROBES = ["publication", "knowledge-graph.json", "knowledge-recall.json"];
+function knowledgeIndexesReadDir(root, probe = TREE_PROBES) {
+  const primary = knowledgeIndexesDir(root);
+  const legacy = legacyIndexesDir(root);
+  const probes = typeof probe === "string" ? [probe] : probe;
+  const has = (dir) => probes.some((n) => fs7.existsSync(path11.join(dir, n)));
+  if (primary === legacy || has(primary)) return primary;
+  return has(legacy) ? legacy : primary;
+}
 function knowledgeIndexReadPath(root, ...segments) {
-  const primary = path11.join(knowledgeIndexesDir(root), ...segments);
-  if (fs7.existsSync(primary)) return primary;
-  const legacy = path11.join(legacyIndexesDir(root), ...segments);
-  return fs7.existsSync(legacy) ? legacy : primary;
+  return path11.join(knowledgeIndexesReadDir(root), ...segments);
 }
 
 // src/domains/state/index-migrate.ts
@@ -5521,38 +5527,10 @@ if (typeof module !== "undefined" && require.main === module && /^promote-upstre
   runPromoteUpstreamCli();
 }
 
-// src/domains/knowledge/legacy-adoption.ts
-var fs15 = __toESM(require("node:fs"));
-var path19 = __toESM(require("node:path"));
-
-// src/domains/knowledge/publication.ts
-var crypto5 = __toESM(require("node:crypto"));
-var fs14 = __toESM(require("node:fs"));
-var os2 = __toESM(require("node:os"));
-var path18 = __toESM(require("node:path"));
-
 // src/domains/knowledge/source-basis.ts
-var crypto4 = __toESM(require("node:crypto"));
 var import_node_child_process2 = require("node:child_process");
 var fs13 = __toESM(require("node:fs"));
 var path17 = __toESM(require("node:path"));
-function canonicalJson(value) {
-  if (value === null || typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new Error("canonicalJson: non-finite number");
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (typeof value === "object") {
-    const obj = value;
-    const keys = Object.keys(obj).filter((k) => obj[k] !== void 0).sort();
-    return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`).join(",")}}`;
-  }
-  throw new Error(`canonicalJson: unsupported ${typeof value}`);
-}
-function basisDigest(value) {
-  return `sha256:${crypto4.createHash("sha256").update(canonicalJson(value), "utf8").digest("hex")}`;
-}
 function realRoot2(root) {
   try {
     return fs13.realpathSync(root);
@@ -5570,316 +5548,6 @@ function git(cwd, args) {
 function resolveSourceWorktreeRoot(cwd) {
   const top = git(cwd, ["rev-parse", "--show-toplevel"])?.trim();
   return realRoot2(top ? top : cwd);
-}
-
-// src/domains/knowledge/publication.ts
-var PUBLICATION_FAULT_STEPS = Object.freeze([
-  "lock_acquired",
-  "artifact:knowledge-graph.json",
-  "artifact:knowledge-recall.json",
-  "layers_written",
-  "manifest_written",
-  "record_written",
-  "generation_renamed",
-  "successor_claimed",
-  "pointer_tmp_written",
-  "pointer_renamed",
-  "export:knowledge-graph.json",
-  "export:knowledge-recall.json",
-  "reclaimed"
-]);
-var ARTIFACT_NAME = /^[a-z0-9][a-z0-9._-]{0,127}\.json$/;
-var GEN_DIR = /^[a-f0-9]{64}$/;
-var HOST = crypto5.createHash("sha256").update(os2.hostname()).digest("hex").slice(0, 12);
-function publicationDir(indexesDir) {
-  return path18.join(indexesDir, "publication");
-}
-function generationsDir(indexesDir) {
-  return path18.join(publicationDir(indexesDir), "generations");
-}
-function sha(bytes) {
-  return `sha256:${crypto5.createHash("sha256").update(bytes).digest("hex")}`;
-}
-function hex(g) {
-  return g.slice("sha256:".length);
-}
-function isGenerationHash(v) {
-  return typeof v === "string" && v.startsWith("sha256:") && GEN_DIR.test(v.slice(7));
-}
-function writeDurable(p, bytes, mode = 420) {
-  const fd = fs14.openSync(p, "wx", mode);
-  try {
-    fs14.writeSync(fd, typeof bytes === "string" ? Buffer.from(bytes, "utf8") : bytes);
-    fs14.fsyncSync(fd);
-  } finally {
-    fs14.closeSync(fd);
-  }
-}
-function contained(indexesDir, target, leafFile = false) {
-  const r = checkContained(indexesDir, target, { policy: "physical", requireRegularFileLeaf: leafFile });
-  return isRefused(r) ? `${r.code}: ${r.detail}` : null;
-}
-var PublicationError = class extends Error {
-  constructor(code, detail) {
-    super(`publication ${code}: ${detail}`);
-    this.code = code;
-  }
-  code;
-};
-function parsePointer(file, indexesDir) {
-  const bad = contained(indexesDir, file, true);
-  if (bad) throw new PublicationError("containment", bad);
-  const ptr = JSON.parse(fs14.readFileSync(file, "utf8"));
-  if (!isGenerationHash(ptr?.generation) || !isGenerationHash(ptr.publication_sha256)) throw new PublicationError("corrupt", "pointer malformed");
-  return ptr;
-}
-function successorFile(indexesDir, parent) {
-  return path18.join(publicationDir(indexesDir), "successors", parent ? hex(parent) : "root");
-}
-function readPointer(indexesDir) {
-  const cur = path18.join(publicationDir(indexesDir), "CURRENT");
-  let ptr = fs14.existsSync(cur) ? parsePointer(cur, indexesDir) : null;
-  if (!ptr) {
-    const root = successorFile(indexesDir, null);
-    if (!fs14.existsSync(root)) return null;
-    ptr = parsePointer(root, indexesDir);
-  }
-  for (let i = 0; i < 1e5; i++) {
-    const next = successorFile(indexesDir, ptr.generation);
-    if (!fs14.existsSync(next)) return ptr;
-    ptr = parsePointer(next, indexesDir);
-  }
-  throw new PublicationError("corrupt", "successor chain does not terminate");
-}
-function readVerified(indexesDir, file, expected) {
-  const bad = contained(indexesDir, file, true);
-  if (bad) throw new PublicationError("containment", bad);
-  const bytes = fs14.readFileSync(file);
-  if (sha(bytes) !== expected) throw new PublicationError("corrupt", `hash mismatch for ${path18.basename(file)}`);
-  return bytes;
-}
-function loadGeneration(indexesDir, generation, publicationSha) {
-  const dir = path18.join(generationsDir(indexesDir), hex(generation));
-  const recBytes = publicationSha ? readVerified(indexesDir, path18.join(dir, "publication.json"), publicationSha) : fs14.readFileSync(path18.join(dir, "publication.json"));
-  const record2 = JSON.parse(recBytes.toString("utf8"));
-  if (record2.generation !== generation) throw new PublicationError("corrupt", "record names another generation");
-  const manBytes = readVerified(indexesDir, path18.join(dir, "manifest.json"), record2.manifest.sha256);
-  const manifest = JSON.parse(manBytes.toString("utf8"));
-  if (manifest.generation !== generation) throw new PublicationError("corrupt", "manifest names another generation");
-  const artifacts = {};
-  for (const [name, a] of Object.entries(manifest.artifacts)) {
-    if (!ARTIFACT_NAME.test(name)) throw new PublicationError("corrupt", `artifact name ${JSON.stringify(name)}`);
-    artifacts[name] = readVerified(indexesDir, path18.join(dir, name), a.sha256);
-  }
-  if (generationId(manifest) !== generation) throw new PublicationError("corrupt", "generation id does not match its manifest");
-  const pointer = {
-    schema_version: "guild.knowledge_publication_pointer.v1",
-    generation,
-    destination_layer_digest: record2.destination_layer_digest,
-    publication_sha256: sha(recBytes)
-  };
-  return { pointer, record: record2, manifest, artifacts };
-}
-function pinFile(indexesDir, generation) {
-  try {
-    const dir = path18.join(publicationDir(indexesDir), "pins");
-    if (contained(indexesDir, dir)) return null;
-    fs14.mkdirSync(dir, { recursive: true });
-    const id = `${process.pid}-${crypto5.randomUUID()}`;
-    const tmp = path18.join(dir, `.tmp-${id}`);
-    writeDurable(tmp, JSON.stringify({ pid: process.pid, host: HOST, generation }));
-    const f = path18.join(dir, `${id}.json`);
-    fs14.renameSync(tmp, f);
-    return f;
-  } catch {
-    return null;
-  }
-}
-function readPublication(indexesDir, opts = {}) {
-  for (let attempt = 0; ; attempt++) {
-    const ptr = opts.generation ? null : readPointer(indexesDir);
-    const gen = opts.generation ?? ptr?.generation;
-    if (!gen) return null;
-    const pin = pinFile(indexesDir, gen);
-    try {
-      const pg = loadGeneration(indexesDir, gen, ptr?.publication_sha256 ?? null);
-      if (ptr && pg.pointer.destination_layer_digest !== ptr.destination_layer_digest) {
-        throw new PublicationError("corrupt", "pointer layer digest differs from its record");
-      }
-      return pg;
-    } catch (err) {
-      if (err.code === "ENOENT" && !opts.generation && attempt < 3) continue;
-      if (err.code === "ENOENT" && opts.generation) return null;
-      throw err;
-    } finally {
-      if (pin) fs14.rmSync(pin, { force: true });
-    }
-  }
-}
-function generationId(m) {
-  return basisDigest({
-    previous_generation: m.previous_generation,
-    artifacts: Object.fromEntries(Object.entries(m.artifacts).map(([k, v]) => [k, v.sha256])),
-    layers: m.layers,
-    source_basis_hash: m.source_basis.source_basis_hash,
-    exports: m.exports,
-    ...m.decisions ? { decisions: m.decisions } : {}
-  });
-}
-var ORPHAN_GRACE_MS = 10 * 6e4;
-
-// src/domains/knowledge/legacy-adoption.ts
-var STALE_LOCK_MS = 6e4;
-var NOT_ADOPTED = /(^|[\\/])(lock|\.claim-[^\\/]*)($|[\\/])/;
-function sleep(ms) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-function pidAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (e) {
-    return e.code === "EPERM";
-  }
-}
-function lstat(p) {
-  try {
-    return fs15.lstatSync(p);
-  } catch {
-    return null;
-  }
-}
-function takeLock(lock, waitMs) {
-  const deadline = Date.now() + waitMs;
-  for (; ; ) {
-    try {
-      fs15.mkdirSync(lock);
-      fs15.writeFileSync(path19.join(lock, "owner"), `${process.pid}
-`);
-      return true;
-    } catch (e) {
-      if (e.code !== "EEXIST") return false;
-    }
-    const st = lstat(lock);
-    let owner = NaN;
-    try {
-      owner = Number(fs15.readFileSync(path19.join(lock, "owner"), "utf8").trim());
-    } catch {
-    }
-    const dead = Number.isFinite(owner) && !pidAlive(owner);
-    if (st && (dead || Date.now() - st.mtimeMs > STALE_LOCK_MS)) {
-      fs15.rmSync(lock, { recursive: true, force: true });
-      continue;
-    }
-    if (Date.now() >= deadline) return false;
-    sleep(25);
-  }
-}
-function inFlight(legacyPub) {
-  if (lstat(path19.join(legacyPub, "lock"))) return "a publisher lock is present (publication in flight)";
-  try {
-    const stale = fs15.readdirSync(path19.join(legacyPub, "successors")).find((n) => n.startsWith(".claim-"));
-    if (stale) return "a successor claim is present (publication in flight)";
-  } catch {
-  }
-  return null;
-}
-function install(tmp, to) {
-  if (fs15.lstatSync(tmp).isDirectory()) {
-    fs15.renameSync(tmp, to);
-  } else {
-    fs15.linkSync(tmp, to);
-    fs15.rmSync(tmp, { force: true });
-  }
-}
-function record(dest, skipped) {
-  const file = path19.join(dest, "adoption.json");
-  try {
-    if (skipped.length === 0) {
-      fs15.rmSync(file, { force: true });
-      return;
-    }
-    fs15.writeFileSync(file, JSON.stringify({ schema: "guild.legacy_index_adoption.v1", skipped }, null, 2) + "\n");
-  } catch {
-  }
-}
-function adoptLegacyKnowledgeIndexes(root, opts = {}) {
-  const result = { adopted: [], skipped: [] };
-  const dest = knowledgeIndexesDir(root);
-  const legacy = legacyIndexesDir(root);
-  if (dest === legacy) return result;
-  const lroot = lstat(legacy);
-  if (!lroot || !lroot.isDirectory()) return result;
-  let names;
-  try {
-    names = fs15.readdirSync(legacy).filter((n) => !n.startsWith(".adopt-"));
-  } catch {
-    return result;
-  }
-  if (names.every((n) => lstat(path19.join(dest, n)) !== null || lstat(path19.join(legacy, n))?.isSymbolicLink())) return result;
-  try {
-    fs15.mkdirSync(dest, { recursive: true });
-  } catch {
-    return result;
-  }
-  const lock = `${dest}.adopt-lock`;
-  if (!takeLock(lock, opts.lockWaitMs ?? 2e3)) return result;
-  try {
-    for (const name of names) {
-      const from = path19.join(legacy, name);
-      const to = path19.join(dest, name);
-      const st = lstat(from);
-      if (!st || st.isSymbolicLink() || !(st.isFile() || st.isDirectory())) {
-        result.skipped.push({ entry: name, reason: "not a regular file or directory (symlinks are never adopted)" });
-        continue;
-      }
-      if (lstat(to)) continue;
-      if (name === "publication") {
-        const why = inFlight(from);
-        if (why) {
-          result.skipped.push({ entry: name, reason: why });
-          continue;
-        }
-      }
-      const stage = path19.join(dest, `.adopt-${process.pid}-stage`);
-      fs15.rmSync(stage, { recursive: true, force: true });
-      try {
-        fs15.mkdirSync(stage);
-        const tmp = path19.join(stage, name);
-        fs15.cpSync(from, tmp, {
-          recursive: true,
-          filter: (src) => {
-            const s = lstat(src);
-            if (!s || s.isSymbolicLink()) return false;
-            if (!(s.isFile() || s.isDirectory())) return false;
-            return !NOT_ADOPTED.test(path19.relative(from, src));
-          }
-        });
-        if (name === "publication") {
-          try {
-            readPublication(stage);
-          } catch (err) {
-            result.skipped.push({ entry: name, reason: `legacy publication is not readable: ${err.message}` });
-            continue;
-          }
-        }
-        opts.beforeInstall?.(name);
-        if (lstat(to)) continue;
-        install(tmp, to);
-        result.adopted.push(name);
-      } catch (err) {
-        if (err.code !== "EEXIST" && err.code !== "ENOTEMPTY") {
-          result.skipped.push({ entry: name, reason: `adoption failed: ${err.message}` });
-        }
-      } finally {
-        fs15.rmSync(stage, { recursive: true, force: true });
-      }
-    }
-    record(dest, result.skipped);
-  } finally {
-    fs15.rmSync(lock, { recursive: true, force: true });
-  }
-  return result;
 }
 
 // scripts/learn/lib/ignore.ts
@@ -5986,49 +5654,48 @@ function resolveMainRepoRoot(cwd) {
       cwd,
       encoding: "utf-8"
     }).trim();
-    const abs = path20.isAbsolute(commonDir) ? commonDir : path20.resolve(cwd, commonDir);
-    const root = path20.dirname(abs);
-    if (fs16.existsSync(root)) return root;
+    const abs = path18.isAbsolute(commonDir) ? commonDir : path18.resolve(cwd, commonDir);
+    const root = path18.dirname(abs);
+    if (fs14.existsSync(root)) return root;
   } catch {
   }
-  return path20.resolve(cwd);
+  return path18.resolve(cwd);
 }
 function sameDir(a, b) {
   try {
-    return fs16.realpathSync(a) === fs16.realpathSync(b);
+    return fs14.realpathSync(a) === fs14.realpathSync(b);
   } catch {
-    return path20.resolve(a) === path20.resolve(b);
+    return path18.resolve(a) === path18.resolve(b);
   }
 }
 function guildPaths(cwd) {
   const repoRoot = resolveMainRepoRoot(cwd);
   const sourceRoot = resolveSourceWorktreeRoot(cwd);
   const guildDir = durableGuildDir(repoRoot);
-  adoptLegacyKnowledgeIndexes(repoRoot);
   const indexesDir = knowledgeIndexesDir(repoRoot);
-  const runsDir = path20.join(guildDir, "runs");
+  const runsDir = path18.join(guildDir, "runs");
   return {
     repoRoot,
     sourceRoot: sameDir(sourceRoot, repoRoot) ? repoRoot : sourceRoot,
     guildDir,
     indexesDir,
     runsDir,
-    codebaseMap: path20.join(indexesDir, "codebase-map.json"),
-    knowledgeGraph: path20.join(indexesDir, "knowledge-graph.json"),
-    knowledgeLinks: path20.join(indexesDir, "knowledge-links.json"),
-    knowledgeRecall: path20.join(indexesDir, "knowledge-recall.json"),
-    fingerprint: path20.join(indexesDir, "understand-fingerprint.json"),
-    partialGraph: path20.join(indexesDir, "understand-partial-graph.json"),
-    readPath: (p) => knowledgeIndexReadPath(repoRoot, path20.relative(indexesDir, p))
+    codebaseMap: path18.join(indexesDir, "codebase-map.json"),
+    knowledgeGraph: path18.join(indexesDir, "knowledge-graph.json"),
+    knowledgeLinks: path18.join(indexesDir, "knowledge-links.json"),
+    knowledgeRecall: path18.join(indexesDir, "knowledge-recall.json"),
+    fingerprint: path18.join(indexesDir, "understand-fingerprint.json"),
+    partialGraph: path18.join(indexesDir, "understand-partial-graph.json"),
+    readPath: (p) => knowledgeIndexReadPath(repoRoot, path18.relative(indexesDir, p))
   };
 }
 function writeJson(filePath, data) {
-  fs16.mkdirSync(path20.dirname(filePath), { recursive: true });
-  fs16.writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf8");
+  fs14.mkdirSync(path18.dirname(filePath), { recursive: true });
+  fs14.writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf8");
 }
 function readJson(filePath) {
   try {
-    return JSON.parse(fs16.readFileSync(filePath, "utf8"));
+    return JSON.parse(fs14.readFileSync(filePath, "utf8"));
   } catch {
     return null;
   }
@@ -6060,7 +5727,7 @@ function resolveRunId(cwd, argv) {
   const flag = parseFlag(argv, "run-id");
   if (flag) return flag;
   try {
-    return fs17.readFileSync(path21.join(durableGuildDir2(cwd), "runs", "current-run-id"), "utf8").trim() || "run-adhoc";
+    return fs15.readFileSync(path19.join(durableGuildDir2(cwd), "runs", "current-run-id"), "utf8").trim() || "run-adhoc";
   } catch {
     return "run-adhoc";
   }
@@ -6116,13 +5783,13 @@ function main() {
     blast_radius: { node_count: nodeCount, layer_count: layerCount, risk },
     untraced_files: untraced
   };
-  const outPath = path21.join(gp.runsDir, runId, "diff-learn.json");
+  const outPath = path19.join(gp.runsDir, runId, "diff-learn.json");
   writeJson(outPath, artifact);
   process.stderr.write(
-    `[diff] changed=${changed.length} affected_nodes=${nodeCount} layers=${layerCount} risk=${risk} untraced=${untraced.length} \u2192 ${path21.relative(gp.repoRoot, outPath)}
+    `[diff] changed=${changed.length} affected_nodes=${nodeCount} layers=${layerCount} risk=${risk} untraced=${untraced.length} \u2192 ${path19.relative(gp.repoRoot, outPath)}
 `
   );
   if (hasFlag(argv, "print")) process.stdout.write(JSON.stringify(artifact, null, 2) + "\n");
-  else process.stdout.write(path21.relative(gp.repoRoot, outPath) + "\n");
+  else process.stdout.write(path19.relative(gp.repoRoot, outPath) + "\n");
 }
 main();

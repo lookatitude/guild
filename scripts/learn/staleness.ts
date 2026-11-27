@@ -66,18 +66,29 @@ function main(): void {
     return;
   }
 
+  // Layout 2 with only a legacy `.guild/indexes` tree: it is read-only and was never
+  // verified against this basis, so nothing in it is reported current. Run the full
+  // learn pipeline to build the cache.
+  if (knowledgeIndexesReadDir(gp.repoRoot) !== gp.indexesDir) {
+    const out = {
+      state: "FULL",
+      reason: "legacy .guild/indexes tree on a layout 2 root: freshness unverified; run the full learn pipeline",
+      freshness: "unknown",
+      filesToReanalyze: Object.keys(tree),
+      rerunArchitecture: true,
+      publication: { error: "legacy .guild/indexes publication is not verified for this basis" },
+    };
+    process.stderr.write("[staleness] FULL — legacy .guild/indexes tree, freshness unverified\n");
+    if (hasFlag(argv, "print")) process.stdout.write(JSON.stringify(out, null, 2) + "\n");
+    else process.stdout.write("FULL\n");
+    return;
+  }
+
   // K03: verify the owner's published generation against the observed basis
   // (consumes after-edit hints; a dropped hook still shows as drift).
   let publication: PublicationStatus | { error: string } | null = null;
   try {
-    // guildPaths adopted any legacy store into the cache, so the generation is
-    // verified against the observed basis like any other. If adoption failed the
-    // legacy generation is never reported current: its freshness is unverified.
-    const readDir = knowledgeIndexesReadDir(gp.repoRoot);
-    publication =
-      readDir === gp.indexesDir
-        ? publicationStatus({ indexesDir: readDir, guildDir: gp.guildDir, observe: () => source })
-        : { error: "legacy .guild/indexes publication could not be adopted into the cache; freshness unverified" };
+    publication = publicationStatus({ indexesDir: gp.indexesDir, guildDir: gp.guildDir, observe: () => source });
   } catch (err) {
     publication = { error: String((err as Error).message ?? err) };
   }

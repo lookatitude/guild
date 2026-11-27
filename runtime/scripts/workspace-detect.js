@@ -3717,7 +3717,8 @@ function knowledgeIndexesDir(root) {
   assertClassPlacement("cache", abs, roots.durable);
   return abs;
 }
-function knowledgeIndexesReadDir(root, probe = "publication") {
+var TREE_PROBES = ["publication", "knowledge-graph.json", "knowledge-recall.json"];
+function knowledgeIndexesReadDir(root, probe = TREE_PROBES) {
   const primary = knowledgeIndexesDir(root);
   const legacy = legacyIndexesDir(root);
   const probes = typeof probe === "string" ? [probe] : probe;
@@ -3725,7 +3726,7 @@ function knowledgeIndexesReadDir(root, probe = "publication") {
   if (primary === legacy || has(primary)) return primary;
   return has(legacy) ? legacy : primary;
 }
-function knowledgeIndexReadPath(root, ...segments) {
+function independentIndexReadPath(root, ...segments) {
   const primary = path9.join(knowledgeIndexesDir(root), ...segments);
   if (fs5.existsSync(primary)) return primary;
   const legacy = path9.join(legacyIndexesDir(root), ...segments);
@@ -8234,7 +8235,7 @@ function isContainedIn(candidatePath, baseDir) {
 function initiativeIsWorkspaceScoped(workspaceRoot2, id) {
   try {
     if (!isValidInitiativeId(id)) return false;
-    const registryPath = knowledgeIndexReadPath(workspaceRoot2, "initiatives-registry.yaml");
+    const registryPath = independentIndexReadPath(workspaceRoot2, "initiatives-registry.yaml");
     if (fs13.existsSync(registryPath)) {
       try {
         const raw = fs13.readFileSync(registryPath, "utf8");

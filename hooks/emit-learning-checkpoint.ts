@@ -38,7 +38,7 @@
  * - No permission / sandbox / runtime policy changes
  */
 
-import { knowledgeIndexesDir, knowledgeIndexReadPath } from "../src/domains/state";
+import { knowledgeIndexesDir } from "../src/domains/state";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -349,13 +349,12 @@ function appendKnowledgeLinksIndex(
 
   const indexDir = knowledgeIndexesDir(guildRoot);
   const indexPath = path.join(indexDir, "knowledge-links.json");
-  const readPath = knowledgeIndexReadPath(guildRoot, "knowledge-links.json");
 
   // Read existing links (safe — missing file = empty list).
   let existing: KnowledgeLink[] = [];
-  if (fs.existsSync(readPath)) {
+  if (fs.existsSync(indexPath)) {
     try {
-      const raw = fs.readFileSync(readPath, "utf8");
+      const raw = fs.readFileSync(indexPath, "utf8");
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       if (Array.isArray(parsed["links"])) {
         existing = parsed["links"] as KnowledgeLink[];

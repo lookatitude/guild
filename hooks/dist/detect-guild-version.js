@@ -3733,7 +3733,7 @@ function knowledgeIndexesDir(root) {
   assertClassPlacement("cache", abs, roots.durable);
   return abs;
 }
-function knowledgeIndexReadPath(root, ...segments) {
+function independentIndexReadPath(root, ...segments) {
   const primary = path10.join(knowledgeIndexesDir(root), ...segments);
   if (fs6.existsSync(primary)) return primary;
   const legacy = path10.join(legacyIndexesDir(root), ...segments);
@@ -5631,7 +5631,7 @@ function detect2(fs16, guildDir) {
     }
   }
   {
-    const p = path18.basename(guildDir) === ".guild" ? knowledgeIndexReadPath(path18.dirname(guildDir), "initiatives-registry.yaml") : j(path18.join("indexes", "initiatives-registry.yaml"));
+    const p = path18.basename(guildDir) === ".guild" ? independentIndexReadPath(path18.dirname(guildDir), "initiatives-registry.yaml") : j(path18.join("indexes", "initiatives-registry.yaml"));
     const parsed = readParsed(pr, p, "yaml", true);
     const sv = svOf(parsed);
     if (sv) {

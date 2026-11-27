@@ -65,13 +65,22 @@ export function knowledgeIndexesDir(root: string): string {
   return abs;
 }
 
+/** True when this root keeps derived indexes off `.guild/` (layout 2). */
+export function indexesAreOffTree(root: string): boolean {
+  return knowledgeIndexesDir(root) !== legacyIndexesDir(root);
+}
+
+/** Entries whose presence makes a tree THE knowledge-index tree: a K03 publication, a graph or a recall projection. */
+const TREE_PROBES: readonly string[] = ["publication", "knowledge-graph.json", "knowledge-recall.json"];
+
 /**
- * Where indexes are READ from. A layout 2 root reads the cache dir and falls back
- * to a legacy `.guild/indexes` until the next upgrade's `caches-out` removes it.
- * `probe` is the entry (or any of several) that decides which tree holds the data (default: the K03
- * publication store); a whole tree is chosen so generations are never mixed.
+ * Where knowledge indexes are READ from: one WHOLE tree, never a mix of files. A
+ * layout 2 root reads the cache tree once it has a publication, graph or recall projection; until
+ * then an existing legacy `.guild/indexes` is read, READ-ONLY (it is never copied,
+ * moved, locked or written; `caches-out` removes it). Layout 1: `.guild/indexes`.
+ * `probe` overrides which entries decide the tree.
  */
-export function knowledgeIndexesReadDir(root: string, probe: string | readonly string[] = "publication"): string {
+export function knowledgeIndexesReadDir(root: string, probe: string | readonly string[] = TREE_PROBES): string {
   const primary = knowledgeIndexesDir(root);
   const legacy = legacyIndexesDir(root);
   const probes = typeof probe === "string" ? [probe] : probe;
@@ -80,11 +89,18 @@ export function knowledgeIndexesReadDir(root: string, probe: string | readonly s
   return has(legacy) ? legacy : primary;
 }
 
-/** One index file for READING: the primary location, else the legacy copy while it still exists. */
+/** One knowledge-index file for READING, from the whole tree `knowledgeIndexesReadDir` chose. */
 export function knowledgeIndexReadPath(root: string, ...segments: string[]): string {
+  return path.join(knowledgeIndexesReadDir(root), ...segments);
+}
+
+/**
+ * A derived file that stands alone (the initiatives registry, the fingerprint salt),
+ * not part of the graph/publication tree: the cache copy, else the legacy copy.
+ */
+export function independentIndexReadPath(root: string, ...segments: string[]): string {
   const primary = path.join(knowledgeIndexesDir(root), ...segments);
   if (fs.existsSync(primary)) return primary;
   const legacy = path.join(legacyIndexesDir(root), ...segments);
   return fs.existsSync(legacy) ? legacy : primary;
 }
-

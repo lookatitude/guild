@@ -21,7 +21,6 @@ export * from "./wiki-frontmatter-contract";
 // only auto wiki writer there is — reaching into `workflows/` for it would be a
 // second door onto the same durable surface.
 export * from "./glossary";
-export * from "./legacy-adoption";
 export * from "./harvest";
 export * from "./harvest-journal";
 export * from "./lane-bundle";

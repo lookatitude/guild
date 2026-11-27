@@ -16,7 +16,6 @@ import * as path from "path";
 import { execFileSync } from "child_process";
 import { durableGuildDir } from "../../lib/state/ensure-storage-layout";
 import { knowledgeIndexesDir, knowledgeIndexReadPath } from "../../../src/domains/state";
-import { adoptLegacyKnowledgeIndexes } from "../../../src/domains/knowledge/legacy-adoption";
 import {
   computeSourceBasis,
   readContainedFile,
@@ -125,9 +124,6 @@ export function guildPaths(cwd: string): GuildPaths {
   const repoRoot = resolveMainRepoRoot(cwd);
   const sourceRoot = resolveSourceWorktreeRoot(cwd);
   const guildDir = durableGuildDir(repoRoot);
-  // Layout 2: adopt a legacy `.guild/indexes` whole, so every stage reads and
-  // extends the one cache store (never a single file of it).
-  adoptLegacyKnowledgeIndexes(repoRoot);
   const indexesDir = knowledgeIndexesDir(repoRoot);
   const runsDir = path.join(guildDir, "runs");
   return {
