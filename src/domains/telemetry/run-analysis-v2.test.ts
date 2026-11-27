@@ -427,22 +427,17 @@ describe("AT26 · cache compatibility", () => {
       return;
     }
     const ex = JSON.parse(fs.readFileSync(path.join(A02_ROOT, "fixtures", "examples.json"), "utf8"));
-    // Nested metric series (T04) are not verified by this reader, so it refuses them rather than pass them unchecked.
-    expect(validateRunAnalysisV2(ex["run-analysis"]).ok).toBe(false);
-    expect(validateRunComparisonV2(ex["run-comparison"]).ok).toBe(false);
-    expect(validateRunAnalysisV2({ ...ex["run-analysis"], metrics: [] })).toEqual({ ok: true });
-    expect(validateRunComparisonV2({ ...ex["run-comparison"], metrics: [] })).toEqual({ ok: true });
-    // Top-level regression cases: with series stripped, the verdict must match the frozen expectation.
+    // Nested metric series are verified with the T04 C9 rules.
+    expect(validateRunAnalysisV2(ex["run-analysis"])).toEqual({ ok: true });
+    expect(validateRunComparisonV2(ex["run-comparison"])).toEqual({ ok: true });
+    // Every frozen run-analysis/run-comparison regression keeps its expected verdict, nested series included.
     const reg = JSON.parse(fs.readFileSync(path.join(A02_ROOT, "fixtures", "regressions.json"), "utf8")).cases as any[];
-    const nested = /metrics|nested|P11|C3-nested|G3-F3/;
     let checked = 0;
     for (const r of reg) {
       if (r.schema !== "run-analysis" && r.schema !== "run-comparison") continue;
       const validate = r.schema === "run-analysis" ? validateRunAnalysisV2 : validateRunComparisonV2;
-      expect(`${r.id}:${validate(r.instance).ok}`).toBe(`${r.id}:false`);
-      if (nested.test(r.id)) continue;
       checked++;
-      expect(`${r.id}:${validate({ ...r.instance, metrics: [] }).ok}`).toBe(`${r.id}:${r.expected_valid}`);
+      expect(`${r.id}:${validate(r.instance).ok}`).toBe(`${r.id}:${r.expected_valid}`);
     }
     expect(checked).toBeGreaterThanOrEqual(10);
   });
