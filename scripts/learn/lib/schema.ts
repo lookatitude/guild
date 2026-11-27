@@ -1320,11 +1320,16 @@ export function isKnowledgeTierRecord(x: unknown): x is KnowledgeTierRecord {
 
 /**
  * The edge type validateGraphV2 writes for an input edge type: lower-cased, a v1
- * alias resolved unless the type is already v2-native, missing -> depends_on.
- * Keeps an input edge's provenance key equal to its validated form.
+ * alias resolved unless the type is already v2-native, then any non-string or
+ * empty result -> depends_on. Mirrors sanitize -> alias (`in`, so inherited keys
+ * such as "constructor" resolve too) -> autoFix, so an input edge's provenance
+ * key equals its validated form; J12 checks it against validateGraphV2.
  */
 export function normalizeEdgeTypeV2(type: unknown): string {
-  if (typeof type !== "string" || type === "") return "depends_on";
-  const t = type.toLowerCase();
-  return !EDGE_TYPES_V2.has(t) && t in EDGE_TYPE_ALIASES ? EDGE_TYPE_ALIASES[t] : t;
+  const t: unknown = typeof type === "string" ? type.toLowerCase() : type;
+  const mapped: unknown =
+    typeof t === "string" && !EDGE_TYPES_V2.has(t) && t in EDGE_TYPE_ALIASES
+      ? (EDGE_TYPE_ALIASES as Record<string, unknown>)[t]
+      : t;
+  return typeof mapped === "string" && mapped !== "" ? mapped : "depends_on";
 }

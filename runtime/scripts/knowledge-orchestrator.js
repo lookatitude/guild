@@ -4518,9 +4518,9 @@ function isKnowledgeTierRecord(x) {
   return !!r && typeof r === "object" && Array.isArray(r.node_ids) && r.node_ids.every((id2) => typeof id2 === "string") && Array.isArray(r.edges) && r.edges.every((e) => Array.isArray(e) && e.length === 3 && e.every((s) => typeof s === "string"));
 }
 function normalizeEdgeTypeV2(type) {
-  if (typeof type !== "string" || type === "") return "depends_on";
-  const t = type.toLowerCase();
-  return !EDGE_TYPES_V2.has(t) && t in EDGE_TYPE_ALIASES ? EDGE_TYPE_ALIASES[t] : t;
+  const t = typeof type === "string" ? type.toLowerCase() : type;
+  const mapped = typeof t === "string" && !EDGE_TYPES_V2.has(t) && t in EDGE_TYPE_ALIASES ? EDGE_TYPE_ALIASES[t] : t;
+  return typeof mapped === "string" && mapped !== "" ? mapped : "depends_on";
 }
 var fs4, path5, crypto3, NODE_TYPES, NODE_TYPES_V2, EDGE_TYPES, EDGE_TYPES_V2, NODE_CATEGORIES, KNOWLEDGE_CONFIG_DEFAULTS, DIRECTIONS, CONFIDENCE, NODE_TYPE_ALIASES, EDGE_TYPE_ALIASES, DIRECTION_ALIASES, KNOWLEDGE_NODE_TYPES_V2;
 var init_schema = __esm({

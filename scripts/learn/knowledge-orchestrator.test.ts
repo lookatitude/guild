@@ -39,7 +39,7 @@ import type {
   ProposeClaimsAndEntitiesFn,
 } from "./content-analyze";
 import type { ClassifyPageFn } from "./wiki-index";
-import { validateGraphV2 } from "./lib/schema";
+import { validateGraphV2, normalizeEdgeTypeV2, EDGE_TYPE_ALIASES, EDGE_TYPES_V2 } from "./lib/schema";
 import type { ProposeTaxonomyFn } from "./taxonomy-build";
 import type { ConfirmCrossLinksFn } from "./cross-link";
 
@@ -1339,5 +1339,37 @@ describe("J — #317: project identity and structure survive finalize", () => {
     const record = { node_ids: ["topic:x"], edges: [["topic:x", "file:a.ts", "evidenced_by"]] };
     expect(validateGraphV2({ ...g, knowledge_tier: record }, {}).data?.knowledge_tier).toEqual(record);
     expect(validateGraphV2({ ...g, knowledge_tier: { node_ids: [1], edges: [] } }, {}).data?.knowledge_tier).toBeUndefined();
+  });
+
+  test("J12: normalizeEdgeTypeV2 agrees with the type validateGraphV2 writes (codex r3)", () => {
+    const types: unknown[] = [
+      ...Object.keys(EDGE_TYPE_ALIASES),
+      ...Object.keys(EDGE_TYPE_ALIASES).map((t) => t.toUpperCase()),
+      ...EDGE_TYPES_V2,
+      "constructor", "__proto__", "toString", "hasOwnProperty", "Related", "", undefined, 7,
+    ];
+    const nodes = [
+      { id: "file:a.ts", type: "file", name: "a.ts", source_refs: ["a.ts"], confidence: "high" },
+      { id: "file:b.ts", type: "file", name: "b.ts", source_refs: ["b.ts"], confidence: "high" },
+    ];
+    const layers = [{ id: "layer:core", name: "Core", description: "", nodeIds: ["file:a.ts", "file:b.ts"] }];
+    for (const type of types) {
+      const out = validateGraphV2(
+        {
+          version: "guild.knowledge_graph.v2",
+          kind: "knowledge",
+          generated_from_commit: "unknown",
+          project: { name: "p", description: "" },
+          nodes,
+          edges: [{ source: "file:a.ts", target: "file:b.ts", type, direction: "out", weight: 1 }],
+          layers,
+          tour: [],
+        },
+        { repoRoot: os.tmpdir() }
+      );
+      const written = out.data?.edges[0]?.type;
+      // A type the validator drops leaves no edge to compare; otherwise the two must agree.
+      if (written !== undefined) expect([String(type), normalizeEdgeTypeV2(type)]).toEqual([String(type), written]);
+    }
   });
 });
