@@ -141,6 +141,8 @@ export interface CodexPluginJson {
   skills: string;
   /** Codex hook manifest for the app/CLI prompt bridge. */
   hooks: string;
+  /** Stdio MCP servers in the cwd "." + plugin-relative form (issue #115). Absent when none. */
+  mcpServers?: Record<string, CodexGitInstallMcpEntry>;
   interface: {
     displayName: string;
     shortDescription: string;
@@ -369,7 +371,7 @@ function degradedCommandNames(
  * GuildPluginManifest.
  *
  * Codex capabilities:
- *  - Supports stdio MCP; HTTP MCP is unsupported → flagged in _unsupported.
+ *  - Supports stdio MCP (declared with cwd "."; issue #115); HTTP MCP is not representable and is omitted.
  *  - No native slash-command .md format; commands are routed through a
  *    UserPromptSubmit bridge hook when the host submits `/guild...` as text.
  *  - Agents have no direct Codex equivalent; flagged if present.
@@ -412,6 +414,10 @@ export function renderCodexPluginJson(
   if (manifest.author !== undefined) result.author = manifest.author;
   if (manifest.license !== undefined) result.license = manifest.license;
   if (manifest.keywords && manifest.keywords.length > 0) result.keywords = manifest.keywords;
+  // Issue #115: the rendered package ships runtime/guild-mcp.js at its root, so the
+  // same relative-cwd form the git-install manifest uses starts the servers here too.
+  const mcpServers = renderCodexMcpServers(manifest);
+  if (Object.keys(mcpServers).length > 0) result.mcpServers = mcpServers;
 
   return result;
 }
@@ -561,6 +567,64 @@ const CLAUDE_PLUGIN_ROOT_TOKEN = "${CLAUDE_PLUGIN_ROOT}/";
 const NO_CWD_FALLBACK_FLAG = "--no-cwd-fallback";
 
 /**
+ * Shared by the git-install manifest and the rendered Codex package: every stdio
+ * server as `cwd: "."` + plugin-relative args + `--no-cwd-fallback` (see
+ * renderCodexGitInstallManifest for the measured rationale). Throws on an arg it
+ * cannot make plugin-relative.
+ */
+function renderCodexMcpServers(manifest: GuildPluginManifest): Record<string, CodexGitInstallMcpEntry> {
+  const mcpServers: Record<string, CodexGitInstallMcpEntry> = {};
+  for (const s of manifest.mcpServers ?? []) {
+    // Only stdio servers are launched by path; an http server has no cwd problem
+    // and no command to resolve, so it is not representable here.
+    if (s.transport !== "stdio" || !s.command) continue;
+    const args = (s.args ?? []).map((a) =>
+      a.startsWith(CLAUDE_PLUGIN_ROOT_TOKEN) ? a.slice(CLAUDE_PLUGIN_ROOT_TOKEN.length) : a
+    );
+    // A path we could not make plugin-relative would resolve against the wrong
+    // root at runtime — refuse rather than ship a silently broken declaration.
+    // Gate round-2 finding: rejecting only a leading "/" and "${…}" let through
+    // `../outside`, `./x`, and Windows absolute/UNC forms while still claiming
+    // every arg was plugin-relative. Check every escape shape after normalizing.
+    const unresolvable = args.find((a) => {
+      if (a.includes("${")) return true; // unexpanded placeholder
+      // Rooted on EITHER platform. posix catches "/x"; win32 catches "C:\\x", "C:/x",
+      // UNC "\\\\server\\share", AND the root-relative "\\x" form a hand-rolled
+      // two-backslash check missed (gate r3: `\rooted.js` is win32-absolute).
+      if (path.posix.isAbsolute(a) || path.win32.isAbsolute(a)) return true;
+      // Only ESCAPING traversal is unsafe. `./server.js` and internal
+      // normalization like `a/../server.js` both resolve fine beneath the
+      // declared cwd — verified by launching `node ./mcp-servers/.../index.js`
+      // from cwd ".". (An earlier revision rejected these on the strength of the
+      // NO-cwd experiment, which is a different configuration; gate r4.)
+      const norm = path.posix.normalize(a.replace(/\\/g, "/"));
+      if (norm === ".." || norm.startsWith("../")) return true;
+      return false;
+    });
+    if (unresolvable !== undefined) {
+      throw new Error(
+        `renderCodexGitInstallManifest: MCP server "${s.id}" has an arg that cannot be made ` +
+          `plugin-relative (${unresolvable}). Codex resolves relative args against cwd ".", so ` +
+          `every path arg must be relative to the plugin root.`
+      );
+    }
+    // `--no-cwd-fallback` is REQUIRED alongside `cwd: "."`: that cwd is the plugin
+    // payload root, and Codex passes a scrubbed env (measured: no PWD, no CODEX_*),
+    // so without the flag each server would default its data root to Guild's OWN
+    // bundled `.guild/` inside the install cache and serve Guild's self-build wiki
+    // and runs to the consumer. With it, the servers fail closed and demand an
+    // explicit per-call `cwd`. The two settings are one unit — never emit one alone.
+    mcpServers[s.id] = {
+      type: "stdio",
+      command: s.command,
+      args: [...args, NO_CWD_FALLBACK_FLAG],
+      cwd: ".",
+    };
+  }
+  return mcpServers;
+}
+
+/**
  * Render the repo-root Codex manifest consumed by a Codex GIT-REF install
  * (`codex plugin marketplace add lookatitude/guild --ref <ref>`), which
  * materializes THE REPO as the plugin payload — not a rendered `dist/` tree.
@@ -611,54 +675,7 @@ export function renderCodexGitInstallManifest(
   manifest: GuildPluginManifest,
   _opts: RenderOptions
 ): CodexGitInstallJson {
-  const mcpServers: Record<string, CodexGitInstallMcpEntry> = {};
-  for (const s of manifest.mcpServers ?? []) {
-    // Only stdio servers are launched by path; an http server has no cwd problem
-    // and no command to resolve, so it is not representable here.
-    if (s.transport !== "stdio" || !s.command) continue;
-    const args = (s.args ?? []).map((a) =>
-      a.startsWith(CLAUDE_PLUGIN_ROOT_TOKEN) ? a.slice(CLAUDE_PLUGIN_ROOT_TOKEN.length) : a
-    );
-    // A path we could not make plugin-relative would resolve against the wrong
-    // root at runtime — refuse rather than ship a silently broken declaration.
-    // Gate round-2 finding: rejecting only a leading "/" and "${…}" let through
-    // `../outside`, `./x`, and Windows absolute/UNC forms while still claiming
-    // every arg was plugin-relative. Check every escape shape after normalizing.
-    const unresolvable = args.find((a) => {
-      if (a.includes("${")) return true; // unexpanded placeholder
-      // Rooted on EITHER platform. posix catches "/x"; win32 catches "C:\\x", "C:/x",
-      // UNC "\\\\server\\share", AND the root-relative "\\x" form a hand-rolled
-      // two-backslash check missed (gate r3: `\rooted.js` is win32-absolute).
-      if (path.posix.isAbsolute(a) || path.win32.isAbsolute(a)) return true;
-      // Only ESCAPING traversal is unsafe. `./server.js` and internal
-      // normalization like `a/../server.js` both resolve fine beneath the
-      // declared cwd — verified by launching `node ./mcp-servers/.../index.js`
-      // from cwd ".". (An earlier revision rejected these on the strength of the
-      // NO-cwd experiment, which is a different configuration; gate r4.)
-      const norm = path.posix.normalize(a.replace(/\\/g, "/"));
-      if (norm === ".." || norm.startsWith("../")) return true;
-      return false;
-    });
-    if (unresolvable !== undefined) {
-      throw new Error(
-        `renderCodexGitInstallManifest: MCP server "${s.id}" has an arg that cannot be made ` +
-          `plugin-relative (${unresolvable}). Codex resolves relative args against cwd ".", so ` +
-          `every path arg must be relative to the plugin root.`
-      );
-    }
-    // `--no-cwd-fallback` is REQUIRED alongside `cwd: "."`: that cwd is the plugin
-    // payload root, and Codex passes a scrubbed env (measured: no PWD, no CODEX_*),
-    // so without the flag each server would default its data root to Guild's OWN
-    // bundled `.guild/` inside the install cache and serve Guild's self-build wiki
-    // and runs to the consumer. With it, the servers fail closed and demand an
-    // explicit per-call `cwd`. The two settings are one unit — never emit one alone.
-    mcpServers[s.id] = {
-      type: "stdio",
-      command: s.command,
-      args: [...args, NO_CWD_FALLBACK_FLAG],
-      cwd: ".",
-    };
-  }
+  const mcpServers = renderCodexMcpServers(manifest);
   return {
     name: manifest.name,
     version: manifest.version,

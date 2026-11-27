@@ -176,6 +176,7 @@ describe("renderCodexPluginJson — happy path", () => {
     const out = renderCodexPluginJson(minimalManifest, opts);
     expect("schema_version" in out).toBe(false);
     expect("commands" in out).toBe(false);
+    // No stdio servers in the manifest -> no map (nothing to declare).
     expect("mcpServers" in out).toBe(false);
     expect("_unsupported" in out).toBe(false);
     expect("_rendered_at" in out).toBe(false);
@@ -208,6 +209,18 @@ describe("renderCodexPluginJson — happy path", () => {
     expect(out.hooks).toBe("./hooks/codex-hooks.json");
   });
 
+  it("declares stdio MCP servers in the cwd '.' + plugin-relative form (issue #115)", () => {
+    const out = renderCodexPluginJson(fullManifest, opts) as unknown as {
+      mcpServers: Record<string, { type: string; command: string; args: string[]; cwd: string }>;
+    };
+    expect(Object.keys(out.mcpServers).sort()).toEqual(["guild-memory", "guild-telemetry"]);
+    for (const e of Object.values(out.mcpServers)) {
+      expect(e.cwd).toBe(".");
+      expect(e.args.at(-1)).toBe("--no-cwd-fallback");
+      expect(e.args.join(" ")).not.toContain("${");
+    }
+  });
+
   it("renders live Codex interface metadata", () => {
     const out = renderCodexPluginJson(fullManifest, opts);
     expect(out.interface.displayName).toBe("Guild Stack");
@@ -230,7 +243,7 @@ describe("renderCodexPluginJson — render-or-degrade", () => {
     };
     const out = renderCodexPluginJson(manifest, opts);
     expect("commands" in out).toBe(false);
-    expect("mcpServers" in out).toBe(false);
+    expect("mcpServers" in out).toBe(false); // http-only: not representable
     expect("agents" in out).toBe(false);
     expect(out.hooks).toBe("./hooks/codex-hooks.json");
     expect(out.skills).toBe("./.agents/skills/");
