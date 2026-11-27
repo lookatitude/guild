@@ -20012,8 +20012,9 @@ function makeFingerprint(raw, salt) {
 ${raw}`, "utf8").digest("hex");
 }
 function loadOrCreateFingerprintSalt(root) {
-  const p = path33.join(durableGuildDir(root), "indexes", "model-catalog", ".fp-salt");
-  if (fsReal.existsSync(p)) return fsReal.readFileSync(p, "utf8").trim();
+  const p = path33.join(knowledgeIndexesDir(root), "model-catalog", ".fp-salt");
+  const existing = knowledgeIndexReadPath(root, "model-catalog", ".fp-salt");
+  if (fsReal.existsSync(existing)) return fsReal.readFileSync(existing, "utf8").trim();
   const salt = crypto8.randomBytes(32).toString("hex");
   fsReal.mkdirSync(path33.dirname(p), { recursive: true });
   fsReal.writeFileSync(p, salt + "\n", { encoding: "utf8", mode: 384 });
@@ -22931,11 +22932,7 @@ function isContainedIn(candidatePath, baseDir) {
 function initiativeIsWorkspaceScoped(workspaceRoot2, id3) {
   try {
     if (!isValidInitiativeId(id3)) return false;
-    const registryPath = path37.join(
-      durableGuildDir(workspaceRoot2),
-      "indexes",
-      "initiatives-registry.yaml"
-    );
+    const registryPath = knowledgeIndexReadPath(workspaceRoot2, "initiatives-registry.yaml");
     if (fs30.existsSync(registryPath)) {
       try {
         const raw = fs30.readFileSync(registryPath, "utf8");
@@ -52386,6 +52383,7 @@ if (isProcessEntry()) {
 }
 
 // scripts/registry-rollup.ts
+init_state();
 var yaml5 = require_js_yaml();
 var REGISTRY_SCHEMA = "guild.initiatives_registry.v1";
 function listDirs(dir) {
@@ -52430,9 +52428,15 @@ function notesToScalar(v) {
   }
   return void 0;
 }
+function registryFile(guildDir, mode) {
+  const name = "initiatives-registry.yaml";
+  if (path83.basename(guildDir) !== ".guild") return path83.join(guildDir, "indexes", name);
+  const root = path83.dirname(guildDir);
+  return mode === "read" ? knowledgeIndexReadPath(root, name) : path83.join(knowledgeIndexesDir(root), name);
+}
 function loadExistingEntries(guildDir) {
   const out = /* @__PURE__ */ new Map();
-  const p = path83.join(guildDir, "indexes", "initiatives-registry.yaml");
+  const p = registryFile(guildDir, "read");
   if (!fs68.existsSync(p)) return out;
   try {
     const parsed = yaml5.load(fs68.readFileSync(p, "utf8"));
@@ -52538,7 +52542,7 @@ function buildInitiativesRegistry(guildDir) {
   return { schema_version: REGISTRY_SCHEMA, built_from: ["initiatives/*", "runs/**/provenance.json"], initiatives: entries };
 }
 function writeInitiativesRegistry(guildDir, registry) {
-  const out = path83.join(guildDir, "indexes", "initiatives-registry.yaml");
+  const out = registryFile(guildDir, "write");
   fs68.mkdirSync(path83.dirname(out), { recursive: true });
   fs68.writeFileSync(out, yaml5.dump(registry), "utf8");
   return out;

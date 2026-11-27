@@ -8915,12 +8915,12 @@ function stackId(value) {
     throw new StackError("invalid_id", "Invalid source or entity identity");
   return value;
 }
-function stackContained(root, relative23, missing = false) {
-  if (!relative23 || path21.isAbsolute(relative23) || /[\\%\x00-\x1f]/.test(relative23) || relative23.split("/").some((x) => !x || x === "." || x === ".."))
+function stackContained(root, relative24, missing = false) {
+  if (!relative24 || path21.isAbsolute(relative24) || /[\\%\x00-\x1f]/.test(relative24) || relative24.split("/").some((x) => !x || x === "." || x === ".."))
     throw new StackError("path_refused", "Invalid relative record path", 403);
-  const target = path21.join(root, ...relative23.split("/"));
+  const target = path21.join(root, ...relative24.split("/"));
   let current = root;
-  for (const part of relative23.split("/")) {
+  for (const part of relative24.split("/")) {
     current = path21.join(current, part);
     try {
       const st = fs17.lstatSync(current);
@@ -8939,9 +8939,9 @@ function stackContained(root, relative23, missing = false) {
     throw new StackError("path_refused", "Record escaped owning root", 403);
   return target;
 }
-function stackRead(root, relative23, optional = false) {
+function stackRead(root, relative24, optional = false) {
   try {
-    const p = stackContained(root, relative23);
+    const p = stackContained(root, relative24);
     const st = fs17.statSync(p);
     if (!st.isFile() || st.size > 1024 * 1024)
       throw new StackError(
@@ -9525,8 +9525,9 @@ function makeFingerprint(raw, salt) {
 ${raw}`, "utf8").digest("hex");
 }
 function loadOrCreateFingerprintSalt(root) {
-  const p = path23.join(durableGuildDir(root), "indexes", "model-catalog", ".fp-salt");
-  if (fsReal.existsSync(p)) return fsReal.readFileSync(p, "utf8").trim();
+  const p = path23.join(knowledgeIndexesDir(root), "model-catalog", ".fp-salt");
+  const existing = knowledgeIndexReadPath(root, "model-catalog", ".fp-salt");
+  if (fsReal.existsSync(existing)) return fsReal.readFileSync(existing, "utf8").trim();
   const salt = crypto6.randomBytes(32).toString("hex");
   fsReal.mkdirSync(path23.dirname(p), { recursive: true });
   fsReal.writeFileSync(p, salt + "\n", { encoding: "utf8", mode: 384 });
@@ -13354,11 +13355,7 @@ function isContainedIn(candidatePath, baseDir) {
 function initiativeIsWorkspaceScoped(workspaceRoot2, id3) {
   try {
     if (!isValidInitiativeId(id3)) return false;
-    const registryPath = path31.join(
-      durableGuildDir(workspaceRoot2),
-      "indexes",
-      "initiatives-registry.yaml"
-    );
+    const registryPath = knowledgeIndexReadPath(workspaceRoot2, "initiatives-registry.yaml");
     if (fs25.existsSync(registryPath)) {
       try {
         const raw = fs25.readFileSync(registryPath, "utf8");
@@ -55273,11 +55270,11 @@ function createManagedClaudeRuntime(input) {
     const storage = createGuildStorage(sourceRoot), privateBase = fs70.realpathSync(storage.root.state), stackRelative = "roots/" + storage.rootId + "/stack/";
     const same = (left, right) => stackCanonical(left) === stackCanonical(right);
     const hash3 = (value) => typeof value === "string" && /^sha256:[a-f0-9]{64}$/.test(value);
-    const read = (root, relative23, expected) => {
-      const file2 = stackContained(root, relative23), stat = fs70.statSync(file2);
+    const read = (root, relative24, expected) => {
+      const file2 = stackContained(root, relative24), stat = fs70.statSync(file2);
       if (!stat.isFile() || stat.size > 1048576 || expected !== void 0 && (!hash3(expected) || stackHash(fs70.readFileSync(file2)) !== expected)) throw new Error("Qualified evidence bytes changed or are unbounded");
       const bytes = fs70.readFileSync(file2, "utf8");
-      return /\.ya?ml$/.test(relative23) ? parseYaml(bytes) : JSON.parse(bytes);
+      return /\.ya?ml$/.test(relative24) ? parseYaml(bytes) : JSON.parse(bytes);
     };
     for (const proof of proofs) {
       if (!["run.start", "run.rerun"].includes(proof.operation) || !/^run-[0-9]{8}-[0-9]{6}-[a-z0-9][a-z0-9-]*$/.test(proof.run_id) || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(proof.attempt_id) || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(proof.operation_id) || !hash3(proof.preview_hash)) throw new Error("Qualified operation identity invalid");
@@ -55370,8 +55367,8 @@ function createManagedClaudeRuntime(input) {
 function loadManagedClaudeRuntime(sourceRoot, packageRoot, validate) {
   const storage = createGuildStorage(sourceRoot), base = storage.root.state;
   if (!fs70.existsSync(base)) return void 0;
-  const relative23 = "roots/" + storage.rootId + "/stack/managed/qualification.json";
-  const file = stackContained(fs70.realpathSync(base), relative23, true);
+  const relative24 = "roots/" + storage.rootId + "/stack/managed/qualification.json";
+  const file = stackContained(fs70.realpathSync(base), relative24, true);
   if (!fs70.existsSync(file)) return void 0;
   const proof = JSON.parse(fs70.readFileSync(file, "utf8"));
   if (proof.schema_version !== "guild.stack.managed_host_qualification.v1") throw new Error("Normal facade requires observed host qualification");

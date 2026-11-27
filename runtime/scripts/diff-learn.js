@@ -3830,6 +3830,34 @@ function knowledgeIndexReadPath(root, ...segments) {
   const legacy = path11.join(legacyIndexesDir(root), ...segments);
   return fs7.existsSync(legacy) ? legacy : primary;
 }
+var NOT_ADOPTED = /(^|[\\/])(lock|\.claim-[^\\/]*)($|[\\/])/;
+function adoptLegacyKnowledgeIndexes(root) {
+  const dest = knowledgeIndexesDir(root);
+  const legacy = legacyIndexesDir(root);
+  if (dest === legacy) return;
+  let names;
+  try {
+    names = fs7.readdirSync(legacy);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    const to = path11.join(dest, name);
+    if (fs7.existsSync(to)) continue;
+    const from = path11.join(legacy, name);
+    const tmp = path11.join(dest, `.adopt-${process.pid}-${name}`);
+    try {
+      fs7.mkdirSync(dest, { recursive: true });
+      fs7.cpSync(from, tmp, {
+        recursive: true,
+        filter: (src) => !NOT_ADOPTED.test(path11.relative(from, src))
+      });
+      fs7.renameSync(tmp, to);
+    } catch {
+      fs7.rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+}
 
 // src/domains/state/index-migrate.ts
 var import_node_child_process = require("node:child_process");
@@ -5666,6 +5694,7 @@ function guildPaths(cwd) {
   const repoRoot = resolveMainRepoRoot(cwd);
   const sourceRoot = resolveSourceWorktreeRoot(cwd);
   const guildDir = durableGuildDir(repoRoot);
+  adoptLegacyKnowledgeIndexes(repoRoot);
   const indexesDir = knowledgeIndexesDir(repoRoot);
   const runsDir = path18.join(guildDir, "runs");
   return {
@@ -5680,14 +5709,7 @@ function guildPaths(cwd) {
     knowledgeRecall: path18.join(indexesDir, "knowledge-recall.json"),
     fingerprint: path18.join(indexesDir, "understand-fingerprint.json"),
     partialGraph: path18.join(indexesDir, "understand-partial-graph.json"),
-    readPath: (p) => knowledgeIndexReadPath(repoRoot, path18.relative(indexesDir, p)),
-    seed: (p) => {
-      if (fs14.existsSync(p)) return;
-      const from = knowledgeIndexReadPath(repoRoot, path18.relative(indexesDir, p));
-      if (from === p || !fs14.existsSync(from)) return;
-      fs14.mkdirSync(path18.dirname(p), { recursive: true });
-      fs14.copyFileSync(from, p);
-    }
+    readPath: (p) => knowledgeIndexReadPath(repoRoot, path18.relative(indexesDir, p))
   };
 }
 function writeJson(filePath, data) {

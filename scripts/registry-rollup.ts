@@ -17,6 +17,7 @@ import * as path from "path";
 import { deriveInitiativeStatus, validateInitiativeManifest, type InitiativeAxes, type DerivedStatus, DERIVED_STATUS } from "./lib/initiative";
 import { durableGuildDir } from "./lib/state/storage";
 import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
+import { knowledgeIndexReadPath, knowledgeIndexesDir } from "../src/domains/state";
 
 const yaml = require("js-yaml") as { load: (s: string) => unknown; dump: (o: unknown) => string };
 
@@ -99,6 +100,18 @@ function notesToScalar(v: unknown): string | undefined {
 }
 
 /**
+ * The registry file for a `.guild` dir: the layout's index dir (platform cache root on
+ * layout 2, `.guild/indexes` on layout 1) with a legacy read fallback. A dir that is
+ * not a `.guild` (fixtures) keeps the literal `<dir>/indexes` home.
+ */
+function registryFile(guildDir: string, mode: "read" | "write"): string {
+  const name = "initiatives-registry.yaml";
+  if (path.basename(guildDir) !== ".guild") return path.join(guildDir, "indexes", name);
+  const root = path.dirname(guildDir);
+  return mode === "read" ? knowledgeIndexReadPath(root, name) : path.join(knowledgeIndexesDir(root), name);
+}
+
+/**
  * Load the existing on-disk registry entries (top-level `initiatives[]`) so a
  * rebuild PRESERVES cached fields that are not supplied by a validated
  * manifest, retained run linkage, and entries that have no manifest. Returns
@@ -106,7 +119,7 @@ function notesToScalar(v: unknown): string | undefined {
  */
 function loadExistingEntries(guildDir: string): Map<string, RegistryEntry> {
   const out = new Map<string, RegistryEntry>();
-  const p = path.join(guildDir, "indexes", "initiatives-registry.yaml");
+  const p = registryFile(guildDir, "read");
   if (!fs.existsSync(p)) return out;
   try {
     const parsed = yaml.load(fs.readFileSync(p, "utf8")) as Record<string, unknown> | null;
@@ -257,7 +270,7 @@ export function buildInitiativesRegistry(guildDir: string): InitiativesRegistry 
  * `initiatives_registry:` wrapper (IN-1).
  */
 export function writeInitiativesRegistry(guildDir: string, registry: InitiativesRegistry): string {
-  const out = path.join(guildDir, "indexes", "initiatives-registry.yaml");
+  const out = registryFile(guildDir, "write");
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, yaml.dump(registry), "utf8");
   return out;

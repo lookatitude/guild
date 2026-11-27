@@ -87,3 +87,41 @@ export function knowledgeIndexReadPath(root: string, ...segments: string[]): str
   const legacy = path.join(legacyIndexesDir(root), ...segments);
   return fs.existsSync(legacy) ? legacy : primary;
 }
+
+/** Publication staging that must not travel: a live peer's lock and unclaimed successor staging. */
+const NOT_ADOPTED = /(^|[\\/])(lock|\.claim-[^\\/]*)($|[\\/])/;
+
+/**
+ * Layout 2 only: copy a legacy `.guild/indexes` into the (absent) cache entries as
+ * ONE unit per top-level entry, so a K03 publication (generations, CURRENT, pins,
+ * successors, exports) never lands half-migrated. An entry already in the cache is
+ * kept; the legacy tree is read, never written, and stays until the upgrade's
+ * `caches-out` removes it. Idempotent and race-safe (copy to a sibling, rename in).
+ */
+export function adoptLegacyKnowledgeIndexes(root: string): void {
+  const dest = knowledgeIndexesDir(root);
+  const legacy = legacyIndexesDir(root);
+  if (dest === legacy) return;
+  let names: string[];
+  try {
+    names = fs.readdirSync(legacy);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    const to = path.join(dest, name);
+    if (fs.existsSync(to)) continue;
+    const from = path.join(legacy, name);
+    const tmp = path.join(dest, `.adopt-${process.pid}-${name}`);
+    try {
+      fs.mkdirSync(dest, { recursive: true });
+      fs.cpSync(from, tmp, {
+        recursive: true,
+        filter: (src) => !NOT_ADOPTED.test(path.relative(from, src)),
+      });
+      fs.renameSync(tmp, to);
+    } catch {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+}

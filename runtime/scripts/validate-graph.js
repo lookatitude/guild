@@ -3838,19 +3838,39 @@ function knowledgeIndexesDir(root) {
   assertClassPlacement("cache", abs, roots.durable);
   return abs;
 }
-function knowledgeIndexesReadDir(root, probe = "publication") {
-  const primary = knowledgeIndexesDir(root);
-  const legacy = legacyIndexesDir(root);
-  const probes = typeof probe === "string" ? [probe] : probe;
-  const has = (dir) => probes.some((n) => fs7.existsSync(path11.join(dir, n)));
-  if (primary === legacy || has(primary)) return primary;
-  return has(legacy) ? legacy : primary;
-}
 function knowledgeIndexReadPath(root, ...segments) {
   const primary = path11.join(knowledgeIndexesDir(root), ...segments);
   if (fs7.existsSync(primary)) return primary;
   const legacy = path11.join(legacyIndexesDir(root), ...segments);
   return fs7.existsSync(legacy) ? legacy : primary;
+}
+var NOT_ADOPTED = /(^|[\\/])(lock|\.claim-[^\\/]*)($|[\\/])/;
+function adoptLegacyKnowledgeIndexes(root) {
+  const dest = knowledgeIndexesDir(root);
+  const legacy = legacyIndexesDir(root);
+  if (dest === legacy) return;
+  let names;
+  try {
+    names = fs7.readdirSync(legacy);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    const to = path11.join(dest, name);
+    if (fs7.existsSync(to)) continue;
+    const from = path11.join(legacy, name);
+    const tmp = path11.join(dest, `.adopt-${process.pid}-${name}`);
+    try {
+      fs7.mkdirSync(dest, { recursive: true });
+      fs7.cpSync(from, tmp, {
+        recursive: true,
+        filter: (src) => !NOT_ADOPTED.test(path11.relative(from, src))
+      });
+      fs7.renameSync(tmp, to);
+    } catch {
+      fs7.rmSync(tmp, { recursive: true, force: true });
+    }
+  }
 }
 
 // src/domains/state/index-migrate.ts
@@ -6126,6 +6146,7 @@ function guildPaths(cwd) {
   const repoRoot = resolveMainRepoRoot(cwd);
   const sourceRoot = resolveSourceWorktreeRoot(cwd);
   const guildDir = durableGuildDir(repoRoot);
+  adoptLegacyKnowledgeIndexes(repoRoot);
   const indexesDir = knowledgeIndexesDir(repoRoot);
   const runsDir = path20.join(guildDir, "runs");
   return {
@@ -6140,14 +6161,7 @@ function guildPaths(cwd) {
     knowledgeRecall: path20.join(indexesDir, "knowledge-recall.json"),
     fingerprint: path20.join(indexesDir, "understand-fingerprint.json"),
     partialGraph: path20.join(indexesDir, "understand-partial-graph.json"),
-    readPath: (p) => knowledgeIndexReadPath(repoRoot, path20.relative(indexesDir, p)),
-    seed: (p) => {
-      if (fs16.existsSync(p)) return;
-      const from = knowledgeIndexReadPath(repoRoot, path20.relative(indexesDir, p));
-      if (from === p || !fs16.existsSync(from)) return;
-      fs16.mkdirSync(path20.dirname(p), { recursive: true });
-      fs16.copyFileSync(from, p);
-    }
+    readPath: (p) => knowledgeIndexReadPath(repoRoot, path20.relative(indexesDir, p))
   };
 }
 var SCAN_MAX_FILES = 2e4;
@@ -8269,10 +8283,12 @@ function baseFrom(pinned, t) {
   }
   return { pinned: null, graph, recall: null, bypassed_export: false };
 }
+function adoptLegacy(t) {
+  if (t.indexesDir === knowledgeIndexesDir(t.repoRoot)) adoptLegacyKnowledgeIndexes(t.repoRoot);
+}
 function readLearnBase(t) {
-  const from = t.indexesDir === knowledgeIndexesDir(t.repoRoot) ? knowledgeIndexesReadDir(t.repoRoot, ["publication", GRAPH_ARTIFACT]) : t.indexesDir;
-  const rt = from === t.indexesDir ? t : { ...t, indexesDir: from };
-  return baseFrom(readPublication(rt.indexesDir), rt);
+  adoptLegacy(t);
+  return baseFrom(readPublication(t.indexesDir), t);
 }
 function jsonBytes(data) {
   return JSON.stringify(data, null, 2) + "\n";
@@ -8283,6 +8299,7 @@ function encode(artifacts) {
   return out;
 }
 function publishBuilt(t, opts) {
+  adoptLegacy(t);
   const basis = opts.basis;
   const ownerId = sourceWorktreeId(t.repoRoot);
   const rebase = opts.rebase;

@@ -16252,12 +16252,12 @@ function stackId(value) {
     throw new StackError("invalid_id", "Invalid source or entity identity");
   return value;
 }
-function stackContained(root, relative23, missing = false) {
-  if (!relative23 || path24.isAbsolute(relative23) || /[\\%\x00-\x1f]/.test(relative23) || relative23.split("/").some((x) => !x || x === "." || x === ".."))
+function stackContained(root, relative24, missing = false) {
+  if (!relative24 || path24.isAbsolute(relative24) || /[\\%\x00-\x1f]/.test(relative24) || relative24.split("/").some((x) => !x || x === "." || x === ".."))
     throw new StackError("path_refused", "Invalid relative record path", 403);
-  const target = path24.join(root, ...relative23.split("/"));
+  const target = path24.join(root, ...relative24.split("/"));
   let current = root;
-  for (const part of relative23.split("/")) {
+  for (const part of relative24.split("/")) {
     current = path24.join(current, part);
     try {
       const st = fs21.lstatSync(current);
@@ -16276,9 +16276,9 @@ function stackContained(root, relative23, missing = false) {
     throw new StackError("path_refused", "Record escaped owning root", 403);
   return target;
 }
-function stackRead(root, relative23, optional = false) {
+function stackRead(root, relative24, optional = false) {
   try {
-    const p = stackContained(root, relative23);
+    const p = stackContained(root, relative24);
     const st = fs21.statSync(p);
     if (!st.isFile() || st.size > 1024 * 1024)
       throw new StackError(
@@ -20333,8 +20333,9 @@ function makeFingerprint(raw, salt) {
 ${raw}`, "utf8").digest("hex");
 }
 function loadOrCreateFingerprintSalt(root) {
-  const p = path34.join(durableGuildDir(root), "indexes", "model-catalog", ".fp-salt");
-  if (fsReal.existsSync(p)) return fsReal.readFileSync(p, "utf8").trim();
+  const p = path34.join(knowledgeIndexesDir(root), "model-catalog", ".fp-salt");
+  const existing = knowledgeIndexReadPath(root, "model-catalog", ".fp-salt");
+  if (fsReal.existsSync(existing)) return fsReal.readFileSync(existing, "utf8").trim();
   const salt = crypto9.randomBytes(32).toString("hex");
   fsReal.mkdirSync(path34.dirname(p), { recursive: true });
   fsReal.writeFileSync(p, salt + "\n", { encoding: "utf8", mode: 384 });
@@ -23252,11 +23253,7 @@ function isContainedIn(candidatePath, baseDir) {
 function initiativeIsWorkspaceScoped(workspaceRoot2, id3) {
   try {
     if (!isValidInitiativeId(id3)) return false;
-    const registryPath = path38.join(
-      durableGuildDir(workspaceRoot2),
-      "indexes",
-      "initiatives-registry.yaml"
-    );
+    const registryPath = knowledgeIndexReadPath(workspaceRoot2, "initiatives-registry.yaml");
     if (fs32.existsSync(registryPath)) {
       try {
         const raw = fs32.readFileSync(registryPath, "utf8");
@@ -42603,9 +42600,9 @@ function createRunLifecycle(env) {
     materializeRunStart(plan) {
       const rootHint = env.__rootHint;
       if (!path80.isAbsolute(plan.root) || rootHint !== void 0 && plan.root !== rootHint) throw new Error("staged start belongs to another source");
-      const safeRelative = (relative23) => {
-        if (typeof relative23 !== "string" || !relative23 || path80.isAbsolute(relative23) || /[\\%\x00-\x1f]/.test(relative23) || relative23.split("/").some((v) => !v || v === "." || v === "..")) throw new Error("staged start path escaped source");
-        const abs = path80.join(plan.root, relative23);
+      const safeRelative = (relative24) => {
+        if (typeof relative24 !== "string" || !relative24 || path80.isAbsolute(relative24) || /[\\%\x00-\x1f]/.test(relative24) || relative24.split("/").some((v) => !v || v === "." || v === "..")) throw new Error("staged start path escaped source");
+        const abs = path80.join(plan.root, relative24);
         if (fsNode.existsSync(plan.root) && isRefused(checkContained(plan.root, abs, { policy: "physical" }))) throw new Error("staged start physical path refused");
         return abs;
       };

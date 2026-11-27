@@ -10,11 +10,13 @@ import * as os from "os";
 import * as path from "path";
 import { execFileSync } from "child_process";
 
-import { knowledgeIndexReadPath, knowledgeIndexesDir, knowledgeIndexesReadDir } from "../../../src/domains/state";
+import { guildRootId, knowledgeIndexesDir } from "../../../src/domains/state";
 import { ensureStorageLayout } from "../../lib/state/ensure-storage-layout";
 import { guildPaths } from "./paths";
-import { readLearnBase } from "./publish";
+import { publishLearnArtifacts, readLearnBase } from "./publish";
 import { writeKnowledgeLinks } from "../write-knowledge-links";
+import { writeInitiativesRegistry } from "../../registry-rollup";
+import { loadOrCreateFingerprintSalt } from "../../../src/domains/config";
 
 const TMP: string[] = [];
 const savedCache = process.env.GUILD_CACHE_HOME;
@@ -82,33 +84,66 @@ describe("layout 2 index home (#283)", () => {
     expect(r.linksPath).toBe(path.join(l1, ".guild", "indexes", "knowledge-recall.json"));
   });
 
-  test("a legacy .guild/indexes stays readable on layout 2 and is never written", () => {
-    const l2 = mkRoot(2);
-    const legacy = path.join(l2, ".guild", "indexes");
-    fs.mkdirSync(legacy, { recursive: true });
-    fs.writeFileSync(path.join(legacy, "knowledge-graph.json"), "{}\n");
-    expect(knowledgeIndexReadPath(l2, "knowledge-graph.json")).toBe(path.join(legacy, "knowledge-graph.json"));
-    const gp = guildPaths(l2);
-    expect(gp.readPath(gp.knowledgeGraph)).toBe(path.join(legacy, "knowledge-graph.json"));
-    // seed copies it forward; the legacy file is untouched
-    gp.seed(gp.knowledgeGraph);
-    expect(fs.readFileSync(gp.knowledgeGraph, "utf8")).toBe("{}\n");
-    expect(gp.readPath(gp.knowledgeGraph)).toBe(gp.knowledgeGraph);
-    // a publication writes to the cache; legacy gains no new entry
-    const before = fs.readdirSync(legacy).sort();
-    writeKnowledgeLinks({ graph, repoRoot: l2 });
-    expect(fs.readdirSync(legacy).sort()).toEqual(before);
-    expect(knowledgeIndexesReadDir(l2)).toBe(knowledgeIndexesDir(l2));
+  /** A real K03 legacy store: written on a layout 1 root, then the root is stamped layout 2. */
+  function legacyPopulatedLayout2(): string {
+    const r = mkRoot(1);
+    writeKnowledgeLinks({ graph, repoRoot: r });
+    expect(fs.existsSync(path.join(r, ".guild", "indexes", "publication", "CURRENT"))).toBe(true);
+    fs.writeFileSync(path.join(r, ".guild", "storage-layout.json"), JSON.stringify({ storage_layout_version: 2 }) + "\n");
+    return r;
+  }
+  const tree = (d: string): string[] => (fs.existsSync(d) ? (fs.readdirSync(d, { recursive: true }) as string[]).sort() : []);
+
+  test("F1: the first publish on a legacy-populated layout 2 root succeeds, keeps recall, and never writes legacy", () => {
+    const r = legacyPopulatedLayout2();
+    const legacyBefore = tree(path.join(r, ".guild", "indexes"));
+    const gp = guildPaths(r);
+    // a graph-only stage publishes on top of the adopted generation
+    const res = publishLearnArtifacts(
+      { indexesDir: gp.indexesDir, repoRoot: gp.repoRoot, sourceRoot: gp.sourceRoot },
+      { channels: ["structural_graph"], provenance: { structural_graph: "rebuilt" }, build: () => ({ "knowledge-graph.json": { nodes: [], edges: [], version: "x" } }) },
+    );
+    expect(res.status).toBe("published");
+    expect(tree(path.join(r, ".guild", "indexes"))).toEqual(legacyBefore);
+    expect(fs.existsSync(path.join(gp.indexesDir, "knowledge-recall.json"))).toBe(true);
   });
 
-  test("the publication base is read from a legacy store until a cache store exists", () => {
-    const l2 = mkRoot(2);
-    const legacy = path.join(l2, ".guild", "indexes");
-    fs.mkdirSync(legacy, { recursive: true });
-    fs.writeFileSync(path.join(legacy, "knowledge-graph.json"), JSON.stringify({ nodes: [], edges: [], version: "x" }));
-    const gp = guildPaths(l2);
+  test("F2: the whole legacy publication (pinned generation + recall layer) is adopted as one unit", () => {
+    const r = legacyPopulatedLayout2();
+    const gp = guildPaths(r);
     const base = readLearnBase({ indexesDir: gp.indexesDir, repoRoot: gp.repoRoot, sourceRoot: gp.sourceRoot });
-    expect(base.graph).not.toBeNull();
+    expect(base.pinned).not.toBeNull();
+    expect(base.recall).not.toBeNull();
+    expect(fs.existsSync(path.join(gp.indexesDir, "publication", "CURRENT"))).toBe(true);
+    expect(fs.existsSync(path.join(gp.indexesDir, "publication", "lock"))).toBe(false);
+  });
+
+  test("F3: a source edit after a legacy generation reports it stale, not current", () => {
+    const r = mkRoot(1);
+    const git = (...a: string[]) => execFileSync("git", ["-C", r, ...a], { stdio: "ignore" });
+    git("init", "-q");
+    fs.mkdirSync(path.join(r, "src"), { recursive: true });
+    fs.writeFileSync(path.join(r, "src", "a.ts"), "export function f() {\n  return 1;\n}\n");
+    git("add", "-A");
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "seed");
+    const run = (script: string, ...a: string[]) =>
+      execFileSync("npx", ["tsx", path.resolve(__dirname, "..", script), "--cwd", r, ...a], { encoding: "utf8", timeout: 90000, env: process.env, stdio: ["ignore", "pipe", "ignore"] });
+    run("extract-structural.ts");
+    fs.writeFileSync(path.join(r, ".guild", "storage-layout.json"), JSON.stringify({ storage_layout_version: 2 }) + "\n");
+    fs.writeFileSync(path.join(r, "src", "a.ts"), "export function f() {\n  return 2;\n}\nexport function g() {}\n");
+    const out = JSON.parse(run("staleness.ts", "--print")) as { publication?: { channels?: Array<{ state: string }>; error?: string } };
+    expect(out.publication?.error).toBeUndefined();
+    const states = (out.publication?.channels ?? []).map((c) => c.state);
+    expect(states.length).toBeGreaterThan(0);
+    expect(states).not.toContain("current_for_basis");
+  });
+
+  test("layout 1 root still writes .guild/indexes exactly as before", () => {
+    const l1 = mkRoot(1);
+    const r = writeKnowledgeLinks({ graph, repoRoot: l1 });
+    expect(r.provenancePath).toBe(path.join(l1, ".guild", "indexes", "knowledge-recall-provenance.json"));
+    expect(fs.existsSync(path.join(l1, ".guild", "indexes", "publication", "CURRENT"))).toBe(true);
+    expect(fs.existsSync(path.join(cacheHome, "roots", guildRootId(l1)))).toBe(false);
   });
 
   test("the extract-structural CLI on a layout 2 root publishes to the cache and leaves .guild/indexes absent", () => {
@@ -124,5 +159,27 @@ describe("layout 2 index home (#283)", () => {
     expect(fs.existsSync(path.join(l2, ".guild", "indexes"))).toBe(false);
     expect(fs.existsSync(path.join(knowledgeIndexesDir(l2), "knowledge-graph.json"))).toBe(true);
     expect(fs.existsSync(path.join(knowledgeIndexesDir(l2), "publication", "CURRENT"))).toBe(true);
+  });
+});
+
+describe("layout 2 derived indexes beyond learn (#283 F4)", () => {
+  test("registry rollup --write and the fingerprint salt write nothing under .guild/indexes", () => {
+    const l2 = mkRoot(2);
+    const reg = writeInitiativesRegistry(path.join(l2, ".guild"), { schema_version: "x", built_from: [], initiatives: [] } as never);
+    expect(reg.startsWith(cacheHome)).toBe(true);
+    loadOrCreateFingerprintSalt(l2);
+    expect(fs.existsSync(path.join(l2, ".guild", "indexes"))).toBe(false);
+  });
+
+  test("a legacy registry and salt stay readable on layout 2; layout 1 still writes .guild/indexes", () => {
+    const l2 = mkRoot(2);
+    const legacy = path.join(l2, ".guild", "indexes");
+    fs.mkdirSync(path.join(legacy, "model-catalog"), { recursive: true });
+    fs.writeFileSync(path.join(legacy, "model-catalog", ".fp-salt"), "oldsalt\n");
+    expect(loadOrCreateFingerprintSalt(l2)).toBe("oldsalt");
+    const l1 = mkRoot(1);
+    expect(writeInitiativesRegistry(path.join(l1, ".guild"), { schema_version: "x", built_from: [], initiatives: [] } as never)).toBe(
+      path.join(l1, ".guild", "indexes", "initiatives-registry.yaml"),
+    );
   });
 });

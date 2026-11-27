@@ -25,7 +25,7 @@ import { decisionPublicationRefs, type DecisionPublicationRefs, type EntityRef }
 import { readPublication, publicationSidecarPath, readPublicationRecord, type BasisRef, type ChannelRecord, type Sha256 } from "./publication";
 import { canonicalJson } from "./source-basis";
 import { sourceWorktreeId, type ChannelState } from "./source-basis";
-import { knowledgeIndexesDir } from "../state";
+import { adoptLegacyKnowledgeIndexes, knowledgeIndexesDir } from "../state";
 
 /** The hook never verifies: any hint makes the generation pending. */
 export const AFTER_EDIT_BUDGET: VerificationBudget = Object.freeze({ max_files: 0, max_bytes: 0 });
@@ -124,6 +124,7 @@ export function hintPublicationFromCwd(cwd: string, paths: readonly string[]): H
     const roots = worktreeRoots(cwd);
     if (!roots) return { recorded: false, generation: null, reason: "not a git worktree", paths: [] };
     // Write dir only: a hint appends a sidecar, and layout 2 writes nothing under `.guild/indexes`.
+    adoptLegacyKnowledgeIndexes(roots.owner);
     const indexesDir = knowledgeIndexesDir(roots.owner);
     const pub = path.join(indexesDir, "publication");
     if (!fs.existsSync(path.join(pub, "CURRENT")) && !fs.existsSync(path.join(pub, "successors", "root"))) {

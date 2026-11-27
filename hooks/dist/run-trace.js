@@ -20128,8 +20128,9 @@ function makeFingerprint(raw, salt) {
 ${raw}`, "utf8").digest("hex");
 }
 function loadOrCreateFingerprintSalt(root) {
-  const p = path37.join(durableGuildDir(root), "indexes", "model-catalog", ".fp-salt");
-  if (fsReal.existsSync(p)) return fsReal.readFileSync(p, "utf8").trim();
+  const p = path37.join(knowledgeIndexesDir(root), "model-catalog", ".fp-salt");
+  const existing = knowledgeIndexReadPath(root, "model-catalog", ".fp-salt");
+  if (fsReal.existsSync(existing)) return fsReal.readFileSync(existing, "utf8").trim();
   const salt = crypto9.randomBytes(32).toString("hex");
   fsReal.mkdirSync(path37.dirname(p), { recursive: true });
   fsReal.writeFileSync(p, salt + "\n", { encoding: "utf8", mode: 384 });
@@ -23047,11 +23048,7 @@ function isContainedIn(candidatePath, baseDir) {
 function initiativeIsWorkspaceScoped(workspaceRoot2, id3) {
   try {
     if (!isValidInitiativeId(id3)) return false;
-    const registryPath = path41.join(
-      durableGuildDir(workspaceRoot2),
-      "indexes",
-      "initiatives-registry.yaml"
-    );
+    const registryPath = knowledgeIndexReadPath(workspaceRoot2, "initiatives-registry.yaml");
     if (fs35.existsSync(registryPath)) {
       try {
         const raw = fs35.readFileSync(registryPath, "utf8");
@@ -42752,9 +42749,9 @@ function createRunLifecycle(env) {
     materializeRunStart(plan) {
       const rootHint = env.__rootHint;
       if (!path83.isAbsolute(plan.root) || rootHint !== void 0 && plan.root !== rootHint) throw new Error("staged start belongs to another source");
-      const safeRelative = (relative24) => {
-        if (typeof relative24 !== "string" || !relative24 || path83.isAbsolute(relative24) || /[\\%\x00-\x1f]/.test(relative24) || relative24.split("/").some((v) => !v || v === "." || v === "..")) throw new Error("staged start path escaped source");
-        const abs = path83.join(plan.root, relative24);
+      const safeRelative = (relative25) => {
+        if (typeof relative25 !== "string" || !relative25 || path83.isAbsolute(relative25) || /[\\%\x00-\x1f]/.test(relative25) || relative25.split("/").some((v) => !v || v === "." || v === "..")) throw new Error("staged start path escaped source");
+        const abs = path83.join(plan.root, relative25);
         if (fsNode.existsSync(plan.root) && isRefused(checkContained(plan.root, abs, { policy: "physical" }))) throw new Error("staged start physical path refused");
         return abs;
       };
@@ -55649,11 +55646,11 @@ function pathIsPhysicallyContained(parent, candidate) {
   }
 }
 function directoryChainIsPhysical(parent, candidate) {
-  const relative24 = path93.relative(parent, candidate);
-  if (relative24.length === 0 || relative24.startsWith("..") || path93.isAbsolute(relative24)) return false;
+  const relative25 = path93.relative(parent, candidate);
+  if (relative25.length === 0 || relative25.startsWith("..") || path93.isAbsolute(relative25)) return false;
   let current = parent;
   try {
-    for (const segment of relative24.split(path93.sep)) {
+    for (const segment of relative25.split(path93.sep)) {
       current = path93.join(current, segment);
       const stats = fs76.lstatSync(current);
       if (!stats.isDirectory() || stats.isSymbolicLink()) return false;

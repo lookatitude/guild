@@ -26,7 +26,7 @@ import {
 import { decisionPublicationRefs } from "../../../src/domains/knowledge/decision-propagation";
 import { basisDigest, sourceWorktreeId, type SourceBasis } from "../../../src/domains/knowledge/source-basis";
 import { deepFreeze } from "../../../src/domains/kernel/sealed-collections";
-import { knowledgeIndexesDir, knowledgeIndexesReadDir } from "../../../src/domains/state";
+import { adoptLegacyKnowledgeIndexes, knowledgeIndexesDir } from "../../../src/domains/state";
 import { durableGuildDir } from "../../lib/state/ensure-storage-layout";
 import { computeLearnSourceBasis } from "./paths";
 import { STRUCTURAL_EXTRACTOR, structuralSubset } from "./structural";
@@ -219,12 +219,18 @@ export function baseFrom(pinned: PinnedGeneration | null, t: LearnPublishTarget)
   return { pinned: null, graph, recall: null, bypassed_export: false };
 }
 
+/**
+ * Layout 2 with a legacy `.guild/indexes`: adopt the whole legacy store into the
+ * cache first, so the base IS the cache's own pointer (never a pointer from a tree
+ * the publication will not write to) and every layer survives.
+ */
+function adoptLegacy(t: LearnPublishTarget): void {
+  if (t.indexesDir === knowledgeIndexesDir(t.repoRoot)) adoptLegacyKnowledgeIndexes(t.repoRoot);
+}
+
 export function readLearnBase(t: LearnPublishTarget): LearnBase {
-  // Layout 2 with only a legacy `.guild/indexes` store: read it as the base (migration);
-  // the next publication is written to the cache root, never back into `.guild`.
-  const from = t.indexesDir === knowledgeIndexesDir(t.repoRoot) ? knowledgeIndexesReadDir(t.repoRoot, ["publication", GRAPH_ARTIFACT]) : t.indexesDir;
-  const rt = from === t.indexesDir ? t : { ...t, indexesDir: from };
-  return baseFrom(readPublication(rt.indexesDir), rt);
+  adoptLegacy(t);
+  return baseFrom(readPublication(t.indexesDir), t);
 }
 
 /** Same bytes `writeJson` produced, so exported files keep their shape. */
@@ -255,6 +261,7 @@ function publishBuilt(
   t: LearnPublishTarget,
   opts: { channels: LayerChannel[]; provenance?: LearnPublishOptions["provenance"]; provenanceReason?: LearnPublishOptions["provenanceReason"]; base: LearnBase; basis: SourceBasis; artifacts: Record<string, unknown>; rebase?: (b: LearnBase) => Record<string, unknown>; lockTimeoutMs?: number },
 ): PublishResult {
+  adoptLegacy(t);
   const basis = opts.basis;
   const ownerId = sourceWorktreeId(t.repoRoot);
   const rebase = opts.rebase;

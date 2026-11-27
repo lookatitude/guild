@@ -26,7 +26,7 @@ import * as path from "path";
 
 import { resolveAuthorHost, type HostFamily } from "./provider-detect";
 import type { RunBindingRecord } from "../lifecycle";
-import { durableGuildDir } from "../state";
+import { durableGuildDir, knowledgeIndexReadPath, knowledgeIndexesDir } from "../state";
 
 // ── Closed enums (§1) ────────────────────────────────────────────────────────
 
@@ -277,8 +277,9 @@ export function makeFingerprint(raw: string, salt: string): string {
  * never committed/shared). Created on first use with crypto randomness.
  */
 export function loadOrCreateFingerprintSalt(root: string): string {
-  const p = path.join(durableGuildDir(root), "indexes", "model-catalog", ".fp-salt");
-  if (fsReal.existsSync(p)) return fsReal.readFileSync(p, "utf8").trim();
+  const p = path.join(knowledgeIndexesDir(root), "model-catalog", ".fp-salt");
+  const existing = knowledgeIndexReadPath(root, "model-catalog", ".fp-salt");
+  if (fsReal.existsSync(existing)) return fsReal.readFileSync(existing, "utf8").trim();
   const salt = crypto.randomBytes(32).toString("hex");
   fsReal.mkdirSync(path.dirname(p), { recursive: true });
   fsReal.writeFileSync(p, salt + "\n", { encoding: "utf8", mode: 0o600 });

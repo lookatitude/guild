@@ -20332,8 +20332,9 @@ function makeFingerprint(raw, salt) {
 ${raw}`, "utf8").digest("hex");
 }
 function loadOrCreateFingerprintSalt(root) {
-  const p = path33.join(durableGuildDir(root), "indexes", "model-catalog", ".fp-salt");
-  if (fsReal.existsSync(p)) return fsReal.readFileSync(p, "utf8").trim();
+  const p = path33.join(knowledgeIndexesDir(root), "model-catalog", ".fp-salt");
+  const existing = knowledgeIndexReadPath(root, "model-catalog", ".fp-salt");
+  if (fsReal.existsSync(existing)) return fsReal.readFileSync(existing, "utf8").trim();
   const salt = crypto8.randomBytes(32).toString("hex");
   fsReal.mkdirSync(path33.dirname(p), { recursive: true });
   fsReal.writeFileSync(p, salt + "\n", { encoding: "utf8", mode: 384 });
@@ -23251,11 +23252,7 @@ function isContainedIn(candidatePath, baseDir) {
 function initiativeIsWorkspaceScoped(workspaceRoot2, id3) {
   try {
     if (!isValidInitiativeId(id3)) return false;
-    const registryPath = path37.join(
-      durableGuildDir(workspaceRoot2),
-      "indexes",
-      "initiatives-registry.yaml"
-    );
+    const registryPath = knowledgeIndexReadPath(workspaceRoot2, "initiatives-registry.yaml");
     if (fs30.existsSync(registryPath)) {
       try {
         const raw = fs30.readFileSync(registryPath, "utf8");
@@ -55486,10 +55483,10 @@ function readRegularFileNoFollow(filePath, label) {
 function snapshotRuntimeFiles(packageRoot) {
   const root = fs67.realpathSync(packageRoot);
   const entries = [];
-  const visit = (directory, relative23) => {
+  const visit = (directory, relative24) => {
     for (const name of fs67.readdirSync(directory).sort()) {
       const absolute = path83.join(directory, name);
-      const childRelative = relative23 ? `${relative23}/${name}` : name;
+      const childRelative = relative24 ? `${relative24}/${name}` : name;
       const stats = fs67.lstatSync(absolute);
       if (stats.isSymbolicLink()) throw new Error(`runtime package contains a symbolic link: ${childRelative}`);
       if (stats.isDirectory()) {
@@ -56288,21 +56285,21 @@ function normalizedGitHubRepository(value) {
   const match = /^([^/]+)\/([^/]+)$/.exec(normalized.slice(webPrefix.length));
   return match === null ? null : `github.com/${match[1]}/${match[2]}`;
 }
-function excludedConsumerPath(relative23) {
-  return relative23.split("/").some((segment) => CONSUMER_EXCLUDED_DIRECTORIES.includes(segment));
+function excludedConsumerPath(relative24) {
+  return relative24.split("/").some((segment) => CONSUMER_EXCLUDED_DIRECTORIES.includes(segment));
 }
 function consumerContentEntries(root) {
   const physicalRoot = fs69.realpathSync(root);
   const entries = [];
   const visit = (directory, prefix) => {
     for (const entry of fs69.readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
-      const relative23 = prefix.length === 0 ? entry.name : `${prefix}/${entry.name}`;
-      if (excludedConsumerPath(relative23)) continue;
+      const relative24 = prefix.length === 0 ? entry.name : `${prefix}/${entry.name}`;
+      if (excludedConsumerPath(relative24)) continue;
       const absolute = path85.join(directory, entry.name);
-      if (entry.isSymbolicLink()) throw new Error(`consumer tree contains a symlink: ${relative23}`);
-      if (entry.isDirectory()) visit(absolute, relative23);
-      else if (entry.isFile()) entries.push({ path: relative23, sha256: sha256Hex3(readRegularNoFollow(absolute, `consumer file ${relative23}`)) });
-      else throw new Error(`consumer tree contains a non-regular entry: ${relative23}`);
+      if (entry.isSymbolicLink()) throw new Error(`consumer tree contains a symlink: ${relative24}`);
+      if (entry.isDirectory()) visit(absolute, relative24);
+      else if (entry.isFile()) entries.push({ path: relative24, sha256: sha256Hex3(readRegularNoFollow(absolute, `consumer file ${relative24}`)) });
+      else throw new Error(`consumer tree contains a non-regular entry: ${relative24}`);
       if (entries.length > 1e5) throw new Error("consumer tree exceeds the bounded file count");
     }
   };
@@ -56345,21 +56342,21 @@ function snapshotOfficialConsumerGitTree(name, sourceRoot, destination) {
   for (const row of rows) {
     const match = /^(\d{6}) (\S+) ([0-9a-f]+)\t(.+)$/.exec(row);
     if (match === null) throw new Error(`${name} consumer Git tree entry is malformed`);
-    const [, mode, type, oid, relative23] = match;
-    if (excludedConsumerPath(relative23)) continue;
-    if (type !== "blob" || mode !== "100644" && mode !== "100755") throw new Error(`${name} consumer Git tree contains an unsupported entry: ${relative23}`);
+    const [, mode, type, oid, relative24] = match;
+    if (excludedConsumerPath(relative24)) continue;
+    if (type !== "blob" || mode !== "100644" && mode !== "100755") throw new Error(`${name} consumer Git tree contains an unsupported entry: ${relative24}`);
     let bytes;
     try {
-      bytes = readRegularNoFollow(path85.join(root, relative23), `${name} worktree file ${relative23}`);
+      bytes = readRegularNoFollow(path85.join(root, relative24), `${name} worktree file ${relative24}`);
       if (gitBlobOid(bytes, objectFormat) !== oid) throw new Error("worktree differs from HEAD");
     } catch {
-      bytes = (0, import_node_child_process4.execFileSync)("git", ["-C", root, "show", `${sourceCommit}:${relative23}`], { maxBuffer: 256 * 1024 * 1024 });
+      bytes = (0, import_node_child_process4.execFileSync)("git", ["-C", root, "show", `${sourceCommit}:${relative24}`], { maxBuffer: 256 * 1024 * 1024 });
     }
-    if (gitBlobOid(bytes, objectFormat) !== oid) throw new Error(`${name} consumer Git object bytes do not match ${relative23}`);
-    const target = path85.join(destination, ...relative23.split("/"));
+    if (gitBlobOid(bytes, objectFormat) !== oid) throw new Error(`${name} consumer Git object bytes do not match ${relative24}`);
+    const target = path85.join(destination, ...relative24.split("/"));
     fs69.mkdirSync(path85.dirname(target), { recursive: true, mode: 448 });
     fs69.writeFileSync(target, bytes, { flag: "wx", mode: mode === "100755" ? 320 : 256 });
-    contentEntries.push({ path: relative23, sha256: sha256Hex3(bytes) });
+    contentEntries.push({ path: relative24, sha256: sha256Hex3(bytes) });
   }
   if (contentEntries.length === 0) throw new Error(`${name} consumer Git tree has no in-scope files`);
   contentEntries.sort((left, right) => left.path.localeCompare(right.path));
@@ -56388,12 +56385,12 @@ function snapshotPluginSourceContentTree(root) {
   const entries = [];
   const visit = (directory, prefix) => {
     for (const entry of fs69.readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
-      const relative23 = prefix.length === 0 ? entry.name : `${prefix}/${entry.name}`;
+      const relative24 = prefix.length === 0 ? entry.name : `${prefix}/${entry.name}`;
       const absolute = path85.join(directory, entry.name);
-      if (entry.isSymbolicLink()) throw new Error(`source twin contains a symlink: ${relative23}`);
-      if (entry.isDirectory()) visit(absolute, relative23);
-      else if (entry.isFile()) entries.push({ path: relative23, sha256: sha256Hex3(readRegularNoFollow(absolute, `source twin file ${relative23}`)) });
-      else throw new Error(`source twin contains a non-regular entry: ${relative23}`);
+      if (entry.isSymbolicLink()) throw new Error(`source twin contains a symlink: ${relative24}`);
+      if (entry.isDirectory()) visit(absolute, relative24);
+      else if (entry.isFile()) entries.push({ path: relative24, sha256: sha256Hex3(readRegularNoFollow(absolute, `source twin file ${relative24}`)) });
+      else throw new Error(`source twin contains a non-regular entry: ${relative24}`);
       if (entries.length > 1e5) throw new Error("source twin exceeds the bounded file count");
     }
   };
@@ -56434,14 +56431,14 @@ function snapshotOfficialPluginSourceGitTree(sourceRoot, destination, expectedCo
   for (const row of rows) {
     const match = /^(\d{6}) (\S+) ([0-9a-f]+)\t(.+)$/.exec(row);
     if (match === null) throw new Error("plugin source Git tree entry is malformed");
-    const [, mode, type, oid, relative23] = match;
-    if (type !== "blob" || mode !== "100644" && mode !== "100755") throw new Error(`plugin source Git tree contains an unsupported entry: ${relative23}`);
-    const bytes = (0, import_node_child_process4.execFileSync)("git", ["-C", root, "--no-replace-objects", "show", `${expectedCommit}:${relative23}`], { maxBuffer: 256 * 1024 * 1024 });
-    if (gitBlobOid(bytes, objectFormat) !== oid) throw new Error(`plugin source Git object bytes do not match ${relative23}`);
-    const target = path85.join(destination, ...relative23.split("/"));
+    const [, mode, type, oid, relative24] = match;
+    if (type !== "blob" || mode !== "100644" && mode !== "100755") throw new Error(`plugin source Git tree contains an unsupported entry: ${relative24}`);
+    const bytes = (0, import_node_child_process4.execFileSync)("git", ["-C", root, "--no-replace-objects", "show", `${expectedCommit}:${relative24}`], { maxBuffer: 256 * 1024 * 1024 });
+    if (gitBlobOid(bytes, objectFormat) !== oid) throw new Error(`plugin source Git object bytes do not match ${relative24}`);
+    const target = path85.join(destination, ...relative24.split("/"));
     fs69.mkdirSync(path85.dirname(target), { recursive: true, mode: 448 });
     fs69.writeFileSync(target, bytes, { flag: "wx", mode: mode === "100755" ? 320 : 256 });
-    contentEntries.push({ path: relative23, sha256: sha256Hex3(bytes) });
+    contentEntries.push({ path: relative24, sha256: sha256Hex3(bytes) });
   }
   if (contentEntries.length === 0) throw new Error("plugin source Git tree has no in-scope files");
   contentEntries.sort((left, right) => left.path.localeCompare(right.path));
@@ -56464,8 +56461,8 @@ function assertConsumerTreeMatches(root, identity) {
   }
 }
 function physicallyContains(parent, child) {
-  const relative23 = path85.relative(fs69.realpathSync(parent), fs69.realpathSync(child));
-  return relative23 === "" || !relative23.startsWith("..") && !path85.isAbsolute(relative23);
+  const relative24 = path85.relative(fs69.realpathSync(parent), fs69.realpathSync(child));
+  return relative24 === "" || !relative24.startsWith("..") && !path85.isAbsolute(relative24);
 }
 function activatedConsumerRoots(hostId, stageRoot, packageRoot, stagedWebsite, stagedBenchmark) {
   const roots = Object.freeze({ website: fs69.realpathSync(stagedWebsite), benchmark: fs69.realpathSync(stagedBenchmark) });
@@ -56489,8 +56486,8 @@ function codexExecutionWorkspace(stageRoot, packageRoot) {
   fs69.mkdirSync(workspace, { recursive: false, mode: 448 });
   const physicalWorkspace = fs69.realpathSync(workspace);
   const physicalPackage = fs69.realpathSync(packageRoot);
-  const relative23 = path85.relative(physicalPackage, physicalWorkspace);
-  if (relative23 === "" || !relative23.startsWith("..") && !path85.isAbsolute(relative23)) throw new Error("Codex execution workspace must be outside the installed plugin tree");
+  const relative24 = path85.relative(physicalPackage, physicalWorkspace);
+  if (relative24 === "" || !relative24.startsWith("..") && !path85.isAbsolute(relative24)) throw new Error("Codex execution workspace must be outside the installed plugin tree");
   if (fs69.readdirSync(physicalWorkspace).length !== 0) throw new Error("Codex execution workspace must start empty");
   return physicalWorkspace;
 }

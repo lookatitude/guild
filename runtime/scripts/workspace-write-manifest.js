@@ -3725,6 +3725,12 @@ function knowledgeIndexesReadDir(root, probe = "publication") {
   if (primary === legacy || has(primary)) return primary;
   return has(legacy) ? legacy : primary;
 }
+function knowledgeIndexReadPath(root, ...segments) {
+  const primary = path9.join(knowledgeIndexesDir(root), ...segments);
+  if (fs5.existsSync(primary)) return primary;
+  const legacy = path9.join(legacyIndexesDir(root), ...segments);
+  return fs5.existsSync(legacy) ? legacy : primary;
+}
 
 // src/domains/state/index-migrate.ts
 var import_node_child_process = require("node:child_process");
@@ -8306,11 +8312,7 @@ function isContainedIn(candidatePath, baseDir) {
 function initiativeIsWorkspaceScoped(workspaceRoot2, id) {
   try {
     if (!isValidInitiativeId(id)) return false;
-    const registryPath = path19.join(
-      durableGuildDir(workspaceRoot2),
-      "indexes",
-      "initiatives-registry.yaml"
-    );
+    const registryPath = knowledgeIndexReadPath(workspaceRoot2, "initiatives-registry.yaml");
     if (fs14.existsSync(registryPath)) {
       try {
         const raw = fs14.readFileSync(registryPath, "utf8");

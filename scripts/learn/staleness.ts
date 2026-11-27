@@ -70,13 +70,14 @@ function main(): void {
   // (consumes after-edit hints; a dropped hook still shows as drift).
   let publication: PublicationStatus | { error: string } | null = null;
   try {
-    // A legacy `.guild/indexes` fallback is read-only: verification records a sidecar.
+    // guildPaths adopted any legacy store into the cache, so the generation is
+    // verified against the observed basis like any other. If adoption failed the
+    // legacy generation is never reported current: its freshness is unverified.
     const readDir = knowledgeIndexesReadDir(gp.repoRoot);
-    publication = publicationStatus({
-      indexesDir: readDir,
-      guildDir: gp.guildDir,
-      observe: readDir === gp.indexesDir ? () => source : undefined,
-    });
+    publication =
+      readDir === gp.indexesDir
+        ? publicationStatus({ indexesDir: readDir, guildDir: gp.guildDir, observe: () => source })
+        : { error: "legacy .guild/indexes publication could not be adopted into the cache; freshness unverified" };
   } catch (err) {
     publication = { error: String((err as Error).message ?? err) };
   }

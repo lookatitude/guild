@@ -38,8 +38,6 @@ function main(): void {
   const gp = guildPaths(cwd);
   const inPath = parseFlag(argv, "in");
   const target = inPath ? path.resolve(cwd, inPath) : gp.knowledgeGraph;
-  if (!inPath) gp.seed(target);
-  gp.seed(gp.knowledgeLinks);
   const runId = resolveRunId(cwd, argv);
 
   // K03: the owner graph is read from and published to the generation store.
