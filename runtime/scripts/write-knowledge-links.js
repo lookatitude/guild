@@ -27020,7 +27020,7 @@ if (isProcessEntry()) {
 
 // scripts/learn/lib/paths.ts
 init_state();
-init_knowledge();
+init_legacy_adoption();
 init_source_basis();
 
 // scripts/learn/lib/ignore.ts
@@ -27622,7 +27622,7 @@ init_decision_propagation();
 init_source_basis();
 init_sealed_collections();
 init_state();
-init_knowledge();
+init_legacy_adoption();
 
 // scripts/learn/lib/structural.ts
 init_kernel();

@@ -1904,7 +1904,7 @@ const KTD29_DEEP_IMPORTS: ReadonlyMap<string, readonly string[]> = new Map<strin
   // K01 (CW-13): avoids pulling recall/harvest into learn runtime bundles.
   ["scripts/learn/k-stage-staleness.ts", LEARN_SOURCE_BASIS],
   ["scripts/learn/lib/ignore.ts", LEARN_SOURCE_BASIS],
-  ["scripts/learn/lib/paths.ts", LEARN_SOURCE_BASIS],
+  ["scripts/learn/lib/paths.ts", [...LEARN_SOURCE_BASIS, "knowledge/legacy-adoption"]],
   ["scripts/learn/lib/resolve-calls-ts.ts", LEARN_SOURCE_BASIS],
   ["scripts/learn/lib/tsconfig-chain.ts", LEARN_SOURCE_BASIS],
   ["scripts/learn/scan.ts", LEARN_SOURCE_BASIS],
@@ -1915,7 +1915,7 @@ const KTD29_DEEP_IMPORTS: ReadonlyMap<string, readonly string[]> = new Map<strin
   ["scripts/learn/lib/source-basis.test.ts", ["knowledge/source-basis", "knowledge/working-set"]],
   // K03 (CW-20): same bundle reason; learn writers publish through the generation store.
   // K04 (CW-25): same bundle reason; learn generations carry the decision refs.
-  ["scripts/learn/lib/publish.ts", ["knowledge/publication", "knowledge/source-basis", "knowledge/decision-propagation", "kernel/sealed-collections"]],
+  ["scripts/learn/lib/publish.ts", ["knowledge/publication", "knowledge/source-basis", "knowledge/decision-propagation", "knowledge/legacy-adoption", "kernel/sealed-collections"]],
   ["scripts/learn/lib/publication-writers.test.ts", ["knowledge/publication", "knowledge/decision-propagation"]],
   // A04: only the packaged Stack entrypoints carry the v2 reader and its ~250KB contract
   // JSON; the lifecycle barrel is whole-required by other bundles, so it must not export them.

@@ -30009,7 +30009,7 @@ var fs63 = __toESM(require("fs"));
 var path69 = __toESM(require("path"));
 var import_child_process3 = require("child_process");
 init_state();
-init_knowledge();
+init_legacy_adoption();
 init_source_basis();
 
 // scripts/learn/lib/tsconfig-chain.ts
@@ -30408,7 +30408,7 @@ init_decision_propagation();
 init_source_basis();
 init_sealed_collections();
 init_state();
-init_knowledge();
+init_legacy_adoption();
 
 // scripts/learn/lib/structural.ts
 init_kernel();
