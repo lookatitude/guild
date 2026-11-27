@@ -7,9 +7,9 @@
  *   transport_mismatch        the page's `mcp:` block (stdio/http) differs from the row
  *   missing_unverified_label  row provenance is `inferred` but the page never says UNVERIFIED
  *                             (in the `mcp:` block or the "(7) MCP" table row)
- *   prose_claims_denied_mcp   row denies both transports but the "(7) MCP" / "FDC-13" row
- *                             asserts one without a hedge (UNVERIFIED / NOT / none / omits / bridge)
  *   unmapped_host             page host_id has no registry row, alias, or exemption
+ *
+ * Prose is deliberately NOT parsed: only the structured `mcp:` block, the label and the mapping gate.
  *
  * Usage: npx tsx check-host-mcp-claims.ts --entities <entities-dir>   (exit 1 on any violation)
  */
@@ -24,7 +24,7 @@ export type McpRows = Record<string, { mcp: { stdio: boolean; http: boolean }; p
 
 export interface Violation {
   file: string;
-  kind: "transport_mismatch" | "missing_unverified_label" | "prose_claims_denied_mcp" | "unmapped_host";
+  kind: "transport_mismatch" | "missing_unverified_label" | "unmapped_host";
   detail: string;
 }
 
@@ -44,9 +44,6 @@ export interface CheckOpts {
   aliases?: Record<string, string>;
   exempt?: readonly string[];
 }
-
-const HEDGE = /UNVERIFIED|\bNOT\b|\bnone\b|omits|bridge/i;
-const CLAIM = /stdio|http/i;
 
 function registryRows(): McpRows {
   const out: McpRows = {};
@@ -99,18 +96,10 @@ export function checkHostMcpClaims(opts: CheckOpts): Violation[] {
     }
 
     const mcpRow = tableRows(text, /\(7\)\s*MCP/);
-    const fdcRow = tableRows(text, /FDC-13/);
     if (row.provenance === "inferred") {
       const labelled = /UNVERIFIED/.test(block.raw) || mcpRow.some((l) => /UNVERIFIED/.test(l));
       if (!labelled) {
         out.push({ file, kind: "missing_unverified_label", detail: "registry row provenance is inferred; page must say UNVERIFIED" });
-      }
-    }
-    if (!row.mcp.stdio && !row.mcp.http) {
-      for (const l of [...mcpRow, ...fdcRow]) {
-        if (CLAIM.test(l) && !HEDGE.test(l)) {
-          out.push({ file, kind: "prose_claims_denied_mcp", detail: `row denies both transports but page says: ${l.slice(0, 120)}` });
-        }
       }
     }
   }

@@ -14426,7 +14426,7 @@ var init_catalog_cache = __esm({
         }
       }
     };
-    defaultSleep = (ms) => new Promise((resolve60) => setTimeout(resolve60, ms));
+    defaultSleep = (ms) => new Promise((resolve61) => setTimeout(resolve61, ms));
   }
 });
 
@@ -40932,7 +40932,7 @@ function supersededWikiPages(wikiDir2) {
     const slug = path75.basename(abs, ".md");
     bySlug.set(slug, [...bySlug.get(slug) ?? [], abs]);
   }
-  const resolve60 = (ref) => {
+  const resolve61 = (ref) => {
     let r = ref.replace(/\\/g, "/");
     if (r.startsWith("decision:")) r = r.slice("decision:".length);
     if (r.startsWith("./")) r = r.slice(2);
@@ -40956,7 +40956,7 @@ function supersededWikiPages(wikiDir2) {
       superseded.add(abs);
     }
     for (const ref of refsOf(fm["supersedes"])) {
-      const target = resolve60(ref);
+      const target = resolve61(ref);
       if (target && target !== abs) superseded.add(target);
     }
   }
@@ -44162,7 +44162,7 @@ function calcDelayMs(attempt, strategy, baseMs) {
 }
 function realSleep(ms) {
   if (ms <= 0) return Promise.resolve();
-  return new Promise((resolve60) => setTimeout(resolve60, ms));
+  return new Promise((resolve61) => setTimeout(resolve61, ms));
 }
 async function runWithRetry(dispatchFn, opts) {
   const maxAttempts = Math.max(1, Math.floor(opts.maxAttempts));
@@ -64937,6 +64937,51 @@ function isInside(root, child) {
   const rel2 = nodepath.relative(root, child);
   return rel2 === "" || !rel2.startsWith("..") && !nodepath.isAbsolute(rel2);
 }
+function otherPluginHookRefusal(pluginsDir, trustedRoot, exists) {
+  if (!exists(pluginsDir)) return null;
+  const ownPluginDir = nodepath.dirname(trustedRoot);
+  const dirs = (p) => nodefs.readdirSync(p, { withFileTypes: true }).filter((d) => d.isDirectory() || d.isSymbolicLink()).map((d) => d.name);
+  try {
+    for (const top of nodefs.readdirSync(pluginsDir)) {
+      if (top === "data" || top === ".DS_Store") continue;
+      if (top !== "cache") return `unrecognised entry "${top}" under ${pluginsDir}`;
+      const cache = nodepath.join(pluginsDir, "cache");
+      for (const market of dirs(cache)) {
+        for (const plugin of dirs(nodepath.join(cache, market))) {
+          const pluginDir = nodepath.join(cache, market, plugin);
+          const realPluginDir = realpathOrNull2(pluginDir);
+          if (realPluginDir !== null && realPluginDir === ownPluginDir) continue;
+          for (const version of dirs(pluginDir)) {
+            const v = nodepath.join(pluginDir, version);
+            const files = [];
+            const manifestPath = nodepath.join(v, ".codex-plugin", "plugin.json");
+            if (exists(manifestPath)) {
+              const pj = JSON.parse(nodefs.readFileSync(manifestPath, "utf8"));
+              if (typeof pj.hooks === "string") files.push(nodepath.resolve(v, pj.hooks));
+              else if (pj.hooks && typeof pj.hooks === "object") {
+                if (allHookCommandsFrom(JSON.stringify(pj.hooks)).length > 0) {
+                  return `plugin ${market}/${plugin} registers hooks inline`;
+                }
+              }
+            }
+            for (const rel2 of ["hooks/hooks.json", "hooks.json", "hooks/codex-hooks.json"]) {
+              files.push(nodepath.join(v, rel2));
+            }
+            for (const f of new Set(files)) {
+              if (!exists(f)) continue;
+              const cmds = allHookCommandsFrom(nodefs.readFileSync(f, "utf8"));
+              JSON.parse(nodefs.readFileSync(f, "utf8"));
+              if (cmds.length > 0) return `plugin ${market}/${plugin} registers hook(s) via ${f}`;
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    return `plugins under ${pluginsDir} could not be inspected (${String(e)})`;
+  }
+  return null;
+}
 function probeCodexPreToolUseEnforcement(opts = {}) {
   const env = opts.env ?? process.env;
   const fsSeam = opts.fs ?? nodefs;
@@ -64962,18 +65007,6 @@ function probeCodexPreToolUseEnforcement(opts = {}) {
     nodepath.join(projectCwd, ".codex", "hooks.json"),
     ...pluginRoot.length > 0 ? [nodepath.join(pluginRoot, "hooks", "codex-hooks.json")] : []
   ];
-  const pluginsDir = nodepath.join(codexHome, "plugins");
-  let pluginEntries = [];
-  try {
-    pluginEntries = fsSeam.existsSync(pluginsDir) ? nodefs.readdirSync(pluginsDir) : [];
-  } catch {
-    pluginEntries = ["<unreadable>"];
-  }
-  if (pluginEntries.length > 0) {
-    return fail3(
-      `codex PreToolUse enforcement NOT proven (grant withheld): ${pluginsDir} contains ${pluginEntries.length} plugin(s), whose hooks Guild cannot enumerate. The grant carries ${CODEX_HOOK_TRUST_FLAG}, which would run them untrusted, and Guild will not authorize hooks it has not inspected. Codex panes launch BARE.`
-    );
-  }
   const configPath = nodepath.join(codexHome, "config.toml");
   let configRaw = "";
   try {
@@ -65033,6 +65066,16 @@ function probeCodexPreToolUseEnforcement(opts = {}) {
     );
   }
   checks.bridge_present = true;
+  const pluginRefusal = otherPluginHookRefusal(
+    nodepath.join(codexHome, "plugins"),
+    trustedRoot,
+    fsSeam.existsSync ? (p) => fsSeam.existsSync(p) : nodefs.existsSync
+  );
+  if (pluginRefusal !== null) {
+    return fail3(
+      `codex PreToolUse enforcement NOT proven (grant withheld): ${pluginRefusal}. The grant carries ${CODEX_HOOK_TRUST_FLAG}, which would run another plugin's hooks untrusted. Codex panes launch BARE.`
+    );
+  }
   const foreign = [];
   for (const manifest of present3) {
     for (const cmd of allHookCommandsFrom(manifest.raw)) {

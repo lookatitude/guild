@@ -552,6 +552,68 @@ function isInside(root: string, child: string): boolean {
 }
 
 /**
+ * Why the grant must be withheld because of OTHER plugins under `<codexHome>/plugins`,
+ * or null when none can interfere. Layout: `cache/<marketplace>/<plugin>/<version>`
+ * (plus `data/`). Guild's own plugin dir (any version) is skipped; for each other
+ * version dir the hook manifests are read (plugin.json `hooks`, plus the conventional
+ * hooks.json locations) and ANY hook command, unparseable manifest, or unknown
+ * top-level entry refuses.
+ */
+function otherPluginHookRefusal(
+  pluginsDir: string,
+  trustedRoot: string,
+  exists: (p: string) => boolean,
+): string | null {
+  if (!exists(pluginsDir)) return null;
+  const ownPluginDir = nodepath.dirname(trustedRoot);
+  const dirs = (p: string): string[] =>
+    nodefs
+      .readdirSync(p, { withFileTypes: true })
+      .filter((d) => d.isDirectory() || d.isSymbolicLink())
+      .map((d) => d.name);
+  try {
+    for (const top of nodefs.readdirSync(pluginsDir)) {
+      if (top === "data" || top === ".DS_Store") continue;
+      if (top !== "cache") return `unrecognised entry "${top}" under ${pluginsDir}`;
+      const cache = nodepath.join(pluginsDir, "cache");
+      for (const market of dirs(cache)) {
+        for (const plugin of dirs(nodepath.join(cache, market))) {
+          const pluginDir = nodepath.join(cache, market, plugin);
+          const realPluginDir = realpathOrNull(pluginDir);
+          if (realPluginDir !== null && realPluginDir === ownPluginDir) continue;
+          for (const version of dirs(pluginDir)) {
+            const v = nodepath.join(pluginDir, version);
+            const files: string[] = [];
+            const manifestPath = nodepath.join(v, ".codex-plugin", "plugin.json");
+            if (exists(manifestPath)) {
+              const pj = JSON.parse(nodefs.readFileSync(manifestPath, "utf8")) as { hooks?: unknown };
+              if (typeof pj.hooks === "string") files.push(nodepath.resolve(v, pj.hooks));
+              else if (pj.hooks && typeof pj.hooks === "object") {
+                if (allHookCommandsFrom(JSON.stringify(pj.hooks)).length > 0) {
+                  return `plugin ${market}/${plugin} registers hooks inline`;
+                }
+              }
+            }
+            for (const rel of ["hooks/hooks.json", "hooks.json", "hooks/codex-hooks.json"]) {
+              files.push(nodepath.join(v, rel));
+            }
+            for (const f of new Set(files)) {
+              if (!exists(f)) continue;
+              const cmds = allHookCommandsFrom(nodefs.readFileSync(f, "utf8"));
+              JSON.parse(nodefs.readFileSync(f, "utf8")); // unparseable => throws => refuse
+              if (cmds.length > 0) return `plugin ${market}/${plugin} registers hook(s) via ${f}`;
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    return `plugins under ${pluginsDir} could not be inspected (${String(e)})`;
+  }
+  return null;
+}
+
+/**
  * ISSUE #94 — prove that codex-side PreToolUse enforcement is REAL on this box.
  *
  * WHY THIS IS NOT A FILE-PRESENCE CHECK. On-box (codex-cli 0.146.0), codex gates
@@ -627,27 +689,6 @@ export function probeCodexPreToolUseEnforcement(
       nodepath.join(projectCwd, ".codex", "hooks.json"),
       ...(pluginRoot.length > 0 ? [nodepath.join(pluginRoot, "hooks", "codex-hooks.json")] : []),
     ];
-
-  // PLUGINS ARE THE HONEST LIMIT. Codex plugins can carry their own hooks, and
-  // Guild has no reliable way to enumerate an enabled plugin's hook set from
-  // here. Rather than assert a containment it cannot check, the probe REFUSES
-  // the grant whenever a plugin directory is present at all: the trust-bypass
-  // flag would run those hooks too, and "we did not look" is not a proof.
-  const pluginsDir = nodepath.join(codexHome, "plugins");
-  let pluginEntries: string[] = [];
-  try {
-    pluginEntries = fsSeam.existsSync(pluginsDir) ? nodefs.readdirSync(pluginsDir) : [];
-  } catch {
-    pluginEntries = ["<unreadable>"];
-  }
-  if (pluginEntries.length > 0) {
-    return fail(
-      `codex PreToolUse enforcement NOT proven (grant withheld): ${pluginsDir} contains ` +
-        `${pluginEntries.length} plugin(s), whose hooks Guild cannot enumerate. The grant ` +
-        `carries ${CODEX_HOOK_TRUST_FLAG}, which would run them untrusted, and Guild will not ` +
-        `authorize hooks it has not inspected. Codex panes launch BARE.`,
-    );
-  }
 
   // config.toml decides TWO things the probe must respect.
   //
@@ -751,6 +792,25 @@ export function probeCodexPreToolUseEnforcement(
     );
   }
   checks.bridge_present = true;
+
+  // Other Codex plugins can register hooks too, and the grant carries
+  // CODEX_HOOK_TRUST_FLAG, which would run those untrusted. Guild installed AS a
+  // plugin is the main install path, so plugins are ENUMERATED rather than refused
+  // wholesale: Guild's own root (and sibling versions of it) is trusted; every other
+  // plugin's hook manifests are read, and any registered hook, unreadable manifest,
+  // or unrecognised layout withholds the grant.
+  const pluginRefusal = otherPluginHookRefusal(
+    nodepath.join(codexHome, "plugins"),
+    trustedRoot,
+    fsSeam.existsSync ? (p: string) => fsSeam.existsSync!(p) : nodefs.existsSync,
+  );
+  if (pluginRefusal !== null) {
+    return fail(
+      `codex PreToolUse enforcement NOT proven (grant withheld): ${pluginRefusal}. The grant ` +
+        `carries ${CODEX_HOOK_TRUST_FLAG}, which would run another plugin's hooks untrusted. ` +
+        `Codex panes launch BARE.`,
+    );
+  }
 
   // 3. Guild solely owns EVERY manifest codex will load.
   const foreign: string[] = [];

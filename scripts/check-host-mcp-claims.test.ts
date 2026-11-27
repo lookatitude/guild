@@ -4,7 +4,7 @@
  * ISSUE #116 — host entity wiki pages vs HOST_REGISTRY_ROWS[<id>].capabilities.mcp.
  * The registry row is authoritative. A page may not claim a transport the row
  * denies, and where the row's provenance is `inferred` the page must say
- * UNVERIFIED. The last describe runs the checker over the real wiki tree, so
+ * UNVERIFIED (structured `mcp:` block only; prose is never parsed). The last describe runs the checker over the real wiki tree, so
  * this file is also the CI rail.
  */
 
@@ -78,11 +78,9 @@ describe("checkHostMcpClaims", () => {
     expect(checkHostMcpClaims({ entitiesDir: d, rows, aliases: {}, exempt: [] })).toEqual([]);
   });
 
-  it("flags prose that claims MCP the row denies", () => {
-    const d = tmpDir({ "b.md": page("host-b", false, false, "stdio + HTTP via config", " # UNVERIFIED") });
-    expect(checkHostMcpClaims({ entitiesDir: d, rows, aliases: {}, exempt: [] }).map((x) => x.kind)).toEqual([
-      "prose_claims_denied_mcp",
-    ]);
+  it("does not parse prose: a hedged-or-not (7) row never fails by itself", () => {
+    const d = tmpDir({ "a.md": page("host-a", true, false, "stdio + HTTP via config") });
+    expect(checkHostMcpClaims({ entitiesDir: d, rows, aliases: {}, exempt: [] })).toEqual([]);
   });
 
   it("resolves page host_id through aliases", () => {

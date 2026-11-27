@@ -843,7 +843,121 @@ describe("the grant covers every hook source codex loads", () => {
     }
   });
 
-  /** Plugin hooks cannot be enumerated, so their mere presence withholds it. */
+  /**
+   * F1 (review of #94): Guild INSTALLED AS A CODEX PLUGIN is the main install path.
+   * Plugins under $CODEX_HOME/plugins/cache/<marketplace>/<plugin>/<version> are
+   * enumerated: Guild's own root is the trusted one; every OTHER plugin is read, and
+   * any hook command it registers (or a manifest we cannot read) withholds the grant.
+   */
+  describe("plugin-installed Guild", () => {
+    function pluginInstall(opts: { bridge?: boolean } = {}) {
+      const { bridge = true } = opts;
+      const src = makeCodexHome({});
+      const codexHome = fs.mkdtempSync(path.join(os.tmpdir(), "guild-codex94-home-"));
+      const root = path.join(codexHome, "plugins", "cache", "guild", "guild", "1.0.0");
+      fs.mkdirSync(path.join(root, "hooks", "dist"), { recursive: true });
+      if (bridge) fs.copyFileSync(src.bridgePath, path.join(root, "hooks", "dist", "pre-tool-use.js"));
+      fs.writeFileSync(
+        path.join(root, "hooks", "codex-hooks.json"),
+        JSON.stringify({
+          hooks: {
+            PreToolUse: [
+              {
+                hooks: [
+                  {
+                    type: "command",
+                    command: 'node "${GUILD_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}}/hooks/dist/pre-tool-use.js"',
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      );
+      src.cleanup();
+      const env = { CODEX_HOME: codexHome, GUILD_PLUGIN_ROOT: root } as NodeJS.ProcessEnv;
+      return { codexHome, root, env, cleanup: () => fs.rmSync(codexHome, { recursive: true, force: true }) };
+    }
+    function addPlugin(codexHome: string, name: string, files: Record<string, string>) {
+      const v = path.join(codexHome, "plugins", "cache", "market", name, "0.1.0");
+      for (const [rel, content] of Object.entries(files)) {
+        fs.mkdirSync(path.dirname(path.join(v, rel)), { recursive: true });
+        fs.writeFileSync(path.join(v, rel), content);
+      }
+    }
+    const HOOKS = JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ type: "command", command: "node x.js" }] }] } });
+
+    it("earns the grant when Guild is the only plugin with hooks", () => {
+      const i = pluginInstall();
+      const project = makeDenyingProject();
+      try {
+        addPlugin(i.codexHome, "hookless", { ".codex-plugin/plugin.json": JSON.stringify({ name: "hookless" }) });
+        const r = probeCodexPreToolUseEnforcement({ env: i.env, cwd: project.cwd });
+        expect(r.detail).toContain("PROVEN");
+        expect(r.enforced).toBe(true);
+      } finally {
+        project.cleanup();
+        i.cleanup();
+      }
+    });
+
+    it("refuses when the Guild bridge has been removed", () => {
+      const i = pluginInstall({ bridge: false });
+      const project = makeDenyingProject();
+      try {
+        const r = probeCodexPreToolUseEnforcement({ env: i.env, cwd: project.cwd });
+        expect(r.enforced).toBe(false);
+      } finally {
+        project.cleanup();
+        i.cleanup();
+      }
+    });
+
+    it("refuses when ANOTHER plugin registers a hook", () => {
+      const i = pluginInstall();
+      const project = makeDenyingProject();
+      try {
+        addPlugin(i.codexHome, "other", {
+          ".codex-plugin/plugin.json": JSON.stringify({ name: "other", hooks: "./hooks/h.json" }),
+          "hooks/h.json": HOOKS,
+        });
+        const r = probeCodexPreToolUseEnforcement({ env: i.env, cwd: project.cwd });
+        expect(r.enforced).toBe(false);
+        expect(r.detail).toContain("other");
+      } finally {
+        project.cleanup();
+        i.cleanup();
+      }
+    });
+
+    it("refuses when another plugin's hook manifest is unreadable", () => {
+      const i = pluginInstall();
+      const project = makeDenyingProject();
+      try {
+        addPlugin(i.codexHome, "broken", { "hooks/hooks.json": "{not json" });
+        const r = probeCodexPreToolUseEnforcement({ env: i.env, cwd: project.cwd });
+        expect(r.enforced).toBe(false);
+      } finally {
+        project.cleanup();
+        i.cleanup();
+      }
+    });
+
+    it("refuses an unknown entry under plugins/", () => {
+      const i = pluginInstall();
+      const project = makeDenyingProject();
+      try {
+        fs.mkdirSync(path.join(i.codexHome, "plugins", "mystery"), { recursive: true });
+        const r = probeCodexPreToolUseEnforcement({ env: i.env, cwd: project.cwd });
+        expect(r.enforced).toBe(false);
+      } finally {
+        project.cleanup();
+        i.cleanup();
+      }
+    });
+  });
+
+  /** An unrecognised layout under plugins/ cannot be read, so it withholds the grant. */
   it("FAILS when codex plugins are installed (their hooks are unknowable)", () => {
     const { codexHome, env, cleanup } = makeCodexHome({});
     const project = makeDenyingProject();
