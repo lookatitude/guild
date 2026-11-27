@@ -524,6 +524,8 @@ export function verifyInstallerLiveIsolatedExecutions(options: VerifyOptions = {
         encoding: "utf8",
         env: {
           ...process.env,
+          // The fixture rail's npx shim reads this; the live rail must use the real npx.
+          GUILD_NPX_SHIM_TSX: undefined,
           HOME: home,
           XDG_CONFIG_HOME: config,
           XDG_CACHE_HOME: cache,
