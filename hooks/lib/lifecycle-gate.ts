@@ -1030,7 +1030,34 @@ export interface LifecycleGateResult {
 
 const AUTOMATED_PROMPT_MARKER =
   /^(?:<(?:task-notification|teammate-message|cross-session-message)(?![\w-])|\[SYSTEM NOTIFICATION - NOT USER INPUT\]|\[Cross-session idle notice\])/;
-const LEADING_SYSTEM_REMINDER = /^\s*<system-reminder>[\s\S]*?<\/system-reminder>/;
+const REMINDER_OPEN = "<system-reminder>";
+const REMINDER_CLOSE = "</system-reminder>";
+
+/**
+ * Index just past the balanced reminder block that starts at `start`, or -1
+ * when it is never closed. Depth-counting, single forward pass (linear).
+ */
+function skipReminderBlock(text: string, start: number): number {
+  let depth = 0;
+  let pos = start;
+  // Cached next-tag indices: re-search only once `pos` has passed them, so a
+  // missing tag costs one full scan, not one per iteration.
+  let open = text.indexOf(REMINDER_OPEN, pos);
+  let close = text.indexOf(REMINDER_CLOSE, pos);
+  for (;;) {
+    if (open !== -1 && open < pos) open = text.indexOf(REMINDER_OPEN, pos);
+    if (close !== -1 && close < pos) close = text.indexOf(REMINDER_CLOSE, pos);
+    if (close === -1) return -1;
+    if (open !== -1 && open < close) {
+      depth += 1;
+      pos = open + REMINDER_OPEN.length;
+    } else {
+      depth -= 1;
+      pos = close + REMINDER_CLOSE.length;
+      if (depth === 0) return pos;
+    }
+  }
+}
 
 /**
  * True when the prompt was injected by the host (background-task completion,
@@ -1042,13 +1069,15 @@ const LEADING_SYSTEM_REMINDER = /^\s*<system-reminder>[\s\S]*?<\/system-reminder
  */
 export function isAutomatedPrompt(promptText: string | null): boolean {
   if (typeof promptText !== "string") return false;
-  let text = promptText;
+  let pos = 0;
   for (;;) {
-    const m = LEADING_SYSTEM_REMINDER.exec(text);
-    if (m === null) break;
-    text = text.slice(m[0].length);
+    while (pos < promptText.length && /\s/.test(promptText[pos]!)) pos += 1;
+    if (!promptText.startsWith(REMINDER_OPEN, pos)) break;
+    const end = skipReminderBlock(promptText, pos);
+    if (end === -1) return false; // unclosed leading reminder: operator prompt
+    pos = end;
   }
-  return AUTOMATED_PROMPT_MARKER.test(text.trimStart());
+  return AUTOMATED_PROMPT_MARKER.test(promptText.slice(pos));
 }
 
 /**

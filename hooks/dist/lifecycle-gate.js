@@ -54642,16 +54642,38 @@ function isDriftCurrent(latestTs, env = process.env, nowMs = Date.now()) {
   return age >= 0 && age <= driftRecencyMs(env);
 }
 var AUTOMATED_PROMPT_MARKER = /^(?:<(?:task-notification|teammate-message|cross-session-message)(?![\w-])|\[SYSTEM NOTIFICATION - NOT USER INPUT\]|\[Cross-session idle notice\])/;
-var LEADING_SYSTEM_REMINDER = /^\s*<system-reminder>[\s\S]*?<\/system-reminder>/;
+var REMINDER_OPEN = "<system-reminder>";
+var REMINDER_CLOSE = "</system-reminder>";
+function skipReminderBlock(text, start) {
+  let depth = 0;
+  let pos = start;
+  let open = text.indexOf(REMINDER_OPEN, pos);
+  let close = text.indexOf(REMINDER_CLOSE, pos);
+  for (; ; ) {
+    if (open !== -1 && open < pos) open = text.indexOf(REMINDER_OPEN, pos);
+    if (close !== -1 && close < pos) close = text.indexOf(REMINDER_CLOSE, pos);
+    if (close === -1) return -1;
+    if (open !== -1 && open < close) {
+      depth += 1;
+      pos = open + REMINDER_OPEN.length;
+    } else {
+      depth -= 1;
+      pos = close + REMINDER_CLOSE.length;
+      if (depth === 0) return pos;
+    }
+  }
+}
 function isAutomatedPrompt(promptText) {
   if (typeof promptText !== "string") return false;
-  let text = promptText;
+  let pos = 0;
   for (; ; ) {
-    const m = LEADING_SYSTEM_REMINDER.exec(text);
-    if (m === null) break;
-    text = text.slice(m[0].length);
+    while (pos < promptText.length && /\s/.test(promptText[pos])) pos += 1;
+    if (!promptText.startsWith(REMINDER_OPEN, pos)) break;
+    const end = skipReminderBlock(promptText, pos);
+    if (end === -1) return false;
+    pos = end;
   }
-  return AUTOMATED_PROMPT_MARKER.test(text.trimStart());
+  return AUTOMATED_PROMPT_MARKER.test(promptText.slice(pos));
 }
 async function evaluateLifecycleGate(guildRoot, runId, promptText, env = process.env) {
   const silent = { block: null, context: null };

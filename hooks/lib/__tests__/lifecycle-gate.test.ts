@@ -847,6 +847,26 @@ describe("lifecycle-gate — evaluateLifecycleGate (real fixtures)", () => {
       expect(isAutomatedPrompt(null)).toBe(false);
     });
 
+    it("handles nested, quoted and unclosed leading system-reminders, in linear time", () => {
+      const R = "<system-reminder>";
+      const C = "</system-reminder>";
+      // Nested reminders, then a real notification: automated.
+      expect(isAutomatedPrompt(`${R}outer${R}inner${C}outer${C}<task-notification>x</task-notification>`)).toBe(true);
+      // Marker only inside reminder content, operator text after: gated.
+      expect(isAutomatedPrompt(`${R}${R}inner${C}<task-notification>quoted</task-notification>${C}keep going`)).toBe(false);
+      // Unclosed leading reminder: operator.
+      expect(isAutomatedPrompt(`${R}never closed <task-notification>x</task-notification>`)).toBe(false);
+      expect(isAutomatedPrompt(`${R}a${R}b${C}<task-notification>x</task-notification>`)).toBe(false);
+      // Large inputs finish fast.
+      const t0 = Date.now();
+      expect(isAutomatedPrompt(R.repeat(200_000) + "<task-notification>")).toBe(false);
+      expect(isAutomatedPrompt((R + "x" + C).repeat(100_000) + "<task-notification>x")).toBe(true);
+      expect(isAutomatedPrompt(R + R + C.repeat(200_000) + "<task-notification>")).toBe(false);
+      expect(isAutomatedPrompt(R.repeat(100_000) + C.repeat(100_000) + "<task-notification>x")).toBe(true);
+      expect(isAutomatedPrompt(" ".repeat(500_000) + "keep going")).toBe(false);
+      expect(Date.now() - t0).toBeLessThan(2000);
+    });
+
     it("returns silent above threshold and leaves gate state bytes unchanged", async () => {
       appendAdHoc(runDir, 6, 3);
       for (const p of AUTOMATED) {
