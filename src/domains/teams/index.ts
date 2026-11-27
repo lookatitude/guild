@@ -64,12 +64,15 @@ export {
 } from "./team-decision-surface";
 export {
   dispatchGate,
+  type DispatchGateVerdict,
+  proposalHashOf,
   recordDecision,
   type TeamDecisionV1,
   writeDecision,
 } from "./team-decision";
 export {
   composeProposal,
+  validateProposal,
   type TeamProposalV2,
   writeProposal,
 } from "./team-proposal";
