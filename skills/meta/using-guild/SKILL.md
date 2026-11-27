@@ -76,7 +76,7 @@ not enumerate or guess them. Orient through these pointers instead:
   classifies the work, and proposes the next step; `--class=` or a typed sub-verb binds
   the class directly.
   A verb is an option, not a requirement. T0 walks the class graph with
-  `node "$(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/work-loop.js" <verb> --run-id <id> --cwd "$(pwd)"`:
+  `node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/work-loop.js" <verb> --run-id <id> --cwd "$(pwd)"`:
   `bind --class=<c>` once, `route --decision '<json>'` after each node, `redirect --input <f>`
   per operator correction, `research-packet --input <f>` at the packet node. Exit 3 = stop and ask.
 - The lifecycle spine is **init → ideate → plan → build → qa → ops**; reach for the
@@ -120,7 +120,7 @@ straight through to the normal lifecycle, unchanged.
 user's verbatim prompt and route on its `intake` field ONLY:
 
 ```
-echo "<the user's verbatim prompt>" | node "$(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/classify-intake.js"
+echo "<the user's verbatim prompt>" | node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/classify-intake.js"
 ```
 
 - `intake === "product_loop"` → route to the product-loop intake: `guild:product-explore`

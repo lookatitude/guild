@@ -10,7 +10,7 @@ A lane stages `.guild/knowledge/candidates/decisions/<slug>.md`; it never promot
 After the operator approves, the lead runs:
 
 ```bash
-node "$(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/wiki-promote.js" <slug> --cwd <repo-root> [--run <run-id>]
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/wiki-promote.js" <slug> --cwd <repo-root> [--run <run-id>]
 ```
 
 Harvest lands `decisions/<slug>.md`, links it under `## Decisions` in `index.md`, and
@@ -32,8 +32,8 @@ either direction.
 ## Run it
 
 ```bash
-node "$(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/wiki-revert.js" --list --run <run-id>
-node "$(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/wiki-revert.js" <harvest_op_id> --run <run-id>
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/wiki-revert.js" --list --run <run-id>
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/wiki-revert.js" <harvest_op_id> --run <run-id>
 ```
 
 `--list` prints each op's id, status, trigger and page path. Take the id from

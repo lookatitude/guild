@@ -22,7 +22,9 @@ const BAD = "npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/evolve-
 const BAD_DEFAULT =
   "npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/evolve-loop.ts";
 const GOOD =
-  'npx tsx "$(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/scripts/evolve-loop.ts"';
+  `npx tsx "$(r='\${CLAUDE_PLUGIN_ROOT}'; case $r in ('\${'*) r=\${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "\${GUILD_PLUGIN_ROOT:-\${r:-$HOME/.local/share/guild/dist/claude-code}}")/scripts/evolve-loop.ts"`;
+const BAD_DQ_TOKEN = GOOD.replace("r='${CLAUDE_PLUGIN_ROOT}'", 'r="${CLAUDE_PLUGIN_ROOT}"');
+const BAD_UNQUOTED_OUTER = GOOD.replace('"$(r=', "$(r=").replace('.ts"', ".ts");
 
 function runScript(args: string[]): { exitCode: number; stdout: string; stderr: string } {
   const result = spawnSync("npx", ["tsx", SCRIPT, ...args], {
@@ -65,6 +67,20 @@ describe("check-plugin-root-fallback.ts", () => {
       const dir = path.join(tmpDir, "commands");
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(path.join(dir, "foo.md"), BAD_DEFAULT);
+      expect(findViolations(tmpDir)).toHaveLength(1);
+    });
+
+    it("flags a double-quoted substituted token (shell evaluates a hostile root)", () => {
+      const dir = path.join(tmpDir, "commands");
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "foo.md"), BAD_DQ_TOKEN);
+      expect(findViolations(tmpDir)).toHaveLength(1);
+    });
+
+    it("flags an unquoted outer substitution (a root with spaces word-splits)", () => {
+      const dir = path.join(tmpDir, "commands");
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "foo.md"), BAD_UNQUOTED_OUTER);
       expect(findViolations(tmpDir)).toHaveLength(1);
     });
 

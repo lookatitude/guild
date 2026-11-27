@@ -15,10 +15,10 @@ architecture-map stub; `--learn` (or `defaults.auto_learn`) folds in the full
 ## Run recording
 
 ```bash
-node "$(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/hooks/dist/run-trace.js" start --command=/guild:init --phase=init --cwd "$(pwd)"
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/hooks/dist/run-trace.js" start --command=/guild:init --phase=init --cwd "$(pwd)"
 # append --initiative=<id> ONLY when the user supplied one (NN#5); never auto-detect
 # sub-verb `adopt` — capability localization, forwarded verbatim
-node "$(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/capability-adopt.js" $REMAINING_ARGS --project-root "$(pwd)"
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/capability-adopt.js" $REMAINING_ARGS --project-root "$(pwd)"
 ```
 
 ## Dispatch
@@ -31,7 +31,7 @@ args: $ARGUMENTS
 ## Team decision gate (blocking)
 
 ```bash
-node "$(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/team-decide.js" gate --proposal <proposal> --cwd "$(pwd)"
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/team-decide.js" gate --proposal <proposal> --cwd "$(pwd)"
 ```
 
 Verbs: approve · restructure · add · remove · substitute · edit_dependencies.

@@ -13,7 +13,7 @@ under `/guild:init --learn`. Unknown sub-verb: print usage, invoke no skill.
 ## Run recording
 
 ```bash
-node "$(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/hooks/dist/run-trace.js" start --command=/guild:learn --cwd "$(pwd)"
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/hooks/dist/run-trace.js" start --command=/guild:learn --cwd "$(pwd)"
 ```
 
 ## Sub-verbs
@@ -32,7 +32,7 @@ node "$(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/
 ## Dispatch
 
 ```bash
-node "$(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/learn-route.js" --cwd "$(pwd)" -- $ARGUMENTS
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/learn-route.js" --cwd "$(pwd)" -- $ARGUMENTS
 ```
 
 The route JSON decides, never prose. `route: usage` → print its `usage` and stop;

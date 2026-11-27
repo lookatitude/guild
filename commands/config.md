@@ -13,13 +13,13 @@ exactly once. `config-cmd.js` has no `init` and rejects `models` / `migrate`.
 
 ```bash
 # set|role|show|validate|providers|ui|update-mcp-hashes|reconcile — forwarded verbatim
-node "$(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/config-cmd.js" $ARGUMENTS --cwd "$(pwd)"
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/config-cmd.js" $ARGUMENTS --cwd "$(pwd)"
 # init — the CLI spells it `reconcile sync` (never-clobber); translate, do not forward
-node "$(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/config-cmd.js" reconcile sync --cwd "$(pwd)" $REMAINING_ARGS
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/config-cmd.js" reconcile sync --cwd "$(pwd)" $REMAINING_ARGS
 # models — $REMAINING_ARGS ALREADY starts with the CLI's sub-verb; never insert another. The CLI defaults --cwd to $PWD, so a user --cwd is never overridden.
-node "$(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/models-cmd.js" $REMAINING_ARGS
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/models-cmd.js" $REMAINING_ARGS
 # migrate — v1->v2 layout inspect / dry-run / retry (dry-run is the default)
-node "$(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/migrate-guild.js" --root="$(pwd)" $REMAINING_ARGS
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/migrate-guild.js" --root="$(pwd)" $REMAINING_ARGS
 ```
 
 | Sub-verb | Grammar |

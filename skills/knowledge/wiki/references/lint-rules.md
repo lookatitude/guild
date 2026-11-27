@@ -137,7 +137,7 @@ gate. The finding records page path, the drafted grade, and the accept
 command:
 
 ```bash
-node $(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/migrate-guild.js --accept-grades --root=<repo-root>
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/migrate-guild.js" --accept-grades --root=<repo-root>
 ```
 
 Do not edit the grade yourself (the non-destructive rule applies) — the

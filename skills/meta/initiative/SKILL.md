@@ -84,7 +84,7 @@ to `scripts/registry-rollup.ts` — the deterministic projection of
 (never hand-derive `run_ids`/`last_run_id` from a manual runs/ walk):
 
 ```
-node $(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/registry-rollup.js \
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/registry-rollup.js" \
   --guild-dir <cwd>/.guild --json
 ```
 
@@ -129,7 +129,7 @@ deterministic CLI and consume its verdict — the same discipline
 `guild:review-broker` applies to its 5-condition gate-pass check.
 
 ```bash
-node $(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/initiative-gate.js close-check \
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/initiative-gate.js" close-check \
   --initiative <id> \
   --root "$(pwd)" \
   --exec-verified=<true only after confirming verify.md PASS for every contributing run>
@@ -159,7 +159,7 @@ criteria or invalid/missing evidence), exit 2 = usage/read error.**
    still owes:
 
    ```bash
-   node $(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/initiative-gate.js docs-workitems \
+   node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/initiative-gate.js" docs-workitems \
      --initiative <id> --root "$(pwd)" --exec-verified=<same value as above>
    ```
 

@@ -32,7 +32,7 @@ There is no version tree, and nothing in this flow creates one.
 Delegates to `scripts/rollback-walker.ts`. Without `--apply` it writes nothing:
 
 ```
-node $(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/rollback-walker.js --skill <key> --steps <n> --cwd <repo-root>
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/rollback-walker.js" --skill <key> --steps <n> --cwd <repo-root>
 ```
 
 It prints the recorded deltas newest-first (entry id, timestamp, target, span, proposer)

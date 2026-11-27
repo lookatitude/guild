@@ -64,46 +64,102 @@ describe("plugin-root shell lines", () => {
     expect(bad.map((f) => path.relative(ROOT, f))).toEqual([]);
   });
 
-  function runClassifyLine(substituteRoot: string | null, env: Record<string, string>): string {
-    const line = fs
-      .readFileSync(path.join(ROOT, "commands", "guild.md"), "utf8")
-      .split("\n")
-      .find((l) => l.includes("classify-intake.js"))!;
-    let cmd = line;
-    if (substituteRoot !== null) cmd = cmd.replaceAll("${CLAUDE_PLUGIN_ROOT}", substituteRoot);
-    const r = spawnSync("bash", ["-c", cmd], {
-      encoding: "utf8",
-      env: { PATH: process.env.PATH ?? "", ARGUMENTS: "x", ...env },
+  /** A `node` stub that records its argv, one per line, so the test sees exactly what node receives. */
+  function stubBin(): { bin: string; argvFile: string } {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-stub-"));
+    const argvFile = path.join(dir, "argv.txt");
+    const bin = path.join(dir, "bin");
+    fs.mkdirSync(bin);
+    fs.writeFileSync(path.join(bin, "node"), `#!/bin/sh\nfor a in "$@"; do printf '%s\\n' "$a"; done > "${argvFile}"\n`, {
+      mode: 0o755,
     });
-    return (r.stdout ?? "").trim() + (r.stderr ?? "").trim();
+    return { bin, argvFile };
   }
 
-  function fakeRoot(tag: string): string {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), `guild-root-${tag}-`));
-    fs.mkdirSync(path.join(root, "runtime", "scripts"), { recursive: true });
-    fs.writeFileSync(path.join(root, "runtime", "scripts", "classify-intake.js"), `console.log("ROOT:${tag}")`);
-    return root;
+  function lineOf(file: string, needle: string): string {
+    return fs
+      .readFileSync(path.join(ROOT, file), "utf8")
+      .split("\n")
+      .find((l) => l.includes(needle))!
+      .replace(/ \\$/, "");
   }
 
-  it("resolves the host-substituted root with no env var and a HOME that has no dist", () => {
-    const root = fakeRoot("subst");
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), "guild-home-"));
-    expect(runClassifyLine(root, { HOME: home })).toBe("ROOT:subst");
-  });
+  /** Run a doc line under `shell`; `substituteRoot` mimics Claude Code's exact-token replacement. */
+  function run(
+    line: string,
+    substituteRoot: string | null,
+    env: Record<string, string>,
+    shell = "bash",
+  ): { argv: string[]; stderr: string } {
+    const { bin, argvFile } = stubBin();
+    const cmd = substituteRoot === null ? line : line.replaceAll("${CLAUDE_PLUGIN_ROOT}", substituteRoot);
+    const r = spawnSync(shell, ["-c", cmd], {
+      encoding: "utf8",
+      env: { PATH: `${bin}:/usr/bin:/bin`, ARGUMENTS: "x", ...env },
+    });
+    const argv = fs.existsSync(argvFile) ? fs.readFileSync(argvFile, "utf8").split("\n").slice(0, -1) : [];
+    return { argv, stderr: r.stderr ?? "" };
+  }
 
-  it("an explicit GUILD_PLUGIN_ROOT still wins", () => {
-    const sub = fakeRoot("subst2");
-    const explicit = fakeRoot("explicit");
-    expect(runClassifyLine(sub, { HOME: os.tmpdir(), GUILD_PLUGIN_ROOT: explicit })).toBe("ROOT:explicit");
-  });
+  const LINES: Array<[string, string, string]> = [
+    ["commands/guild.md", "classify-intake.js", "runtime/scripts/classify-intake.js"],
+    ["skills/meta/execute-plan/SKILL.md", "write-task-run.js", "runtime/scripts/write-task-run.js"],
+  ];
 
-  it("without substitution (other hosts) falls back to CLAUDE_PLUGIN_ROOT, then the install.sh dist", () => {
-    const viaEnv = fakeRoot("env");
-    expect(runClassifyLine(null, { HOME: os.tmpdir(), CLAUDE_PLUGIN_ROOT: viaEnv })).toBe("ROOT:env");
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), "guild-home2-"));
-    const dist = path.join(home, ".local", "share", "guild", "dist", "claude-code");
-    fs.mkdirSync(path.join(dist, "runtime", "scripts"), { recursive: true });
-    fs.writeFileSync(path.join(dist, "runtime", "scripts", "classify-intake.js"), `console.log("ROOT:dist")`);
-    expect(runClassifyLine(null, { HOME: home })).toBe("ROOT:dist");
-  });
+  const sentinelDir = () => fs.mkdtempSync(path.join(os.tmpdir(), "guild-sentinel-"));
+
+  const shells = ["bash", ...(fs.existsSync("/bin/bash") && "/bin/bash" !== "bash" ? ["/bin/bash"] : [])];
+
+  for (const shell of shells) {
+    for (const [file, needle, rel] of LINES) {
+      describe(`${file} under ${shell}`, () => {
+        const line = lineOf(file, needle);
+
+        it("passes node exactly one argv for a host-substituted root with spaces", () => {
+          const root = "/opt/Guild Install";
+          const { argv } = run(line, root, { HOME: os.tmpdir() }, shell);
+          expect(argv[0]).toBe(`${root}/${rel}`);
+        });
+
+        const hostile = (s: string) => [
+          ["$(...)", `/opt/$(touch ${s}/PWNED)/guild`],
+          ["backticks", `/opt/\`touch ${s}/PWNED\`/guild`],
+          ["$HOME", "/opt/$HOME/guild"],
+          ["$VAR and ${VAR}", "/opt/$PATH/${HOME}/guild"],
+          ["double quotes", '/opt/a"b/guild'],
+          ["semicolon and newline-free metachars", "/opt/a;b&c|d>e/guild"],
+        ];
+
+        for (const [label] of hostile("X")) {
+          it(`never evaluates a substituted root containing ${label}`, () => {
+            const s = sentinelDir();
+            const root = hostile(s).find(([l]) => l === label)![1];
+            const { argv } = run(line, root, { HOME: os.tmpdir() }, shell);
+            expect(argv[0]).toBe(`${root}/${rel}`);
+            expect(fs.existsSync(path.join(s, "PWNED"))).toBe(false);
+          });
+        }
+
+        it("does not evaluate a hostile substituted root even when GUILD_PLUGIN_ROOT is set", () => {
+          const s = sentinelDir();
+          const { argv } = run(line, `/opt/$(touch ${s}/PWNED)/guild`, { HOME: os.tmpdir(), GUILD_PLUGIN_ROOT: "/g r" }, shell);
+          expect(argv[0]).toBe(`/g r/${rel}`);
+          expect(fs.existsSync(path.join(s, "PWNED"))).toBe(false);
+        });
+
+        it("non-substituting host: literal token falls back to the env var, taken verbatim", () => {
+          const s = sentinelDir();
+          const root = `/env/$(touch ${s}/PWNED)/a b`;
+          const { argv } = run(line, null, { HOME: os.tmpdir(), CLAUDE_PLUGIN_ROOT: root }, shell);
+          expect(argv[0]).toBe(`${root}/${rel}`);
+          expect(fs.existsSync(path.join(s, "PWNED"))).toBe(false);
+        });
+
+        it("non-substituting host, no env: GUILD_PLUGIN_ROOT wins, then the install.sh dist", () => {
+          expect(run(line, null, { HOME: os.tmpdir(), GUILD_PLUGIN_ROOT: "/g" }, shell).argv[0]).toBe(`/g/${rel}`);
+          expect(run(line, null, { HOME: "/h" }, shell).argv[0]).toBe(`/h/.local/share/guild/dist/claude-code/${rel}`);
+        });
+      });
+    }
+  }
 });

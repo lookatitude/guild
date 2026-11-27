@@ -25,7 +25,7 @@ Three required inputs, all produced upstream:
 Before Stage 1, run the receipt gate and gate on its exit code — never judge receipt shape by eye:
 
 ```bash
-node $(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/check-handoff-receipts.js --cwd <repo-root> --run-id <run-id>
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/check-handoff-receipts.js" --cwd <repo-root> --run-id <run-id>
 ```
 
 Exit 0 → every receipt has the five §8.2 `## <name>` sections and exactly one valid ```` ```guild.handoff.v2 ```` fence; proceed. A non-zero exit → do **not** write a passing `review.md`: record each refused receipt and its defects as a Stage 1 blocker, halt, and loop back to `guild:execute-plan` (a `## files changed` heading or a plain ```` ```json ```` fence is a malformed receipt). Review cannot synthesize a receipt that was never written.

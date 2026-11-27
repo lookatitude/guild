@@ -49,7 +49,7 @@ TaskCell. The host contract does not yet prove child-env carriage, so do not
 reconstruct the plan or issue `Agent()` yourself:
 
 ```
-node $(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/agent-team-launcher.js --team <resolved-team-path> --cwd <repo-root> --agent-mode=agent --run-id <run-id>
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/agent-team-launcher.js" --team <resolved-team-path> --cwd <repo-root> --agent-mode=agent --run-id <run-id>
 ```
 
 Only an unscoped unknown/project role can reach the legacy declarative path
@@ -172,7 +172,7 @@ The agent's **final action** in this lifecycle is writing its receipt file — s
 **Request a one-shot agent, then wait on the receipt in code (#138).** On the in-session `Agent()` rung, spawn each lane as a one-shot subagent: pass no `team_name` and no `name`, so the host returns the lane's report instead of a resident teammate. Some hosts still land the call on a resident teammate (`in_process_teammate`) whose only signal is an idle notification. An idle notification is never a result. On every rung, collect the lane with the receipt-wait CLI, never with a hand-written poll:
 
 ```bash
-node $(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/lane-receipt-wait.js \
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/lane-receipt-wait.js" \
   --cwd "$PWD" --run-id <run-id> --specialist <specialist> --task-id <task-id> \
   --dispatched-at <epoch-ms> [--timeout-ms <ms>]
 ```
@@ -408,7 +408,7 @@ When the target repo IS the Guild plugin itself (self-build), `team.yaml` is com
 When the snapshot-resolved backend is `agent-team` (the D5 ladder resolved `agent_mode` to `team` at intake; team is primary whenever tmux is present — not an opt-in), invoke `scripts/agent-team-launcher.ts` to spawn the tmux session — one pane for the orchestrator plus one pane per specialist, with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` exported in each pane. The launcher is the canonical entry point for the agent-team backend; a real launch writes its session manifest to `.guild/runs/<run-id>/agent-team/session.json` and refuses to spawn nested teams per §7.3. Run it once per execute-plan invocation:
 
 ```
-node $(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/agent-team-launcher.js --team <resolved-team-path> --cwd <repo-root>
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/agent-team-launcher.js" --team <resolved-team-path> --cwd <repo-root>
 ```
 
 `<resolved-team-path>` is the **`resolveTeamFile(guildRoot, slug, readActivePhase(cwd))`** result (`scripts/lib/team-file.ts`) — the per-phase `.guild/team/<slug>.<phase>.yaml` (or legacy `.guild/team/<slug>.yaml` on back-compat). **Never reconstruct `.guild/team/<slug>.yaml` here** — pass the resolved path the input step (`## Input`) already computed. The launcher's `slugFromTeamPath` tolerates the `<slug>.<phase>.yaml` basename. Pass `--dry-run` first to preview the resolved commands and in-memory manifest without spawning the session or writing anything; use `--session-name` when a name collision would otherwise block launch.
