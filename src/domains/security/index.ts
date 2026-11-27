@@ -33,6 +33,8 @@ export * from "./events";
 export * from "./d5-permission-content";
 // T15 rework: the wiki-ingest pause marker the PreToolUse hook enforces.
 export * from "./ingest-pause";
+// W02: the one privileged-action classifier the lifecycle protected-path verifier consumes.
+export { classifyActionTokens } from "./privileged-actions";
 
 // ── consumed outside the domain (T16: every importer goes through this index) ──
 export {
