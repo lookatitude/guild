@@ -11,6 +11,7 @@ export {
   verifyInstallerDryRuns,
   verifyInstallerFixtureExecutions,
   verifyInstallerLiveIsolatedExecutions,
+  writeNpxShim,
   parseVerifyInstallerArgs,
   runVerifyInstallerCli,
   type InstallerHost,

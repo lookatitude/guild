@@ -303,20 +303,20 @@ function writeFakeHostBinary(binDir: string, name: string): void {
 }
 
 /**
- * Offline `npx` shim (issue #259). The plugin root ships no tsx, so a bare
- * `npx tsx` re-resolves tsx against the npm registry on every install.sh run.
- * The shim runs scripts/node_modules/.bin/tsx for `npx tsx ...` and defers any
- * other call to the real npx (the shim dir must be first on PATH). install.sh
- * still invokes `npx tsx ...` verbatim.
+ * Offline `npx` shim for the FIXTURE rail only (issue #259). The plugin root
+ * ships no tsx, so a bare `npx tsx` re-resolves tsx against the npm registry on
+ * every install.sh run. The shim runs the tsx named by $GUILD_NPX_SHIM_TSX
+ * (read from the environment, never interpolated into the script) for
+ * `npx tsx ...` and defers anything else to the real npx (shim dir must be
+ * first on PATH). The live rail deliberately keeps the real npx.
  */
-function writeNpxShim(binDir: string, root: string): void {
-  const localTsx = path.join(root, "scripts", "node_modules", ".bin", "tsx");
+export function writeNpxShim(binDir: string): void {
   const abs = path.join(binDir, "npx");
   fs.writeFileSync(
     abs,
     [
       "#!/usr/bin/env bash",
-      `if [ "$1" = "tsx" ] && [ -x "${localTsx}" ]; then shift; exec "${localTsx}" "$@"; fi`,
+      'if [ "$1" = "tsx" ] && [ -n "$GUILD_NPX_SHIM_TSX" ] && [ -x "$GUILD_NPX_SHIM_TSX" ]; then shift; exec "$GUILD_NPX_SHIM_TSX" "$@"; fi',
       'PATH="${PATH#*:}" exec npx "$@"',
       "",
     ].join("\n")
@@ -439,7 +439,7 @@ export function verifyInstallerFixtureExecutions(options: VerifyOptions = {}): I
     for (const binary of ["claude", "codex", "pi", "agy", "cursor-agent", "gh", "opencode", "acli"]) {
       writeFakeHostBinary(fakeBin, binary);
     }
-    writeNpxShim(fakeBin, root);
+    writeNpxShim(fakeBin);
 
     for (const expectation of INSTALLER_HOST_EXPECTATIONS) {
       const logFile = path.join(tmp, `${expectation.host}.log`);
@@ -452,6 +452,7 @@ export function verifyInstallerFixtureExecutions(options: VerifyOptions = {}): I
           HOME: fakeHome,
           XDG_CONFIG_HOME: fakeConfig,
           GUILD_INSTALL_FAKE_HOST_LOG: logFile,
+          GUILD_NPX_SHIM_TSX: path.join(root, "scripts", "node_modules", ".bin", "tsx"),
           PATH: `${fakeBin}${path.delimiter}${options.pathEnv ?? process.env.PATH ?? "/usr/bin:/bin"}`,
           npm_config_cache: process.env["npm_config_cache"] ?? path.join(os.tmpdir(), "guild-npm-cache"),
         },
@@ -517,9 +518,6 @@ export function verifyInstallerLiveIsolatedExecutions(options: VerifyOptions = {
       const data = path.join(tmp, "data");
       const state = path.join(tmp, "state");
       for (const dir of [home, config, cache, data, state]) fs.mkdirSync(dir, { recursive: true });
-      const shimBin = path.join(tmp, "shim-bin");
-      fs.mkdirSync(shimBin, { recursive: true });
-      writeNpxShim(shimBin, root);
 
       const res = spawnSync("bash", [installScript, "--host", expectation.host], {
         cwd: root,
@@ -531,7 +529,7 @@ export function verifyInstallerLiveIsolatedExecutions(options: VerifyOptions = {
           XDG_CACHE_HOME: cache,
           XDG_DATA_HOME: data,
           XDG_STATE_HOME: state,
-          PATH: `${shimBin}${path.delimiter}${pathEnv}`,
+          PATH: pathEnv,
           npm_config_cache: process.env["npm_config_cache"] ?? path.join(os.tmpdir(), "guild-npm-cache"),
         },
         timeout: 120_000,

@@ -12,6 +12,7 @@ import {
   verifyInstallerDryRunOutput,
   verifyInstallerDryRuns,
   verifyInstallerHostExecutionLog,
+  writeNpxShim,
 } from "./verify-installer";
 
 describe("verify installer dry-runs", () => {
@@ -58,7 +59,30 @@ describe("verify installer dry-runs", () => {
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
-  }, 180_000);
+  }, 300_000); // real npx per host (~150s locally); fixture rail uses the offline shim
+
+  it("npx shim passes a tsx path containing space, $ and \" without shell interpretation", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-npx-shim-"));
+    try {
+      const weird = path.join(tmp, 'we ird $HOME "q" $(touch pwned)');
+      fs.mkdirSync(weird, { recursive: true });
+      const fakeTsx = path.join(weird, "tsx");
+      fs.writeFileSync(fakeTsx, '#!/usr/bin/env bash\necho "shim-ok $*"\n');
+      fs.chmodSync(fakeTsx, 0o755);
+      const bin = path.join(tmp, "bin");
+      fs.mkdirSync(bin);
+      writeNpxShim(bin);
+      const res = spawnSync(path.join(bin, "npx"), ["tsx", "a", "b"], {
+        encoding: "utf8",
+        env: { ...process.env, GUILD_NPX_SHIM_TSX: fakeTsx, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+      });
+      expect(res.stdout.trim()).toBe("shim-ok a b");
+      expect(fs.existsSync(path.join(weird, "pwned"))).toBe(false);
+      expect(fs.existsSync(path.join(process.cwd(), "pwned"))).toBe(false);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
 
   it("CONTROL: fails when a required host command snippet is absent", () => {
     const errors = verifyInstallerDryRunOutput(
