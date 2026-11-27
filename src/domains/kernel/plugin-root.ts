@@ -50,7 +50,7 @@ export function ownPluginRoot(fromDir: string): string {
 }
 
 /** True when `dir` is a Guild plugin root: it ships the runtime marker or the Claude manifest. */
-export function isPluginRoot(dir: string): boolean {
+function isPluginRoot(dir: string): boolean {
   return (
     fs.existsSync(path.join(dir, PLUGIN_ROOT_MARKER)) ||
     fs.existsSync(path.join(dir, ".claude-plugin", "plugin.json"))
@@ -72,28 +72,4 @@ export function resolveValidatedPluginRoot(
     if (typeof value === "string" && value.length > 0 && isPluginRoot(value)) return path.resolve(value);
   }
   return findPluginRoot(fromDir);
-}
-
-/**
- * True when `absPath` lies inside a Guild-managed root: under `pluginRoot`, or under
- * a directory that holds a `.guild/` directory. Anything else (scratch dirs, home
- * config, unrelated repos) is outside Guild's scope.
- */
-export function isUnderGuildManagedRoot(absPath: string, pluginRoot: string | null): boolean {
-  const target = path.resolve(absPath);
-  if (pluginRoot !== null) {
-    const rel = path.relative(path.resolve(pluginRoot), target);
-    if (rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))) return true;
-  }
-  let dir = path.dirname(target);
-  for (;;) {
-    try {
-      if (fs.statSync(path.join(dir, ".guild")).isDirectory()) return true;
-    } catch {
-      // not present at this level
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) return false;
-    dir = parent;
-  }
 }

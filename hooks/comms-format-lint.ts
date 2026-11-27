@@ -62,7 +62,8 @@
 
 import * as path from "path";
 import { lintCommsFormat, type CommsLintFinding } from "../scripts/comms/comms-format-lint.js";
-import { isUnderGuildManagedRoot, resolveValidatedPluginRoot } from "../src/domains/kernel/plugin-root.js";
+import { resolveValidatedPluginRoot } from "../src/domains/kernel";
+import { isUnderGuildManagedRoot } from "./lib/guild-managed.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
