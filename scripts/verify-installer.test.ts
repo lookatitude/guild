@@ -12,10 +12,8 @@ import {
   verifyInstallerDryRunOutput,
   verifyInstallerDryRuns,
   verifyInstallerHostExecutionLog,
+  writeNpxShim,
 } from "./verify-installer";
-
-// Off CI these two take ~17min against a 180s budget (https://github.com/lookatitude/guild/issues/259).
-const ciOnly = it.skipIf(!process.env.CI);
 
 describe("verify installer dry-runs", () => {
   it("passes for every supported install.sh host without requiring host binaries", () => {
@@ -28,17 +26,17 @@ describe("verify installer dry-runs", () => {
     );
   });
 
-  ciOnly("executes every supported install.sh host against isolated fake host binaries", () => {
+  it("executes every supported install.sh host against isolated fake host binaries", () => {
     const result = verifyInstallerFixtureExecutions({ root: PLUGIN_ROOT });
     expect(result.errors).toEqual([]);
     expect(result.ok).toBe(true);
     expect(result.checks).toEqual(
       INSTALLER_HOST_EXPECTATIONS.map((entry) => `${entry.host}:install.sh fixture execution`)
     );
-    // Runs every host's install.sh for real (~45s); Jest never timed out sync tests, Bun does.
+    // Runs every host's install.sh for real (~40s); Jest never timed out sync tests, Bun does.
   }, 180_000);
 
-  ciOnly("executes the live-isolated installer rail against PATH host binaries without dry-run", () => {
+  it("executes the live-isolated installer rail against PATH host binaries without dry-run", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-installer-live-test-"));
     try {
       const fakeBin = path.join(tmp, "bin");
@@ -61,7 +59,30 @@ describe("verify installer dry-runs", () => {
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
-  }, 180_000);
+  }, 300_000); // real npx per host (~150s locally); fixture rail uses the offline shim
+
+  it("npx shim passes a tsx path containing space, $ and \" without shell interpretation", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-npx-shim-"));
+    try {
+      const weird = path.join(tmp, 'we ird $HOME "q" $(touch pwned)');
+      fs.mkdirSync(weird, { recursive: true });
+      const fakeTsx = path.join(weird, "tsx");
+      fs.writeFileSync(fakeTsx, '#!/usr/bin/env bash\necho "shim-ok $*"\n');
+      fs.chmodSync(fakeTsx, 0o755);
+      const bin = path.join(tmp, "bin");
+      fs.mkdirSync(bin);
+      writeNpxShim(bin);
+      const res = spawnSync(path.join(bin, "npx"), ["tsx", "a", "b"], {
+        encoding: "utf8",
+        env: { ...process.env, GUILD_NPX_SHIM_TSX: fakeTsx, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+      });
+      expect(res.stdout.trim()).toBe("shim-ok a b");
+      expect(fs.existsSync(path.join(weird, "pwned"))).toBe(false);
+      expect(fs.existsSync(path.join(process.cwd(), "pwned"))).toBe(false);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
 
   it("CONTROL: fails when a required host command snippet is absent", () => {
     const errors = verifyInstallerDryRunOutput(
