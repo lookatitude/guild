@@ -843,6 +843,21 @@ describe("the grant covers every hook source codex loads", () => {
     }
   });
 
+  /** Documents the limit: a plugin-installed Guild never earns the bypass (plugin hooks are not enumerable). */
+  it("refuses a plugin-installed Guild (plugins/cache/guild/guild/<v> present)", () => {
+    const { codexHome, env, cleanup } = makeCodexHome({});
+    const project = makeDenyingProject();
+    try {
+      fs.mkdirSync(path.join(codexHome, "plugins", "cache", "guild", "guild", "1.0.0"), { recursive: true });
+      const r = probeCodexPreToolUseEnforcement({ env, cwd: project.cwd });
+      expect(r.enforced).toBe(false);
+      expect(r.detail).toContain("plugin");
+    } finally {
+      project.cleanup();
+      cleanup();
+    }
+  });
+
   /** Plugin hooks cannot be enumerated, so their mere presence withholds it. */
   it("FAILS when codex plugins are installed (their hooks are unknowable)", () => {
     const { codexHome, env, cleanup } = makeCodexHome({});

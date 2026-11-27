@@ -1032,13 +1032,12 @@ function codexPackageRefs(
   inv: GuildInventoryV1,
   codexJson: ReturnType<typeof renderCodexPluginJson>
 ): PackageReferences {
-  void codexJson;
   return {
     host: "codex",
     command_ids: [],
     skill_ids: inv.skills.map((s) => s.id), // native skills/** + .agents fallback
     agent_ids: [], // Codex flags agents unsupported (render-or-degrade) — none referenced.
-    mcp_server_ids: [],
+    mcp_server_ids: Object.keys(codexJson.mcpServers ?? {}),
     script_ids: [],
     hook_ids: [],
     schema_versions: [],

@@ -40,3 +40,12 @@ describe("scripts package command rails", () => {
     expect(pkg.scripts["verify:installer-live"]).toContain("--execute-live-isolated");
   });
 });
+
+describe("host MCP claims rail (#116)", () => {
+  test("check:host-mcp-claims is wired", () => {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(__dirname, "../../scripts/package.json"), "utf8")
+    ) as { scripts: Record<string, string> };
+    expect(pkg.scripts["check:host-mcp-claims"]).toContain("check-host-mcp-claims.ts");
+  });
+});

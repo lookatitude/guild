@@ -628,6 +628,9 @@ export function probeCodexPreToolUseEnforcement(
       ...(pluginRoot.length > 0 ? [nodepath.join(pluginRoot, "hooks", "codex-hooks.json")] : []),
     ];
 
+  // A plugin-installed Guild therefore cannot earn --dangerously-bypass-hook-trust: Codex loads
+  // plugin hooks from sources Guild cannot fully enumerate (manifest arrays, root plugin.json
+  // extensions, project config layers).
   // PLUGINS ARE THE HONEST LIMIT. Codex plugins can carry their own hooks, and
   // Guild has no reliable way to enumerate an enabled plugin's hook set from
   // here. Rather than assert a containment it cannot check, the probe REFUSES

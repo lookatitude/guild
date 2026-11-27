@@ -36,9 +36,9 @@
  * this rewrite — with `cwd: "."` the server starts and returns real wiki results.
  *
  * WHY THE MAP IS ALWAYS EMITTED EXPLICITLY. The rendered Codex package's
- * `renderCodexPluginJson` emits no `mcpServers` and is silent — but that is because
- * the rendered tree ships NO `.mcp.json` to fall back to, NOT because omission and
- * `{}` are equivalent. For a payload that does carry `.mcp.json` (the repo),
+ * `renderCodexPluginJson` (issue #115) now declares the same cwd "." form; before that
+ * it was silent because the rendered tree ships NO `.mcp.json` to fall back to, NOT
+ * because omission and `{}` are equivalent. For a payload that does carry `.mcp.json` (the repo),
  * omitting the field re-enables the broken fallback. Omission ≠ empty ≠ populated.
  */
 
@@ -271,16 +271,24 @@ describe("Claude's contract is untouched", () => {
   });
 });
 
-describe("the rendered Codex package is a DIFFERENT case, not the same decision", () => {
-  it("renderCodexPluginJson omits mcpServers — safe only because that tree ships no .mcp.json", () => {
+describe("the rendered Codex package declares the same working form (issue #115)", () => {
+  it("renderCodexPluginJson emits both servers with cwd '.' and the no-cwd-fallback flag", () => {
     const rendered = renderCodexPluginJson(
-      { name: "guild", version: "9.9.9", description: "d" } as never,
+      {
+        name: "guild",
+        version: "9.9.9",
+        description: "d",
+        mcpServers: [
+          { id: "guild-memory", transport: "stdio", command: "node", args: ["${CLAUDE_PLUGIN_ROOT}/runtime/guild-mcp.js", "wiki"] },
+        ],
+      } as never,
       { renderedAt: STAMP } as never
-    ) as unknown as Record<string, unknown>;
-    expect(rendered["mcpServers"]).toBeUndefined();
-    // The asymmetry that makes omission safe there and unsafe here: the repo DOES
-    // carry a .mcp.json for Codex to fall back to, so the repo-root manifest must
-    // state the map explicitly rather than omit it.
-    expect(fs.existsSync(path.join(PLUGIN_ROOT, ".mcp.json"))).toBe(true);
+    ) as unknown as { mcpServers: Record<string, Entry> };
+    expect(rendered.mcpServers["guild-memory"]).toEqual({
+      type: "stdio",
+      command: "node",
+      args: ["runtime/guild-mcp.js", "wiki", "--no-cwd-fallback"],
+      cwd: ".",
+    });
   });
 });

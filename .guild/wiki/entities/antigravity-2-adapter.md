@@ -67,8 +67,8 @@ model_tiers:
   powerful: { model: "default", thinking: "high" }
 
 mcp:
-  stdio: true                   # via mcp_config.json in plugin
-  http: true
+  stdio: false                  # corrected 2026-11-27 (#116): authoritative row is stdio:false, http:false (verified) - Guild's rendered Antigravity package ships no MCP
+  http: false
   plugin_bundled: true
   core_provides_mcp: true
 
@@ -104,14 +104,14 @@ ttl_seconds: 3600
 | (4) Dispatch | Projects + dynamic subagents (Rung 2) → subagent fallback → serial (Rung 4) | No tmux | `HostIndependentAgentBackend` maps Guild lanes to Antigravity Projects/dynamic subagents. `app_projects: true` + `has_independent_agents: true`. |
 | (5) Permissions | App scoped-permission UI + hooks.json denial | No `PreToolUse ask` | `ScopePolicy.resolve()` runs; emitter maps `ask` → app scoped-permission UI (`ask_renderer: app_scoped_perm`). Projects provide per-project scoped permissions. |
 | (6) Model tiers | `{ model: "default", thinking: low/medium/high }` (Gemini-family) | — | `ModelResolver` uses Gemini thinking levels; same registry entry as Gemini CLI (audit §"P0: Model tiers" registry). |
-| (7) MCP | stdio + HTTP via `mcp_config.json` | — | `McpAdapter` emits MCP entries in `mcp_config.json` plugin file. Both local stdio and remote HTTP documented. |
+| (7) MCP | **none rendered — authoritative row is `mcp: {stdio: false, http: false}` (provenance `verified`)** | Host documents `mcp_config.json` | **corrected 2026-11-27 (#116):** Antigravity itself documents stdio + HTTP MCP via `mcp_config.json`, but Guild's rendered package does NOT emit it (degraded, render-or-degrade), so no transport is claimed for the Guild package. Falls back to fs/BM25. |
 | (8) Team visibility | Rung 2 (Projects + dynamic subagents) → serial Rung 4 | No tmux | `app_projects: true`; Guild initiatives map to Antigravity Projects; lanes map to dynamic subagents. |
 
 ## Per-feature degradation matrix
 
 | FDC | Full behavior | This host | Degradation contract |
 |---|---|---|---|
-| FDC-1 Memory | MCP stdio `guild-memory` | stdio or HTTP via `mcp_config.json` | No degradation expected; fs/BM25 fallback if MCP fails. |
+| FDC-1 Memory | MCP stdio `guild-memory` | NOT via MCP (row: stdio:false, http:false) | corrected 2026-11-27 (#116): fs/BM25 fallback; `mcp_config.json` is not rendered. |
 | FDC-2 Knowledge-graph + recall | `guild-memory` or fs scan | MCP or fallback | Index re-scan if MCP unavailable. |
 | FDC-3 Context assembly | Context bundle always written | Full | Bundle written in project folder; `degraded_retrieval` if FDC-1/2 degrade. |
 | FDC-4 Agent communication | File bus canonical | Full (project folder writes) | `agent_bus.transport: file_bus_native`; Projects provide per-project `.guild/` tree. |
@@ -123,7 +123,7 @@ ttl_seconds: 3600
 | FDC-10 Visuals / UI | Host-native | Projects panel, artifacts, skills UI, scheduled task dashboard | App provides richer visual orchestration surface than CLI. No tmux. |
 | FDC-11 Security / permissions | Policy core + ask path | App scoped permissions | `ScopePolicy` runs; `ask_renderer: app_scoped_perm`. Project-level scoped permissions are the security perimeter. |
 | FDC-12 Cost + subscription | Native billing | `cost_path: native_process` | Antigravity process is native; no external CLI issue. |
-| FDC-13 MCP | stdio / HTTP | Full via `mcp_config.json` | Both transports documented for Antigravity (audit §"MCP support matrix"). |
+| FDC-13 MCP | stdio / HTTP | none rendered (NOT claimed) | corrected 2026-11-27 (#116): the host documents both transports (audit §"MCP support matrix"), but the authoritative row denies both for Guild's package. |
 | FDC-14 Host-native subagents | Parallel agents | Projects + dynamic subagents (Rung 2) | `coordination.parallelism: host_native`; multi-project + subagent parallelism per app docs. |
 | FDC-15 Work isolation | Worktrees | Projects + worktree support | "Projects with worktree support" per app feature docs. Guild initiatives map 1:1 to Projects. |
 | FDC-16 Telemetry + replay | Normalized trace | Normalization required | Antigravity `hooks.json` event field names differ. `GuildHookEvent` normalization mandatory. `source: host_hook`, `fidelity: full` when hooks present. |
