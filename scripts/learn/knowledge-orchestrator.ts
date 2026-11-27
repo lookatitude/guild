@@ -94,6 +94,9 @@ import {
   makeTopicId,
   makeWikiPageId,
   KNOWLEDGE_CONFIG_DEFAULTS,
+  isKnowledgeTierRecord,
+  normalizeEdgeTypeV2,
+  type KnowledgeTierRecord,
   type GraphNode,
   type GraphEdge,
   type KnowledgeGraph,
@@ -255,8 +258,8 @@ const KNOWLEDGE_TIER_EDGE_TYPES = new Set([
  * that filtered on the marker silently dropped all of them.
  *
  * Provenance first: finalize records what it emitted in `knowledge_tier`, and a
- * graph carrying that record drops exactly those nodes and edge endpoint pairs
- * (plus edges into a dropped node). Type is not provenance: input may hold
+ * graph carrying that record drops exactly those nodes and typed edges (plus
+ * edges into a dropped node). Type is not provenance: input may hold
  * valid concept / entity / topic / claim nodes of its own.
  *
  * A graph without the record (written before it existed, or rewritten by a
@@ -292,44 +295,37 @@ export function carriedForwardSubset<
   const edges = g.edges.filter((e) => {
     if (marked(e)) return true;
     if (dropped.has(e.source) || dropped.has(e.target)) return false;
-    return record ? !record.edgeKeys.has(edgeEndpointKey(e)) : !KNOWLEDGE_TIER_EDGE_TYPES.has(e.type);
+    return record ? !record.edgeKeys.has(edgeKey(e)) : !KNOWLEDGE_TIER_EDGE_TYPES.has(e.type);
   });
   return { nodes, edges };
 }
 
-/** What one finalize emitted, as stored on the graph (`knowledge_tier`). */
-export interface KnowledgeTierRecord {
-  node_ids: string[];
-  edge_endpoints: [string, string][];
-}
-
-const edgeEndpointKey = (e: { source: string; target: string }) => JSON.stringify([e.source, e.target]);
+type EdgeLike = { source: string; target: string; type?: unknown };
+/** Typed edge identity, with the type as validateGraphV2 writes it (it dedups on type|source|target). */
+const edgeKey = (e: EdgeLike) => JSON.stringify([e.source, e.target, normalizeEdgeTypeV2(e.type)]);
 
 function readKnowledgeTier(x: unknown): { nodeIds: Set<string>; edgeKeys: Set<string> } | null {
-  const r = x as Partial<KnowledgeTierRecord> | null | undefined;
-  if (!r || typeof r !== "object" || !Array.isArray(r.node_ids) || !Array.isArray(r.edge_endpoints)) return null;
-  if (!r.node_ids.every((id) => typeof id === "string")) return null;
-  if (!r.edge_endpoints.every((p) => Array.isArray(p) && p.length === 2 && p.every((s) => typeof s === "string"))) return null;
+  if (!isKnowledgeTierRecord(x)) return null;
   return {
-    nodeIds: new Set(r.node_ids),
-    edgeKeys: new Set(r.edge_endpoints.map(([source, target]) => edgeEndpointKey({ source, target }))),
+    nodeIds: new Set(x.node_ids),
+    edgeKeys: new Set(x.edges.map(([source, target, type]) => edgeKey({ source, target, type }))),
   };
 }
 
 /**
- * The record a finalize stores: every node id and edge endpoint pair in the
- * finished graph that did not come in through `input`. Sorted, so the graph
- * bytes stay a pure function of their inputs (SC-8).
+ * The record a finalize stores: every node id and typed edge in the finished
+ * graph that did not come in through `input`. Sorted, so the graph bytes stay a
+ * pure function of their inputs (SC-8).
  */
 export function knowledgeTierRecord(
-  graph: { nodes: { id: string }[]; edges: { source: string; target: string }[] },
-  input: { nodes: { id: string }[]; edges: { source: string; target: string }[] } | undefined,
+  graph: { nodes: { id: string }[]; edges: EdgeLike[] },
+  input: { nodes: { id: string }[]; edges: EdgeLike[] } | undefined,
 ): KnowledgeTierRecord {
   const inNodes = new Set((input?.nodes ?? []).map((n) => n.id));
-  const inEdges = new Set((input?.edges ?? []).map(edgeEndpointKey));
+  const inEdges = new Set((input?.edges ?? []).map(edgeKey));
   const node_ids = [...new Set(graph.nodes.map((n) => n.id).filter((id) => !inNodes.has(id)))].sort();
-  const keys = [...new Set(graph.edges.map(edgeEndpointKey).filter((k) => !inEdges.has(k)))].sort();
-  return { node_ids, edge_endpoints: keys.map((k) => JSON.parse(k) as [string, string]) };
+  const keys = [...new Set(graph.edges.map(edgeKey).filter((k) => !inEdges.has(k)))].sort();
+  return { node_ids, edges: keys.map((k) => JSON.parse(k) as [string, string, string]) };
 }
 
 /**

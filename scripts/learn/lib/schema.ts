@@ -1289,6 +1289,42 @@ export function validateGraphV2(
     layers: validLayers,
     tour: validTour,
   };
+  // #317: finalize's provenance record survives a whole-graph re-validation
+  // (validate-graph); without it the next finalize falls back to type.
+  if (isKnowledgeTierRecord(raw.knowledge_tier)) graph.knowledge_tier = raw.knowledge_tier;
 
   return { success: true, data: graph, issues };
+}
+
+// ---------------------------------------------------------------------------
+// v2 — finalize provenance record (#317)
+// ---------------------------------------------------------------------------
+
+/** What one knowledge finalize emitted beyond its input: node ids and [source, target, type] edges. */
+export interface KnowledgeTierRecord {
+  node_ids: string[];
+  edges: [string, string, string][];
+}
+
+export function isKnowledgeTierRecord(x: unknown): x is KnowledgeTierRecord {
+  const r = x as Partial<KnowledgeTierRecord> | null | undefined;
+  return (
+    !!r &&
+    typeof r === "object" &&
+    Array.isArray(r.node_ids) &&
+    r.node_ids.every((id) => typeof id === "string") &&
+    Array.isArray(r.edges) &&
+    r.edges.every((e) => Array.isArray(e) && e.length === 3 && e.every((s) => typeof s === "string"))
+  );
+}
+
+/**
+ * The edge type validateGraphV2 writes for an input edge type: lower-cased, a v1
+ * alias resolved unless the type is already v2-native, missing -> depends_on.
+ * Keeps an input edge's provenance key equal to its validated form.
+ */
+export function normalizeEdgeTypeV2(type: unknown): string {
+  if (typeof type !== "string" || type === "") return "depends_on";
+  const t = type.toLowerCase();
+  return !EDGE_TYPES_V2.has(t) && t in EDGE_TYPE_ALIASES ? EDGE_TYPE_ALIASES[t] : t;
 }

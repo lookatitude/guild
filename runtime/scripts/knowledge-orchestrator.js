@@ -4510,7 +4510,17 @@ function validateGraphV2(input, opts) {
     layers: validLayers,
     tour: validTour
   };
+  if (isKnowledgeTierRecord(raw.knowledge_tier)) graph.knowledge_tier = raw.knowledge_tier;
   return { success: true, data: graph, issues };
+}
+function isKnowledgeTierRecord(x) {
+  const r = x;
+  return !!r && typeof r === "object" && Array.isArray(r.node_ids) && r.node_ids.every((id2) => typeof id2 === "string") && Array.isArray(r.edges) && r.edges.every((e) => Array.isArray(e) && e.length === 3 && e.every((s) => typeof s === "string"));
+}
+function normalizeEdgeTypeV2(type) {
+  if (typeof type !== "string" || type === "") return "depends_on";
+  const t = type.toLowerCase();
+  return !EDGE_TYPES_V2.has(t) && t in EDGE_TYPE_ALIASES ? EDGE_TYPE_ALIASES[t] : t;
 }
 var fs4, path5, crypto3, NODE_TYPES, NODE_TYPES_V2, EDGE_TYPES, EDGE_TYPES_V2, NODE_CATEGORIES, KNOWLEDGE_CONFIG_DEFAULTS, DIRECTIONS, CONFIDENCE, NODE_TYPE_ALIASES, EDGE_TYPE_ALIASES, DIRECTION_ALIASES, KNOWLEDGE_NODE_TYPES_V2;
 var init_schema = __esm({
@@ -5355,10 +5365,10 @@ async function buildCrossLinks(repoRoot, input, opts) {
   const nodeById = new Map(input.nodes.map((n) => [n.id, n]));
   const result2 = [];
   for (const edge of rawEdges) {
-    const edgeKey = `${edge.source}\u2192${edge.target}:${edge.type}`;
-    if (!candidateKeys.has(edgeKey)) continue;
+    const edgeKey2 = `${edge.source}\u2192${edge.target}:${edge.type}`;
+    if (!candidateKeys.has(edgeKey2)) continue;
     if (edge.weight < relMinConf) continue;
-    if (existingKeys.has(edgeKey)) continue;
+    if (existingKeys.has(edgeKey2)) continue;
     if (edge.type === "evidenced_by") {
       const targetNode = nodeById.get(edge.target);
       if (!targetNode) continue;
@@ -5367,7 +5377,7 @@ async function buildCrossLinks(repoRoot, input, opts) {
       if (!anyResolves) continue;
     }
     result2.push(edge);
-    existingKeys.add(edgeKey);
+    existingKeys.add(edgeKey2);
   }
   return { edges: result2 };
 }
@@ -30546,27 +30556,24 @@ function carriedForwardSubset(g) {
   const edges = g.edges.filter((e) => {
     if (marked(e)) return true;
     if (dropped.has(e.source) || dropped.has(e.target)) return false;
-    return record ? !record.edgeKeys.has(edgeEndpointKey(e)) : !KNOWLEDGE_TIER_EDGE_TYPES.has(e.type);
+    return record ? !record.edgeKeys.has(edgeKey(e)) : !KNOWLEDGE_TIER_EDGE_TYPES.has(e.type);
   });
   return { nodes, edges };
 }
-var edgeEndpointKey = (e) => JSON.stringify([e.source, e.target]);
+var edgeKey = (e) => JSON.stringify([e.source, e.target, normalizeEdgeTypeV2(e.type)]);
 function readKnowledgeTier(x) {
-  const r = x;
-  if (!r || typeof r !== "object" || !Array.isArray(r.node_ids) || !Array.isArray(r.edge_endpoints)) return null;
-  if (!r.node_ids.every((id2) => typeof id2 === "string")) return null;
-  if (!r.edge_endpoints.every((p) => Array.isArray(p) && p.length === 2 && p.every((s) => typeof s === "string"))) return null;
+  if (!isKnowledgeTierRecord(x)) return null;
   return {
-    nodeIds: new Set(r.node_ids),
-    edgeKeys: new Set(r.edge_endpoints.map(([source, target]) => edgeEndpointKey({ source, target })))
+    nodeIds: new Set(x.node_ids),
+    edgeKeys: new Set(x.edges.map(([source, target, type]) => edgeKey({ source, target, type })))
   };
 }
 function knowledgeTierRecord(graph, input) {
   const inNodes = new Set((input?.nodes ?? []).map((n) => n.id));
-  const inEdges = new Set((input?.edges ?? []).map(edgeEndpointKey));
+  const inEdges = new Set((input?.edges ?? []).map(edgeKey));
   const node_ids = [...new Set(graph.nodes.map((n) => n.id).filter((id2) => !inNodes.has(id2)))].sort();
-  const keys = [...new Set(graph.edges.map(edgeEndpointKey).filter((k) => !inEdges.has(k)))].sort();
-  return { node_ids, edge_endpoints: keys.map((k) => JSON.parse(k)) };
+  const keys = [...new Set(graph.edges.map(edgeKey).filter((k) => !inEdges.has(k)))].sort();
+  return { node_ids, edges: keys.map((k) => JSON.parse(k)) };
 }
 var UNKNOWN_GRAPH_PROJECT = { name: "unknown", description: "" };
 function resolveGraphProject(prior) {

@@ -24,6 +24,7 @@ import {
   emitRound1Candidates,
   resolveGraphProject,
   carriedForwardSubset,
+  knowledgeTierRecord,
   type KnowledgeFilePaths,
   type KnowledgeLLMSeams,
   type RunKnowledgeOptions,
@@ -38,6 +39,7 @@ import type {
   ProposeClaimsAndEntitiesFn,
 } from "./content-analyze";
 import type { ClassifyPageFn } from "./wiki-index";
+import { validateGraphV2 } from "./lib/schema";
 import type { ProposeTaxonomyFn } from "./taxonomy-build";
 import type { ConfirmCrossLinksFn } from "./cross-link";
 
@@ -1245,7 +1247,7 @@ describe("J — #317: project identity and structure survive finalize", () => {
     ];
     const knowledge_tier = {
       node_ids: ["concept:k1", "domain:billing"],
-      edge_endpoints: [["concept:k1", "file:a.ts"], ["file:a.ts", "file:a.ts"]],
+      edges: [["concept:k1", "file:a.ts", "implemented_by"], ["file:a.ts", "file:a.ts", "relates_to"]],
     };
     const sub = carriedForwardSubset({ nodes, edges, knowledge_tier });
     expect(sub.nodes.map((n) => n.id)).toEqual(["file:a.ts", "concept:input", "domain:src"]);
@@ -1289,6 +1291,13 @@ describe("J — #317: project identity and structure survive finalize", () => {
       const first = graphOf(dir);
       expect(first.nodes.some((n: { id: string }) => n.id === concept.id)).toBe(true);
       expect(first.knowledge_tier.node_ids).not.toContain(concept.id);
+      // A whole-graph re-validation in between must not erase the record (codex r2 P1).
+      const v = Bun.spawnSync(
+        [process.execPath, path.join(path.dirname(ORCHESTRATOR), "validate-graph.js"), "--cwd", dir, "--in", ".guild/indexes/knowledge-graph.json"],
+        { cwd: dir, stdout: "pipe", stderr: "pipe" }
+      );
+      if (v.exitCode !== 0) throw new Error(`validate-graph failed: ${v.stderr.toString()}`);
+      expect(graphOf(dir).knowledge_tier).toEqual(first.knowledge_tier);
       finalizeCli(dir);
       const second = graphOf(dir);
       expect(second.nodes.some((n: { id: string }) => n.id === concept.id)).toBe(true);
@@ -1297,4 +1306,38 @@ describe("J — #317: project identity and structure survive finalize", () => {
     },
     60000
   );
+
+  test("J10: an emitted edge sharing its endpoints with an input edge is still dropped (codex r2 P2)", () => {
+    const nodes = [
+      { id: "file:a.ts", type: "file" },
+      { id: "file:b.ts", type: "file" },
+    ];
+    const input = { nodes, edges: [{ source: "file:a.ts", target: "file:b.ts", type: "Related" }] };
+    const graph = {
+      nodes,
+      edges: [
+        { source: "file:a.ts", target: "file:b.ts", type: "related" }, // the input edge, validated (lower-cased)
+        { source: "file:a.ts", target: "file:b.ts", type: "operates_on" }, // K5 output on the same pair
+      ],
+    };
+    const knowledge_tier = knowledgeTierRecord(graph, input);
+    expect(knowledge_tier).toEqual({ node_ids: [], edges: [["file:a.ts", "file:b.ts", "operates_on"]] });
+    expect(carriedForwardSubset({ ...graph, knowledge_tier }).edges.map((e) => e.type)).toEqual(["related"]);
+  });
+
+  test("J11: validateGraphV2 keeps a well-formed record and drops a malformed one", () => {
+    const g = {
+      version: "guild.knowledge_graph.v2",
+      kind: "knowledge",
+      generated_from_commit: "unknown",
+      project: { name: "p", description: "" },
+      nodes: [{ id: "file:a.ts", type: "file", name: "a.ts", source_refs: ["a.ts"], confidence: "high" }],
+      edges: [],
+      layers: [{ id: "layer:core", name: "Core", description: "", nodeIds: ["file:a.ts"] }],
+      tour: [],
+    };
+    const record = { node_ids: ["topic:x"], edges: [["topic:x", "file:a.ts", "evidenced_by"]] };
+    expect(validateGraphV2({ ...g, knowledge_tier: record }, {}).data?.knowledge_tier).toEqual(record);
+    expect(validateGraphV2({ ...g, knowledge_tier: { node_ids: [1], edges: [] } }, {}).data?.knowledge_tier).toBeUndefined();
+  });
 });

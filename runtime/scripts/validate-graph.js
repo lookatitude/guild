@@ -7942,7 +7942,12 @@ function validateGraphV2(input, opts) {
     layers: validLayers,
     tour: validTour
   };
+  if (isKnowledgeTierRecord(raw.knowledge_tier)) graph.knowledge_tier = raw.knowledge_tier;
   return { success: true, data: graph, issues };
+}
+function isKnowledgeTierRecord(x) {
+  const r = x;
+  return !!r && typeof r === "object" && Array.isArray(r.node_ids) && r.node_ids.every((id) => typeof id === "string") && Array.isArray(r.edges) && r.edges.every((e) => Array.isArray(e) && e.length === 3 && e.every((s) => typeof s === "string"));
 }
 
 // scripts/learn/lib/structural.ts
