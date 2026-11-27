@@ -45193,86 +45193,6 @@ var init_workflow_graph_overlay = __esm({
   }
 });
 
-// src/domains/lifecycle/workflow-protected-paths.ts
-var PROTECTED_PATHS_VERSION, GATE_ORDER, CLASS_REQUIRED_GATE_ROLES, RELEASE_CLASS_GATE_ROLES, QA_ASSURANCE_KINDS;
-var init_workflow_protected_paths = __esm({
-  "src/domains/lifecycle/workflow-protected-paths.ts"() {
-    init_security();
-    init_workflow_graph_overlay();
-    PROTECTED_PATHS_VERSION = "guild.protected_paths.v1";
-    GATE_ORDER = Object.freeze(["d5", "qa", "ops", "d8"]);
-    CLASS_REQUIRED_GATE_ROLES = Object.freeze({ product: ["d5", "qa", "d8"] });
-    RELEASE_CLASS_GATE_ROLES = Object.freeze({ ops: ["ops"] });
-    QA_ASSURANCE_KINDS = Object.freeze(["security", "adversarial_security", "ui", "ux"]);
-  }
-});
-
-// src/domains/lifecycle/workflow-component-compiler.ts
-function canonicalJson3(value) {
-  if (value === null || typeof value === "boolean") return JSON.stringify(value);
-  if (typeof value === "string") return JSON.stringify(value);
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new Error("non-finite number in canonical JSON");
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) return `[${value.map(canonicalJson3).join(",")}]`;
-  if (isPlain(value)) {
-    const keys = Object.keys(value).filter((k) => value[k] !== void 0).sort();
-    return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson3(value[k])}`).join(",")}}`;
-  }
-  throw new Error(`value of type ${typeof value} is not canonical JSON`);
-}
-function sha256Of2(value) {
-  return `sha256:${crypto24.createHash("sha256").update(canonicalJson3(value), "utf8").digest("hex")}`;
-}
-function isPlain(v) {
-  if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
-  const proto = Object.getPrototypeOf(v);
-  return proto === Object.prototype || proto === null;
-}
-var crypto24, WORKFLOW_COMPILER_ID, WORKFLOW_COMPILER_VERSION, COMPILER_LIMITS, COMPONENT_EFFECTS, COMPONENT_GATE_ROLES, COMPONENT_CONDITION_KINDS, COMPONENT_STEP_KINDS, CLASS_REQUIRED_GATE_ROLES2, RELEASE_CLASS_GATE_ROLES2, COMPILER_HASH;
-var init_workflow_component_compiler = __esm({
-  "src/domains/lifecycle/workflow-component-compiler.ts"() {
-    crypto24 = __toESM(require("node:crypto"));
-    init_kernel();
-    init_state();
-    init_workflow_graph_overlay();
-    init_workflow_protected_paths();
-    WORKFLOW_COMPILER_ID = "guild.workflow_compiler";
-    WORKFLOW_COMPILER_VERSION = "1";
-    COMPILER_LIMITS = Object.freeze({
-      maxNodes: 1e3,
-      maxEdges: 5e3,
-      maxComponents: 100,
-      maxProtectedGates: 10,
-      maxCallDepth: 8,
-      maxStepNesting: 16,
-      maxSteps: 100,
-      maxRepeatRounds: 10,
-      maxTotalRounds: 100,
-      maxPorts: 50,
-      maxCapabilities: 50,
-      maxConditionTerms: 8,
-      maxPathStates: 1e4
-    });
-    COMPONENT_EFFECTS = Object.freeze(["read", "write", "review", "gate", "privileged_operation", "release"]);
-    COMPONENT_GATE_ROLES = Object.freeze(["d5", "qa", "ops", "d8"]);
-    COMPONENT_CONDITION_KINDS = Object.freeze(["outcome", "no_unresolved_questions", "obligations_accepted", "artifact_present", "all_of", "any_of"]);
-    COMPONENT_STEP_KINDS = Object.freeze(["task", "sequence", "repeat", "call"]);
-    CLASS_REQUIRED_GATE_ROLES2 = Object.freeze({ product: ["d5", "qa", "d8"] });
-    RELEASE_CLASS_GATE_ROLES2 = Object.freeze({ ops: ["ops"] });
-    COMPILER_HASH = sha256Of2({
-      id: WORKFLOW_COMPILER_ID,
-      version: WORKFLOW_COMPILER_VERSION,
-      limits: COMPILER_LIMITS,
-      step_kinds: COMPONENT_STEP_KINDS,
-      condition_kinds: COMPONENT_CONDITION_KINDS,
-      edge_outcomes: ["next", "repeat"],
-      protected_paths: PROTECTED_PATHS_VERSION
-    });
-  }
-});
-
 // src/domains/lifecycle/learning-checkpoint-5.ts
 var CHECKPOINT_VERDICTS, VERDICT_ROUTE;
 var init_learning_checkpoint_5 = __esm({
@@ -55296,8 +55216,6 @@ var init_lifecycle = __esm({
     init_write_run_manifest();
     init_write_task_run();
     init_workflow_graph_overlay();
-    init_workflow_component_compiler();
-    init_workflow_protected_paths();
     init_stable_lock();
     init_learning_checkpoint_5();
     init_workflow_graph_load();
@@ -55342,7 +55260,7 @@ var init_lifecycle = __esm({
 
 // src/domains/distribution/release-distribution-contract.ts
 function sha2566(value) {
-  return crypto25.createHash("sha256").update(value).digest("hex");
+  return crypto24.createHash("sha256").update(value).digest("hex");
 }
 function stableJson(value) {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
@@ -55384,10 +55302,10 @@ function verifyReleaseClaim(claim, archive) {
   if (claim.host_support.supported !== false) errors.push("unsupported host cannot be promoted");
   return errors;
 }
-var crypto25, RELEASE_CLAIM_SCHEMA, OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS;
+var crypto24, RELEASE_CLAIM_SCHEMA, OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS;
 var init_release_distribution_contract = __esm({
   "src/domains/distribution/release-distribution-contract.ts"() {
-    crypto25 = __toESM(require("node:crypto"));
+    crypto24 = __toESM(require("node:crypto"));
     RELEASE_CLAIM_SCHEMA = "guild.release_claim.v1";
     OPERATION_KINDS = Object.freeze(["render", "install", "activate", "update", "uninstall", "verify"]);
     ACCEPTED_CONFORMANCE_ARTIFACTS = Object.freeze([
@@ -58176,10 +58094,10 @@ function assertLockedScriptRuntimeDependencies(pluginRoot) {
     }
   }
 }
-function canonicalJson4(value) {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson4).join(",")}]`;
+function canonicalJson3(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson3).join(",")}]`;
   if (value !== null && typeof value === "object") {
-    return `{${Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0).map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson4(child)}`).join(",")}}`;
+    return `{${Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0).map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson3(child)}`).join(",")}}`;
   }
   return JSON.stringify(value);
 }
@@ -58204,7 +58122,7 @@ function assertLockedNativeScriptRuntimeClosure(pluginRoot) {
   }
   const expectedRootEntries = [".bin", ".package-lock.json", ...Object.keys(LOCKED_SCRIPT_RUNTIME_DIGESTS)].sort();
   const actualRootEntries = fs81.readdirSync(nodeModules).sort();
-  if (canonicalJson4(actualRootEntries) !== canonicalJson4(expectedRootEntries)) {
+  if (canonicalJson3(actualRootEntries) !== canonicalJson3(expectedRootEntries)) {
     throw new Error("locked native script runtime contains an unexpected or missing root entry");
   }
   assertLockedScriptRuntimeDependencies(root);
@@ -58217,7 +58135,7 @@ function assertLockedNativeScriptRuntimeClosure(pluginRoot) {
     "installed scripts package lock"
   );
   const expectedLockKeys = ["lockfileVersion", "name", "packages", "requires"].sort();
-  if (canonicalJson4(Object.keys(installedLock).sort()) !== canonicalJson4(expectedLockKeys)) {
+  if (canonicalJson3(Object.keys(installedLock).sort()) !== canonicalJson3(expectedLockKeys)) {
     throw new Error("installed scripts package lock has an invalid shape");
   }
   const sourcePackages = sourceLock["packages"];
@@ -58235,7 +58153,7 @@ function assertLockedNativeScriptRuntimeClosure(pluginRoot) {
       return [packagePath, entry];
     })
   );
-  if (canonicalJson4(installedPackages) !== canonicalJson4(expectedPackages)) {
+  if (canonicalJson3(installedPackages) !== canonicalJson3(expectedPackages)) {
     throw new Error("installed scripts package lock is not the exact production projection");
   }
   const binRoot = path96.join(nodeModules, ".bin");
@@ -62341,7 +62259,7 @@ function buildStationTaskCellResult(station, teamPlanRef, lanes) {
 init_teams();
 
 // scripts/lib/core/contracts/specialist-identity.ts
-var crypto26 = __toESM(require("crypto"));
+var crypto25 = __toESM(require("crypto"));
 var import_util5 = require("util");
 
 // scripts/lib/roster.ts
@@ -62585,17 +62503,17 @@ function canonicalize(value) {
   }
   return out;
 }
-function canonicalJson5(value) {
+function canonicalJson4(value) {
   return JSON.stringify(canonicalize(value));
 }
 function hashSpecialistType(type) {
-  return sha256Hex3(canonicalJson5(type));
+  return sha256Hex3(canonicalJson4(type));
 }
 function hashSpecialistProfile(profile) {
-  return sha256Hex3(canonicalJson5(profile));
+  return sha256Hex3(canonicalJson4(profile));
 }
 function sha256Hex3(s) {
-  return crypto26.createHash("sha256").update(s, "utf8").digest("hex");
+  return crypto25.createHash("sha256").update(s, "utf8").digest("hex");
 }
 var TOOL_TO_CAPABILITY = Object.freeze({
   Read: "read-files",
@@ -62703,12 +62621,12 @@ function specialistProfileFromAgentFrontmatter(fm, boundType) {
 }
 
 // scripts/lib/capability/definition-ref-for-dispatch.ts
-var crypto28 = __toESM(require("node:crypto"));
+var crypto27 = __toESM(require("node:crypto"));
 var fs89 = __toESM(require("node:fs"));
 var path105 = __toESM(require("node:path"));
 
 // scripts/lib/core/contracts/adoption-manifest.ts
-var crypto27 = __toESM(require("crypto"));
+var crypto26 = __toESM(require("crypto"));
 var import_util6 = require("util");
 var ADOPTION_MANIFEST_SCHEMA = "guild.adoption_manifest.v1";
 var ADOPTION_REASONS = Object.freeze([
@@ -62808,7 +62726,7 @@ function entryDigest(entry) {
   try {
     const valid = validateAdoptionEntry(entry);
     if (valid === null) return INVALID_DIGEST;
-    return crypto27.createHash("sha256").update(JSON.stringify(canonicalize2(valid)), "utf8").digest("hex");
+    return crypto26.createHash("sha256").update(JSON.stringify(canonicalize2(valid)), "utf8").digest("hex");
   } catch {
     return INVALID_DIGEST;
   }
@@ -62824,7 +62742,7 @@ function manifestCommitment(manifest) {
     const payload = COMMITMENT_DOMAIN + JSON.stringify([m.schema_version, m.project_id, m.entries.length, tip]);
     return {
       ok: true,
-      digest: crypto27.createHash("sha256").update(payload, "utf8").digest("hex"),
+      digest: crypto26.createHash("sha256").update(payload, "utf8").digest("hex"),
       empty: m.entries.length === 0
     };
   } catch {
@@ -64457,7 +64375,7 @@ function shippedDefinitionRef(pluginRoot, lane) {
     kind: "agent",
     id: name,
     relative_path: definition,
-    content_hash: `sha256:${crypto28.createHash("sha256").update(bytes).digest("hex")}`,
+    content_hash: `sha256:${crypto27.createHash("sha256").update(bytes).digest("hex")}`,
     source_commit: null,
     specialist_profile_hash: identity.profileHash,
     specialist_type_hash: identity.typeHash,
@@ -66148,24 +66066,24 @@ var CAPABILITY_READERS = {
   "host.structured_output.native_json": (entry) => entry.capabilities.structured_output.native_json
 };
 var UNKNOWN_HOST_VERSION = "unknown";
-function canonicalJson6(value) {
+function canonicalJson5(value) {
   if (value === null) return "null";
   const kind = typeof value;
   if (kind === "number") return Number.isFinite(value) ? JSON.stringify(value) : "null";
   if (kind === "boolean" || kind === "string") return JSON.stringify(value);
   if (kind === "undefined" || kind === "function" || kind === "symbol") return "null";
-  if (Array.isArray(value)) return `[${value.map((item) => canonicalJson6(item)).join(",")}]`;
+  if (Array.isArray(value)) return `[${value.map((item) => canonicalJson5(item)).join(",")}]`;
   const record = value;
   const parts = [];
   for (const key of Object.keys(record).sort()) {
     if (record[key] === void 0) continue;
-    parts.push(`${JSON.stringify(key)}:${canonicalJson6(record[key])}`);
+    parts.push(`${JSON.stringify(key)}:${canonicalJson5(record[key])}`);
   }
   return `{${parts.join(",")}}`;
 }
 function snapshotHash(hostId, hostVersion, facts) {
   const digest2 = (0, import_node_crypto13.createHash)("sha256").update(
-    canonicalJson6({
+    canonicalJson5({
       schema_version: HOST_CAPABILITY_SNAPSHOT_SCHEMA,
       host_id: hostId,
       host_version: hostVersion,
@@ -66223,7 +66141,7 @@ function createHostCapabilitySnapshotStore() {
       if (!hostId || !entry) return unsupportedResult(request);
       const hostVersion = request.hostVersion ?? UNKNOWN_HOST_VERSION;
       const observation = request.authentication ?? "not_observed";
-      const inputHash = canonicalJson6({ host_id: hostId, host_version: hostVersion, authentication: observation });
+      const inputHash = canonicalJson5({ host_id: hostId, host_version: hostVersion, authentication: observation });
       const key = keyFor(request.runId, hostId);
       const existing = minted.get(key);
       if (existing !== void 0) {

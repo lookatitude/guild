@@ -34066,86 +34066,6 @@ var init_workflow_graph_overlay = __esm({
   }
 });
 
-// src/domains/lifecycle/workflow-protected-paths.ts
-var PROTECTED_PATHS_VERSION, GATE_ORDER, CLASS_REQUIRED_GATE_ROLES, RELEASE_CLASS_GATE_ROLES, QA_ASSURANCE_KINDS;
-var init_workflow_protected_paths = __esm({
-  "src/domains/lifecycle/workflow-protected-paths.ts"() {
-    init_security();
-    init_workflow_graph_overlay();
-    PROTECTED_PATHS_VERSION = "guild.protected_paths.v1";
-    GATE_ORDER = Object.freeze(["d5", "qa", "ops", "d8"]);
-    CLASS_REQUIRED_GATE_ROLES = Object.freeze({ product: ["d5", "qa", "d8"] });
-    RELEASE_CLASS_GATE_ROLES = Object.freeze({ ops: ["ops"] });
-    QA_ASSURANCE_KINDS = Object.freeze(["security", "adversarial_security", "ui", "ux"]);
-  }
-});
-
-// src/domains/lifecycle/workflow-component-compiler.ts
-function canonicalJson2(value) {
-  if (value === null || typeof value === "boolean") return JSON.stringify(value);
-  if (typeof value === "string") return JSON.stringify(value);
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new Error("non-finite number in canonical JSON");
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) return `[${value.map(canonicalJson2).join(",")}]`;
-  if (isPlain(value)) {
-    const keys = Object.keys(value).filter((k) => value[k] !== void 0).sort();
-    return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson2(value[k])}`).join(",")}}`;
-  }
-  throw new Error(`value of type ${typeof value} is not canonical JSON`);
-}
-function sha256Of2(value) {
-  return `sha256:${crypto17.createHash("sha256").update(canonicalJson2(value), "utf8").digest("hex")}`;
-}
-function isPlain(v) {
-  if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
-  const proto = Object.getPrototypeOf(v);
-  return proto === Object.prototype || proto === null;
-}
-var crypto17, WORKFLOW_COMPILER_ID, WORKFLOW_COMPILER_VERSION, COMPILER_LIMITS, COMPONENT_EFFECTS, COMPONENT_GATE_ROLES, COMPONENT_CONDITION_KINDS, COMPONENT_STEP_KINDS, CLASS_REQUIRED_GATE_ROLES2, RELEASE_CLASS_GATE_ROLES2, COMPILER_HASH;
-var init_workflow_component_compiler = __esm({
-  "src/domains/lifecycle/workflow-component-compiler.ts"() {
-    crypto17 = __toESM(require("node:crypto"));
-    init_kernel();
-    init_state();
-    init_workflow_graph_overlay();
-    init_workflow_protected_paths();
-    WORKFLOW_COMPILER_ID = "guild.workflow_compiler";
-    WORKFLOW_COMPILER_VERSION = "1";
-    COMPILER_LIMITS = Object.freeze({
-      maxNodes: 1e3,
-      maxEdges: 5e3,
-      maxComponents: 100,
-      maxProtectedGates: 10,
-      maxCallDepth: 8,
-      maxStepNesting: 16,
-      maxSteps: 100,
-      maxRepeatRounds: 10,
-      maxTotalRounds: 100,
-      maxPorts: 50,
-      maxCapabilities: 50,
-      maxConditionTerms: 8,
-      maxPathStates: 1e4
-    });
-    COMPONENT_EFFECTS = Object.freeze(["read", "write", "review", "gate", "privileged_operation", "release"]);
-    COMPONENT_GATE_ROLES = Object.freeze(["d5", "qa", "ops", "d8"]);
-    COMPONENT_CONDITION_KINDS = Object.freeze(["outcome", "no_unresolved_questions", "obligations_accepted", "artifact_present", "all_of", "any_of"]);
-    COMPONENT_STEP_KINDS = Object.freeze(["task", "sequence", "repeat", "call"]);
-    CLASS_REQUIRED_GATE_ROLES2 = Object.freeze({ product: ["d5", "qa", "d8"] });
-    RELEASE_CLASS_GATE_ROLES2 = Object.freeze({ ops: ["ops"] });
-    COMPILER_HASH = sha256Of2({
-      id: WORKFLOW_COMPILER_ID,
-      version: WORKFLOW_COMPILER_VERSION,
-      limits: COMPILER_LIMITS,
-      step_kinds: COMPONENT_STEP_KINDS,
-      condition_kinds: COMPONENT_CONDITION_KINDS,
-      edge_outcomes: ["next", "repeat"],
-      protected_paths: PROTECTED_PATHS_VERSION
-    });
-  }
-});
-
 // src/domains/lifecycle/learning-checkpoint-5.ts
 var CHECKPOINT_VERDICTS, VERDICT_ROUTE;
 var init_learning_checkpoint_5 = __esm({
@@ -35193,7 +35113,7 @@ var init_per_host_packaging = __esm({
 
 // src/domains/distribution/release-distribution-contract.ts
 function sha2563(value) {
-  return crypto18.createHash("sha256").update(value).digest("hex");
+  return crypto17.createHash("sha256").update(value).digest("hex");
 }
 function stableJson(value) {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
@@ -35235,10 +35155,10 @@ function verifyReleaseClaim(claim, archive) {
   if (claim.host_support.supported !== false) errors.push("unsupported host cannot be promoted");
   return errors;
 }
-var crypto18, RELEASE_CLAIM_SCHEMA, OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS;
+var crypto17, RELEASE_CLAIM_SCHEMA, OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS;
 var init_release_distribution_contract = __esm({
   "src/domains/distribution/release-distribution-contract.ts"() {
-    crypto18 = __toESM(require("node:crypto"));
+    crypto17 = __toESM(require("node:crypto"));
     RELEASE_CLAIM_SCHEMA = "guild.release_claim.v1";
     OPERATION_KINDS = Object.freeze(["render", "install", "activate", "update", "uninstall", "verify"]);
     ACCEPTED_CONFORMANCE_ARTIFACTS = Object.freeze([
@@ -38287,7 +38207,7 @@ function indexOne(root, rel2) {
     title: titleOf(rel2, body),
     tokens: tokenize(`${titleOf(rel2, body)}
 ${body}`),
-    hash: crypto19.createHash("sha256").update(body, "utf8").digest("hex").slice(0, 16),
+    hash: crypto18.createHash("sha256").update(body, "utf8").digest("hex").slice(0, 16),
     mtime
   };
 }
@@ -38358,10 +38278,10 @@ function searchWiki(query, opts = {}) {
   if (kept.length === 0) return failOpen("reranker returned no known documents; served BM25");
   return { hits: kept, backend: "hybrid", built_index: built };
 }
-var crypto19, fs51, path64, WIKI_INDEX_SCHEMA, DEFAULT_MAX_HITS, DEFAULT_MIN_SCORE;
+var crypto18, fs51, path64, WIKI_INDEX_SCHEMA, DEFAULT_MAX_HITS, DEFAULT_MIN_SCORE;
 var init_wiki_index = __esm({
   "src/domains/knowledge/wiki-index.ts"() {
-    crypto19 = __toESM(require("node:crypto"));
+    crypto18 = __toESM(require("node:crypto"));
     fs51 = __toESM(require("node:fs"));
     path64 = __toESM(require("node:path"));
     init_bm25();
@@ -38427,7 +38347,7 @@ function generationsDir(indexesDir) {
   return path66.join(publicationDir(indexesDir), "generations");
 }
 function sha(bytes) {
-  return `sha256:${crypto20.createHash("sha256").update(bytes).digest("hex")}`;
+  return `sha256:${crypto19.createHash("sha256").update(bytes).digest("hex")}`;
 }
 function hex2(g) {
   return g.slice("sha256:".length);
@@ -38485,7 +38405,7 @@ function pinFile(indexesDir, generation) {
     const dir = path66.join(publicationDir(indexesDir), "pins");
     if (contained(indexesDir, dir)) return null;
     fs53.mkdirSync(dir, { recursive: true });
-    const id3 = `${process.pid}-${crypto20.randomUUID()}`;
+    const id3 = `${process.pid}-${crypto19.randomUUID()}`;
     const tmp = path66.join(dir, `.tmp-${id3}`);
     writeDurable(tmp, JSON.stringify({ pid: process.pid, host: HOST, generation }));
     const f = path66.join(dir, `${id3}.json`);
@@ -38516,10 +38436,10 @@ function readPublicationRecord(indexesDir, opts = {}) {
     }
   }
 }
-var crypto20, fs53, os5, path66, PUBLICATION_FAULT_STEPS, GEN_DIR, HOST, PublicationError, ORPHAN_GRACE_MS;
+var crypto19, fs53, os5, path66, PUBLICATION_FAULT_STEPS, GEN_DIR, HOST, PublicationError, ORPHAN_GRACE_MS;
 var init_publication = __esm({
   "src/domains/knowledge/publication.ts"() {
-    crypto20 = __toESM(require("node:crypto"));
+    crypto19 = __toESM(require("node:crypto"));
     fs53 = __toESM(require("node:fs"));
     os5 = __toESM(require("node:os"));
     path66 = __toESM(require("node:path"));
@@ -38541,7 +38461,7 @@ var init_publication = __esm({
       "reclaimed"
     ]);
     GEN_DIR = /^[a-f0-9]{64}$/;
-    HOST = crypto20.createHash("sha256").update(os5.hostname()).digest("hex").slice(0, 12);
+    HOST = crypto19.createHash("sha256").update(os5.hostname()).digest("hex").slice(0, 12);
     PublicationError = class extends Error {
       constructor(code, detail) {
         super(`publication ${code}: ${detail}`);
@@ -38624,7 +38544,7 @@ function newestMtime(dir) {
 }
 function hashOpenQuestions(ids) {
   const sorted = [...ids].filter((s) => typeof s === "string").sort();
-  return crypto21.createHash("sha256").update(sorted.join("\n"), "utf8").digest("hex").slice(0, 32);
+  return crypto20.createHash("sha256").update(sorted.join("\n"), "utf8").digest("hex").slice(0, 32);
 }
 function storageFor2(opts) {
   return opts.storage ?? createGuildStorage(opts.cwd ?? process.cwd());
@@ -38698,10 +38618,10 @@ function buildWorkingSetCard(input) {
   }
   return card;
 }
-var crypto21, fs54, path68, WORKING_SET_SCHEMA, WORKING_SET_TOKEN_CAP;
+var crypto20, fs54, path68, WORKING_SET_SCHEMA, WORKING_SET_TOKEN_CAP;
 var init_working_set = __esm({
   "src/domains/knowledge/working-set.ts"() {
-    crypto21 = __toESM(require("node:crypto"));
+    crypto20 = __toESM(require("node:crypto"));
     fs54 = __toESM(require("node:fs"));
     path68 = __toESM(require("node:path"));
     init_state();
@@ -38713,12 +38633,12 @@ var init_working_set = __esm({
 
 // src/domains/knowledge/lane-bundle.ts
 function bundleId(cellId, fingerprint2) {
-  return crypto22.createHash("sha256").update(`${cellId}
+  return crypto21.createHash("sha256").update(`${cellId}
 ${fingerprint2}`, "utf8").digest("hex").slice(0, 16);
 }
 function fingerprintOf(ws) {
   const f = ws.fingerprint;
-  return crypto22.createHash("sha256").update(`${f.wiki_mtime}
+  return crypto21.createHash("sha256").update(`${f.wiki_mtime}
 ${f.git_head}
 ${f.open_questions_hash}`, "utf8").digest("hex").slice(0, 16);
 }
@@ -38747,10 +38667,10 @@ function buildLaneBundle(input) {
   }
   return bundle;
 }
-var crypto22, LANE_BUNDLE_SCHEMA, LANE_BUNDLE_TOKEN_CAP;
+var crypto21, LANE_BUNDLE_SCHEMA, LANE_BUNDLE_TOKEN_CAP;
 var init_lane_bundle = __esm({
   "src/domains/knowledge/lane-bundle.ts"() {
-    crypto22 = __toESM(require("node:crypto"));
+    crypto21 = __toESM(require("node:crypto"));
     init_glossary();
     init_working_set();
     LANE_BUNDLE_SCHEMA = "guild.lane_bundle.v1";
@@ -39474,7 +39394,7 @@ function writeOnce(root, target, bytes) {
   const prep = prepareContainedWrite(root, target, { requireRegularFileLeaf: true });
   if (isRefused(prep)) return prep.code === "mkdir-failed" ? "failed" : "containment";
   const dest = prep.realPath;
-  const tmp = `${dest}.${process.pid}.${crypto23.randomBytes(6).toString("hex")}.tmp`;
+  const tmp = `${dest}.${process.pid}.${crypto22.randomBytes(6).toString("hex")}.tmp`;
   let fd = null;
   try {
     fd = fs59.openSync(tmp, fs59.constants.O_WRONLY | fs59.constants.O_CREAT | fs59.constants.O_EXCL | fs59.constants.O_NOFOLLOW, 384);
@@ -39591,7 +39511,7 @@ function attemptOf(ctx) {
 function beginRetrieval(query, ctx) {
   if (!validContext(ctx)) return null;
   const clock = ctx.clock ?? SYSTEM_CLOCK;
-  const query_id = ctx.query_id ?? `q-${crypto23.randomBytes(16).toString("hex")}`;
+  const query_id = ctx.query_id ?? `q-${crypto22.randomBytes(16).toString("hex")}`;
   const startedAt = clock.wall();
   const startNs = clock.monotonicNs();
   const sanitized = sanitizeQuery(typeof query === "string" ? query : "", ctx);
@@ -39610,7 +39530,7 @@ function beginRetrieval(query, ctx) {
   const startOutcome = writeOnce(ctx.runDir, path73.join(dir, `${query_id}.started.json`), Buffer.from(JSON.stringify(marker)));
   const startLoss = startOutcome === "written" ? null : startOutcome === "containment" ? "containment" : startOutcome === "conflict" || startOutcome === "identical" ? "record_conflict" : "start_not_written";
   const markLost = () => {
-    const lostId = `q-${crypto23.randomBytes(16).toString("hex")}`;
+    const lostId = `q-${crypto22.randomBytes(16).toString("hex")}`;
     writeOnce(ctx.runDir, path73.join(dir, `${lostId}.started.json`), Buffer.from(JSON.stringify({ ...marker, query_id: lostId })));
   };
   if (startLoss === "record_conflict") markLost();
@@ -39702,7 +39622,7 @@ function instrumentRetrieval(query, ctx, producer, toItems = (r) => r, evidenceO
   }
 }
 function useIdOf(queryId, ordinal, kind, id3) {
-  return `u-${crypto23.createHash("sha256").update(JSON.stringify([queryId, ordinal, kind, id3])).digest("hex").slice(0, 32)}`;
+  return `u-${crypto22.createHash("sha256").update(JSON.stringify([queryId, ordinal, kind, id3])).digest("hex").slice(0, 32)}`;
 }
 function recordKnowledgeUse(input) {
   const { runDir: runDir2, query_id, ordinal, consumer } = input;
@@ -39836,10 +39756,10 @@ function parseUse(bytes) {
     return null;
   }
 }
-var crypto23, fs59, os6, path73, RETRIEVAL_RECORD_SCHEMA, RETRIEVAL_STARTED_SCHEMA, KNOWLEDGE_USE_SCHEMA, USE_CAPTURE_SCHEMA, RETRIEVAL_LIMITS, ENTRY_POINTS, CONSUMER_KINDS, ID_RE, QID_RE, MODE_RE, ERROR_CODE_RE, SHA_RE, ISO_RE, isIso, safeQid, isSha, isStr, SYSTEM_CLOCK, PROCESS_CLOCK_REF, sha2, isObj3, isStrOrNull, keysExactly, GENERATION_STATES, CHANNEL_STATES, RECORD_KEYS;
+var crypto22, fs59, os6, path73, RETRIEVAL_RECORD_SCHEMA, RETRIEVAL_STARTED_SCHEMA, KNOWLEDGE_USE_SCHEMA, USE_CAPTURE_SCHEMA, RETRIEVAL_LIMITS, ENTRY_POINTS, CONSUMER_KINDS, ID_RE, QID_RE, MODE_RE, ERROR_CODE_RE, SHA_RE, ISO_RE, isIso, safeQid, isSha, isStr, SYSTEM_CLOCK, PROCESS_CLOCK_REF, sha2, isObj3, isStrOrNull, keysExactly, GENERATION_STATES, CHANNEL_STATES, RECORD_KEYS;
 var init_retrieval_ledger = __esm({
   "src/domains/knowledge/retrieval-ledger.ts"() {
-    crypto23 = __toESM(require("node:crypto"));
+    crypto22 = __toESM(require("node:crypto"));
     fs59 = __toESM(require("node:fs"));
     os6 = __toESM(require("node:os"));
     path73 = __toESM(require("node:path"));
@@ -39875,8 +39795,8 @@ var init_retrieval_ledger = __esm({
       wall: () => (/* @__PURE__ */ new Date()).toISOString(),
       monotonicNs: () => process.hrtime.bigint()
     };
-    PROCESS_CLOCK_REF = crypto23.createHash("sha256").update(`${os6.hostname()}|${process.pid}|${Date.now() - Math.round(process.uptime() * 1e3)}`).digest("hex").slice(0, 16);
-    sha2 = (b) => `sha256:${crypto23.createHash("sha256").update(b).digest("hex")}`;
+    PROCESS_CLOCK_REF = crypto22.createHash("sha256").update(`${os6.hostname()}|${process.pid}|${Date.now() - Math.round(process.uptime() * 1e3)}`).digest("hex").slice(0, 16);
+    sha2 = (b) => `sha256:${crypto22.createHash("sha256").update(b).digest("hex")}`;
     isObj3 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
     isStrOrNull = (v) => v === null || typeof v === "string";
     keysExactly = (o, keys) => {
@@ -40050,7 +39970,7 @@ function resolveRecallBeforeRead(cwd) {
   return true;
 }
 function hashQuery(query) {
-  return crypto24.createHash("sha256").update(query).digest("hex").slice(0, 16);
+  return crypto23.createHash("sha256").update(query).digest("hex").slice(0, 16);
 }
 function rankWikiDocs(docs, wikiBase, limit, composite) {
   const scoring = docs.filter((d) => d.score > 0);
@@ -40174,7 +40094,7 @@ function kgQueryBranch(query, cwd, limit, runDir2, runId, category, onExportRead
   try {
     const bytes = fs61.readFileSync(projPath);
     try {
-      onExportRead?.(`sha256:${crypto24.createHash("sha256").update(bytes).digest("hex")}`);
+      onExportRead?.(`sha256:${crypto23.createHash("sha256").update(bytes).digest("hex")}`);
     } catch {
     }
     proj = JSON.parse(bytes.toString("utf8"));
@@ -40441,7 +40361,7 @@ function recallUninstrumented(query, opts) {
   const _traceBranch = allChunks.length === 0 ? "empty" : source === "combined" ? "combined" : source === "structural" ? "structural" : source;
   try {
     const _analysisTs = (/* @__PURE__ */ new Date()).toISOString();
-    const _spanId = crypto24.createHash("sha256").update(`${runId ?? ""}|recall|${_analysisTs}|${_laneId}`).digest("hex").slice(0, 16);
+    const _spanId = crypto23.createHash("sha256").update(`${runId ?? ""}|recall|${_analysisTs}|${_laneId}`).digest("hex").slice(0, 16);
     emitTraceEvent(
       makeAnalysisTraceEvent({
         ts: new Date(_traceStart).toISOString(),
@@ -40635,12 +40555,12 @@ function runRecallCli() {
   }
   process.stdout.write(JSON.stringify(result2) + "\n");
 }
-var fs61, path75, crypto24, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
+var fs61, path75, crypto23, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
 var init_recall = __esm({
   "src/domains/knowledge/recall.ts"() {
     fs61 = __toESM(require("node:fs"));
     path75 = __toESM(require("node:path"));
-    crypto24 = __toESM(require("node:crypto"));
+    crypto23 = __toESM(require("node:crypto"));
     init_state();
     init_wiki_recall();
     init_fs_scanner();
@@ -52263,8 +52183,6 @@ var init_lifecycle = __esm({
     init_write_run_manifest();
     init_write_task_run();
     init_workflow_graph_overlay();
-    init_workflow_component_compiler();
-    init_workflow_protected_paths();
     init_stable_lock();
     init_learning_checkpoint_5();
     init_workflow_graph_load();
@@ -54541,7 +54459,7 @@ var fs75 = __toESM(require("fs"));
 var path94 = __toESM(require("path"));
 
 // scripts/lib/capability/adoption-migrate.ts
-var crypto26 = __toESM(require("crypto"));
+var crypto25 = __toESM(require("crypto"));
 var fs72 = __toESM(require("fs"));
 var path91 = __toESM(require("path"));
 var import_util8 = require("util");
@@ -55157,7 +55075,7 @@ var ADOPTION_RESOLUTIONS = Object.freeze([
 init_kernel();
 
 // scripts/lib/core/contracts/specialist-identity.ts
-var crypto25 = __toESM(require("crypto"));
+var crypto24 = __toESM(require("crypto"));
 var import_util6 = require("util");
 
 // scripts/lib/roster.ts
@@ -55401,17 +55319,17 @@ function canonicalize2(value) {
   }
   return out;
 }
-function canonicalJson4(value) {
+function canonicalJson3(value) {
   return JSON.stringify(canonicalize2(value));
 }
 function hashSpecialistType(type) {
-  return sha256Hex3(canonicalJson4(type));
+  return sha256Hex3(canonicalJson3(type));
 }
 function hashSpecialistProfile(profile) {
-  return sha256Hex3(canonicalJson4(profile));
+  return sha256Hex3(canonicalJson3(profile));
 }
 function sha256Hex3(s) {
-  return crypto25.createHash("sha256").update(s, "utf8").digest("hex");
+  return crypto24.createHash("sha256").update(s, "utf8").digest("hex");
 }
 var TOOL_TO_CAPABILITY = Object.freeze({
   Read: "read-files",
@@ -58762,7 +58680,7 @@ function readArray4(value) {
   return out;
 }
 function sha256Prefixed(bytes) {
-  return `sha256:${crypto26.createHash("sha256").update(bytes).digest("hex")}`;
+  return `sha256:${crypto25.createHash("sha256").update(bytes).digest("hex")}`;
 }
 function toPosixRel(abs, root) {
   const rel2 = path91.relative(root, abs);

@@ -473,8 +473,8 @@ export function applyMutation(ledger: AssuranceLedger, m: { subject: SubjectMani
     const before = new Map(body.subject.artifacts.map((a) => [a.name, a.sha256]));
     const after = new Map(next.artifacts.map((a) => [a.name, a.sha256]));
     const moved = [...new Set([...before.keys(), ...after.keys()])].filter((n) => before.get(n) !== after.get(n));
-    const changed = m.changed === "unknown" ? null : arr(snapshot(m.changed, "invalid-ledger", "changed"), LIMITS.artifacts, "invalid-ledger", "changed").map((n, i) => str(n, ID, "invalid-ledger", `changed[${i}]`));
-    const known = changed !== null && moved.every((n) => changed.includes(n));
+    const changed = arr(snapshot(m.changed, "invalid-ledger", "changed"), LIMITS.artifacts, "invalid-ledger", "changed").map((n, i) => str(n, ID, "invalid-ledger", `changed[${i}]`));
+    const known = moved.every((n) => changed.includes(n));
     invalidate(body, next, known ? "declared" : "unknown-mutation");
     return seal(body);
   });
