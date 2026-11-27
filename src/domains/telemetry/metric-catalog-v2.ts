@@ -7,9 +7,11 @@
 export type MetricUnit = "ms" | "usd" | "tokens" | "count" | "ratio" | "usd_per_outcome" | "ms_per_outcome" | "case_score" | "inherited_metric_unit";
 export interface AtomicMetric { id: string; unit: MetricUnit; formula_version: string; producer_package: string }
 
+import { deepFreeze, sealMap, sealSet } from "../kernel";
+
 export const METRIC_CATALOG_SCHEMA = "guild.proposed_metric_catalog.v1" as const;
 
-export const ATOMIC_METRICS: readonly AtomicMetric[] = Object.freeze([
+export const ATOMIC_METRICS: readonly AtomicMetric[] = deepFreeze([
   { id: "M01.run_count", unit: "count", formula_version: "proposed:m01.run_count.1", producer_package: "T01→T02→T03" },
   { id: "M01.execution_count", unit: "count", formula_version: "proposed:m01.execution_count.1", producer_package: "T01→T02→T03" },
   { id: "M01.task_count", unit: "count", formula_version: "proposed:m01.task_count.1", producer_package: "T01→T02→T03" },
@@ -116,7 +118,7 @@ export const ATOMIC_METRICS: readonly AtomicMetric[] = Object.freeze([
   { id: "M31.prompt_capture_ratio", unit: "ratio", formula_version: "proposed:m31.prompt_capture_ratio.1", producer_package: "T01→T03" },
 ]);
 
-export const ATOMIC_BY_ID: ReadonlyMap<string, AtomicMetric> = new Map(ATOMIC_METRICS.map((m) => [m.id, m]));
-export const ATOMIC_BY_FORMULA: ReadonlyMap<string, AtomicMetric> = new Map(ATOMIC_METRICS.map((m) => [m.formula_version, m]));
+export const ATOMIC_BY_ID: ReadonlyMap<string, AtomicMetric> = sealMap(ATOMIC_METRICS.map((m) => [m.id, m] as const), "ATOMIC_BY_ID");
+export const ATOMIC_BY_FORMULA: ReadonlyMap<string, AtomicMetric> = sealMap(ATOMIC_METRICS.map((m) => [m.formula_version, m] as const), "ATOMIC_BY_FORMULA");
 /** Catalog-declared signed statistics: paired candidate-baseline deltas. */
-export const SIGNED_METRICS: ReadonlySet<string> = new Set(["M28.paired_score_delta", "M28.paired_cost_delta_usd", "M28.paired_latency_delta_ms"]);
+export const SIGNED_METRICS: ReadonlySet<string> = sealSet(["M28.paired_score_delta", "M28.paired_cost_delta_usd", "M28.paired_latency_delta_ms"], "SIGNED_METRICS");

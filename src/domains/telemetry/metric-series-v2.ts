@@ -762,22 +762,22 @@ const readRequestShape = C.object({
 const verdict = (errors: string[]): Verdict => (errors.length === 0 ? { ok: true } : { ok: false, errors });
 type Req = (ok: boolean, msg: string) => void;
 
-function coverageRules(c: Coverage, require: Req): void {
+function coverageRules(c: Coverage, assertRule: Req): void {
   if (c.eligible !== null) {
-    require(c.covered <= c.eligible, "covered exceeds eligible");
-    if (c.missing !== null) require(c.covered + c.missing === c.eligible, "eligible must equal covered plus missing; excluded is outside eligible");
+    assertRule(c.covered <= c.eligible, "covered exceeds eligible");
+    if (c.missing !== null) assertRule(c.covered + c.missing === c.eligible, "eligible must equal covered plus missing; excluded is outside eligible");
   }
-  if (c.state === "complete") require(c.eligible !== null && c.covered === c.eligible && c.missing === 0, "complete requires known full coverage");
-  else require(Boolean(c.reason), "incomplete coverage needs reason");
-  if (c.state === "unavailable") require(c.covered === 0, "unavailable coverage cannot have covered samples");
+  if (c.state === "complete") assertRule(c.eligible !== null && c.covered === c.eligible && c.missing === 0, "complete requires known full coverage");
+  else assertRule(Boolean(c.reason), "incomplete coverage needs reason");
+  if (c.state === "unavailable") assertRule(c.covered === 0, "unavailable coverage cannot have covered samples");
 }
-function snapshotRules(s: Snapshot, require: Req): void {
+function snapshotRules(s: Snapshot, assertRule: Req): void {
   const gens = s.source_generations.map((g) => g.source_id);
-  require(new Set(gens).size === gens.length && gens.every((x) => s.source_ids.includes(x)) && s.source_ids.every((x) => gens.includes(x)), "snapshot source/generation identity mismatch");
+  assertRule(new Set(gens).size === gens.length && gens.every((x) => s.source_ids.includes(x)) && s.source_ids.every((x) => gens.includes(x)), "snapshot source/generation identity mismatch");
 }
-export function queryRules(q: QueryIdentity, require: Req): void {
-  snapshotRules(q.snapshot, require);
-  require(compareTraceInstants(q.window.from, q.window.to) < 0, "window must be nonempty half-open [from,to)");
+export function queryRules(q: QueryIdentity, assertRule: Req): void {
+  snapshotRules(q.snapshot, assertRule);
+  assertRule(compareTraceInstants(q.window.from, q.window.to) < 0, "window must be nonempty half-open [from,to)");
 }
 
 const UNSIGNED_UNITS = new Set(["count", "tokens", "ms", "usd", "usd_per_outcome", "ms_per_outcome"]);
@@ -787,41 +787,41 @@ export function validateMetricSeriesV2(value: unknown): Verdict {
   seriesShape(value, "$", errors);
   if (errors.length) return verdict(errors);
   const v = value as MetricSeriesV2;
-  const require: Req = (ok, msg) => { if (!ok) errors.push(msg); };
-  queryRules(v.query, require);
-  for (const p of v.points) coverageRules(p.coverage, require);
-  coverageRules(v.coverage, require);
+  const assertRule: Req = (ok, msg) => { if (!ok) errors.push(msg); };
+  queryRules(v.query, assertRule);
+  for (const p of v.points) coverageRules(p.coverage, assertRule);
+  coverageRules(v.coverage, assertRule);
   const def = ATOMIC_BY_ID.get(v.metric_id)!;
-  require(v.query.versions.formula === def.formula_version, "metric formula version differs from pinned registry");
+  assertRule(v.query.versions.formula === def.formula_version, "metric formula version differs from pinned registry");
   if (v.metric_id === "M29.series_value") {
     const under = v.underlying_metric_id === null ? undefined : ATOMIC_BY_ID.get(v.underlying_metric_id);
-    require(under !== undefined, "M29 alias needs underlying scalar");
-    if (under) require(v.unit === under.unit && v.underlying_formula_version === under.formula_version, "M29 underlying unit/formula mismatch");
-  } else require(v.underlying_metric_id === null && v.underlying_formula_version === null && v.unit === def.unit, "scalar unit or unexpected alias mismatch");
+    assertRule(under !== undefined, "M29 alias needs underlying scalar");
+    if (under) assertRule(v.unit === under.unit && v.underlying_formula_version === under.formula_version, "M29 underlying unit/formula mismatch");
+  } else assertRule(v.underlying_metric_id === null && v.underlying_formula_version === null && v.unit === def.unit, "scalar unit or unexpected alias mismatch");
   const expectedUnder = v.metric_id === "M29.series_value" ? { metric_id: v.underlying_metric_id, formula_version: v.underlying_formula_version } : null;
-  require(canonicalJson(v.query.underlying_scalar) === canonicalJson(expectedUnder), "query identity must carry exactly the M29 underlying scalar (null for ordinary scalars)");
-  require(v.usage_semantics === v.query.versions.usage_semantics, "series usage semantics differ from pinned query usage semantics");
+  assertRule(canonicalJson(v.query.underlying_scalar) === canonicalJson(expectedUnder), "query identity must carry exactly the M29 underlying scalar (null for ordinary scalars)");
+  assertRule(v.usage_semantics === v.query.versions.usage_semantics, "series usage semantics differ from pinned query usage semantics");
   const effective = v.metric_id === "M29.series_value" ? v.underlying_metric_id : v.metric_id;
   const hash = queryHash(v.query);
   const keys = new Set<string>();
   for (const p of v.points) {
-    require(!keys.has(p.key), "duplicate series point key");
+    assertRule(!keys.has(p.key), "duplicate series point key");
     keys.add(p.key);
-    require(p.drilldown.query_hash === hash, "drilldown query identity mismatch");
-    if (p.coverage.state !== "complete") require(p.exact_total === null, "incomplete metric cannot claim exact total");
-    if (p.coverage.state === "unavailable") require(p.value === null && p.known_subtotal === null && Boolean(p.reason), "unavailable metric must be null with reason");
-    if (p.denominator === 0) require(p.value === null && Boolean(p.reason), "zero denominator is unavailable with an explicit reason, not zero score");
-    if (p.value === null) require(Boolean(p.reason), "unavailable metric value needs an explicit reason independent of input coverage");
-    if (UNSIGNED_UNITS.has(v.unit) && !SIGNED_METRICS.has(effective ?? "")) require([p.value, p.known_subtotal, p.exact_total, p.numerator].every((x) => x === null || x >= 0), "unsigned metric cannot be negative");
+    assertRule(p.drilldown.query_hash === hash, "drilldown query identity mismatch");
+    if (p.coverage.state !== "complete") assertRule(p.exact_total === null, "incomplete metric cannot claim exact total");
+    if (p.coverage.state === "unavailable") assertRule(p.value === null && p.known_subtotal === null && Boolean(p.reason), "unavailable metric must be null with reason");
+    if (p.denominator === 0) assertRule(p.value === null && Boolean(p.reason), "zero denominator is unavailable with an explicit reason, not zero score");
+    if (p.value === null) assertRule(Boolean(p.reason), "unavailable metric value needs an explicit reason independent of input coverage");
+    if (UNSIGNED_UNITS.has(v.unit) && !SIGNED_METRICS.has(effective ?? "")) assertRule([p.value, p.known_subtotal, p.exact_total, p.numerator].every((x) => x === null || x >= 0), "unsigned metric cannot be negative");
     if (p.value !== null) {
-      if (v.unit === "ratio") require(p.value >= 0 && p.value <= 1, "ratio outside0..1");
-      if (v.unit === "count") require(p.value >= 0 && Number.isInteger(p.value), "count must be nonnegative integer");
+      if (v.unit === "ratio") assertRule(p.value >= 0 && p.value <= 1, "ratio outside0..1");
+      if (v.unit === "count") assertRule(p.value >= 0 && Number.isInteger(p.value), "count must be nonnegative integer");
     }
-    require(p.evidence.every((x) => v.query.snapshot.source_ids.includes(x.source_id)), "metric evidence outside query sources");
-    if (effective === "M10.native_estimate_usd") require(p.cost_basis === "native_estimate", "native estimate cannot become measured billing");
-    if (effective === "M10.derived_estimate_usd") require(p.cost_basis === "derived_estimate", "derived estimate must retain basis");
-    if (effective === "M10.measured_spend_usd") require(p.cost_basis === "measured", "measured series cannot contain estimated cost");
-    if (p.cost_basis === "derived_estimate") require(v.pricing !== null && v.pricing.version === v.query.versions.pricing, "derived estimate needs pinned pricing matching query pricing version");
+    assertRule(p.evidence.every((x) => v.query.snapshot.source_ids.includes(x.source_id)), "metric evidence outside query sources");
+    if (effective === "M10.native_estimate_usd") assertRule(p.cost_basis === "native_estimate", "native estimate cannot become measured billing");
+    if (effective === "M10.derived_estimate_usd") assertRule(p.cost_basis === "derived_estimate", "derived estimate must retain basis");
+    if (effective === "M10.measured_spend_usd") assertRule(p.cost_basis === "measured", "measured series cannot contain estimated cost");
+    if (p.cost_basis === "derived_estimate") assertRule(v.pricing !== null && v.pricing.version === v.query.versions.pricing, "derived estimate needs pinned pricing matching query pricing version");
   }
   return verdict(errors);
 }
@@ -831,10 +831,10 @@ export function validateMetricDrilldownV2(value: unknown): Verdict {
   drilldownShape(value, "$", errors);
   if (errors.length) return verdict(errors);
   const v = value as MetricDrilldownV2;
-  const require: Req = (ok, msg) => { if (!ok) errors.push(msg); };
-  snapshotRules(v.snapshot, require);
-  coverageRules(v.coverage, require);
-  require(v.records.every((x) => v.snapshot.source_ids.includes(x.source_id)), "drilldown record outside snapshot sources");
+  const assertRule: Req = (ok, msg) => { if (!ok) errors.push(msg); };
+  snapshotRules(v.snapshot, assertRule);
+  coverageRules(v.coverage, assertRule);
+  assertRule(v.records.every((x) => v.snapshot.source_ids.includes(x.source_id)), "drilldown record outside snapshot sources");
   return verdict(errors);
 }
 
@@ -843,9 +843,9 @@ export function validateReadRequestV2(value: unknown): Verdict {
   readRequestShape(value, "$", errors);
   if (errors.length) return verdict(errors);
   const v = value as ReadRequestV2;
-  const require: Req = (ok, msg) => { if (!ok) errors.push(msg); };
-  queryRules(v.query, require);
-  require(v.query_hash === queryHash(v.query) && (Object.values(RESULT_SCHEMA_IDS) as string[]).includes(v.result_schema_id), "query hash or requested schema unsupported");
+  const assertRule: Req = (ok, msg) => { if (!ok) errors.push(msg); };
+  queryRules(v.query, assertRule);
+  assertRule(v.query_hash === queryHash(v.query) && (Object.values(RESULT_SCHEMA_IDS) as string[]).includes(v.result_schema_id), "query hash or requested schema unsupported");
   return verdict(errors);
 }
 
