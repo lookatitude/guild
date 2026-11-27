@@ -254,35 +254,82 @@ const KNOWLEDGE_TIER_EDGE_TYPES = new Set([
  * unmarked file / function / class / flow / domain nodes, and a re-finalize
  * that filtered on the marker silently dropped all of them.
  *
- * A node is knowledge-tier output when its type is one only K1-K4 emit, or it
- * is a K4 domain. K4 emits a domain only together with a `belongs_to_domain`
- * edge into it (taxonomy-build, SC-5), and no structural stage writes that edge,
- * so "target of belongs_to_domain" identifies K4 domains exactly. A node the
- * structural extractor marked is always kept. An edge is dropped when its type
- * is knowledge-only or either endpoint was dropped.
+ * Provenance first: finalize records what it emitted in `knowledge_tier`, and a
+ * graph carrying that record drops exactly those nodes and edge endpoint pairs
+ * (plus edges into a dropped node). Type is not provenance: input may hold
+ * valid concept / entity / topic / claim nodes of its own.
+ *
+ * A graph without the record (written before it existed, or rewritten by a
+ * whole-graph validator) falls back to type: a node is knowledge-tier output
+ * when its type is one only K1-K4 emit, or it is a domain with no outgoing
+ * `contains_flow` (derive-domain always writes one; K4 never does, and K4's
+ * `belongs_to_domain` edge may have been dropped by validation). An edge is
+ * dropped when its type is knowledge-only or either endpoint was dropped.
+ * Either way a node or edge the structural extractor marked is kept.
  */
 export function carriedForwardSubset<
   N extends { id: string; type: string },
   E extends { source: string; target: string; type: string },
->(g: { nodes: N[]; edges: E[] }): { nodes: N[]; edges: E[] } {
+>(g: { nodes: N[]; edges: E[]; knowledge_tier?: unknown }): { nodes: N[]; edges: E[] } {
   const marked = (x: unknown) => {
     const r = x as Record<string, unknown>;
     return r.extractor === STRUCTURAL_EXTRACTOR || r.structural === true;
   };
-  const k4Domains = new Set(g.edges.filter((e) => e.type === "belongs_to_domain").map((e) => e.target));
+  const record = readKnowledgeTier(g.knowledge_tier);
+  const flowDomains = new Set(g.edges.filter((e) => e.type === "contains_flow").map((e) => e.source));
+  const emitted = (n: N) =>
+    record
+      ? record.nodeIds.has(n.id)
+      : KNOWLEDGE_TIER_NODE_TYPES.has(n.type) || (n.type === "domain" && !flowDomains.has(n.id));
   const dropped = new Set<string>();
   const nodes = g.nodes.filter((n) => {
-    const knowledge = KNOWLEDGE_TIER_NODE_TYPES.has(n.type) || (n.type === "domain" && k4Domains.has(n.id));
-    if (knowledge && !marked(n)) {
+    if (emitted(n) && !marked(n)) {
       dropped.add(n.id);
       return false;
     }
     return true;
   });
-  const edges = g.edges.filter(
-    (e) => marked(e) || (!KNOWLEDGE_TIER_EDGE_TYPES.has(e.type) && !dropped.has(e.source) && !dropped.has(e.target))
-  );
+  const edges = g.edges.filter((e) => {
+    if (marked(e)) return true;
+    if (dropped.has(e.source) || dropped.has(e.target)) return false;
+    return record ? !record.edgeKeys.has(edgeEndpointKey(e)) : !KNOWLEDGE_TIER_EDGE_TYPES.has(e.type);
+  });
   return { nodes, edges };
+}
+
+/** What one finalize emitted, as stored on the graph (`knowledge_tier`). */
+export interface KnowledgeTierRecord {
+  node_ids: string[];
+  edge_endpoints: [string, string][];
+}
+
+const edgeEndpointKey = (e: { source: string; target: string }) => JSON.stringify([e.source, e.target]);
+
+function readKnowledgeTier(x: unknown): { nodeIds: Set<string>; edgeKeys: Set<string> } | null {
+  const r = x as Partial<KnowledgeTierRecord> | null | undefined;
+  if (!r || typeof r !== "object" || !Array.isArray(r.node_ids) || !Array.isArray(r.edge_endpoints)) return null;
+  if (!r.node_ids.every((id) => typeof id === "string")) return null;
+  if (!r.edge_endpoints.every((p) => Array.isArray(p) && p.length === 2 && p.every((s) => typeof s === "string"))) return null;
+  return {
+    nodeIds: new Set(r.node_ids),
+    edgeKeys: new Set(r.edge_endpoints.map(([source, target]) => edgeEndpointKey({ source, target }))),
+  };
+}
+
+/**
+ * The record a finalize stores: every node id and edge endpoint pair in the
+ * finished graph that did not come in through `input`. Sorted, so the graph
+ * bytes stay a pure function of their inputs (SC-8).
+ */
+export function knowledgeTierRecord(
+  graph: { nodes: { id: string }[]; edges: { source: string; target: string }[] },
+  input: { nodes: { id: string }[]; edges: { source: string; target: string }[] } | undefined,
+): KnowledgeTierRecord {
+  const inNodes = new Set((input?.nodes ?? []).map((n) => n.id));
+  const inEdges = new Set((input?.edges ?? []).map(edgeEndpointKey));
+  const node_ids = [...new Set(graph.nodes.map((n) => n.id).filter((id) => !inNodes.has(id)))].sort();
+  const keys = [...new Set(graph.edges.map(edgeEndpointKey).filter((k) => !inEdges.has(k)))].sort();
+  return { node_ids, edge_endpoints: keys.map((k) => JSON.parse(k) as [string, string]) };
 }
 
 /**
@@ -1208,7 +1255,15 @@ export async function runKnowledgeStages(
   const canonEdges = validated.edges.map(
     (e) => (isStructuralItem(e) ? e : (canonicalizeEdge(e) as unknown as GraphEdge))
   );
-  const graph: KnowledgeGraph = { ...validated, nodes: canonNodes, edges: canonEdges };
+  // #317: record what this finalize emitted, so the next one carries forward
+  // exactly the rest (carriedForwardSubset). Added after validation, which
+  // rebuilds the graph object and would drop it.
+  const graph: KnowledgeGraph = {
+    ...validated,
+    nodes: canonNodes,
+    edges: canonEdges,
+    knowledge_tier: knowledgeTierRecord({ nodes: canonNodes, edges: canonEdges }, opts.structuralGraph),
+  };
 
   // ── HARD SC-3 enforcement: every wiki_page must have ≥1 topic membership ───
   // The orphan codex found passed SILENTLY because nothing enforced SC-3.
@@ -1367,7 +1422,7 @@ if (require.main === module) {
             // A v2 graph already carries the knowledge tier. Everything that tier
             // did not emit is input, marked by the structural extractor or not
             // (#317), so a re-finalize never drops file / function / flow nodes.
-            const sub = carriedForwardSubset({ nodes: prior.nodes, edges: prior.edges });
+            const sub = carriedForwardSubset({ nodes: prior.nodes, edges: prior.edges, knowledge_tier: prior.knowledge_tier });
             structuralGraph = { nodes: sub.nodes, edges: sub.edges, layers: prior.layers, tour: prior.tour };
           }
         }

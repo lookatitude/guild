@@ -1229,4 +1229,72 @@ describe("J — #317: project identity and structure survive finalize", () => {
     ]);
     expect(sub.edges.map((e) => e.type)).toEqual(["contains", "contains_flow"]);
   });
+
+  test("J7: with a knowledge_tier record, only what the previous finalize emitted is dropped", () => {
+    const nodes = [
+      { id: "file:a.ts", type: "file" },
+      { id: "concept:input", type: "concept" }, // carried in from the v1 input, unmarked
+      { id: "concept:k1", type: "concept" }, // K1 output
+      { id: "domain:billing", type: "domain" }, // K4 output whose membership edge validation dropped
+      { id: "domain:src", type: "domain" }, // derive-domain, written after that finalize
+    ];
+    const edges = [
+      { source: "concept:input", target: "file:a.ts", type: "implemented_by" },
+      { source: "concept:k1", target: "file:a.ts", type: "implemented_by" },
+      { source: "file:a.ts", target: "file:a.ts", type: "relates_to" }, // K5 output between input nodes
+    ];
+    const knowledge_tier = {
+      node_ids: ["concept:k1", "domain:billing"],
+      edge_endpoints: [["concept:k1", "file:a.ts"], ["file:a.ts", "file:a.ts"]],
+    };
+    const sub = carriedForwardSubset({ nodes, edges, knowledge_tier });
+    expect(sub.nodes.map((n) => n.id)).toEqual(["file:a.ts", "concept:input", "domain:src"]);
+    expect(sub.edges).toEqual([edges[0]]);
+  });
+
+  test("J8: without a record, a domain with no contains_flow is knowledge-tier output even when orphaned", () => {
+    const nodes = [
+      { id: "flow:a.ts", type: "flow" },
+      { id: "domain:src", type: "domain" },
+      { id: "domain:orphan", type: "domain" }, // K4 domain whose belongs_to_domain edge was dropped
+    ];
+    const edges = [{ source: "domain:src", target: "flow:a.ts", type: "contains_flow" }];
+    const sub = carriedForwardSubset({ nodes, edges });
+    expect(sub.nodes.map((n) => n.id)).toEqual(["flow:a.ts", "domain:src"]);
+  });
+
+  test(
+    "J9: CLI re-finalize keeps an unmarked input concept and its edge (codex P1 on #318)",
+    () => {
+      const dir = mkTmpRepo();
+      scaffoldFixtureRepo(dir);
+      const indexes = path.join(dir, ".guild", "indexes");
+      fs.mkdirSync(indexes, { recursive: true });
+      const fileNode = { id: `file:${CODE_PATHS[0]}`, type: "file", name: "validate.ts", source_refs: [CODE_PATHS[0]], confidence: "high" };
+      const concept = { id: "concept:input-validation", type: "concept", name: "Input validation", source_refs: [CODE_PATHS[0]], confidence: "high", category: "concept" };
+      fs.writeFileSync(
+        path.join(indexes, "knowledge-graph.json"),
+        JSON.stringify({
+          version: "guild.knowledge_graph.v1",
+          kind: "codebase",
+          generated_from_commit: "unknown",
+          project: { name: "acme-widgets", description: "" },
+          nodes: [fileNode, concept],
+          edges: [{ source: concept.id, target: fileNode.id, type: "implemented_by", direction: "out", weight: 1 }],
+          layers: [{ id: "layer:core", name: "Core", description: "", nodeIds: [fileNode.id] }],
+          tour: [],
+        })
+      );
+      finalizeCli(dir);
+      const first = graphOf(dir);
+      expect(first.nodes.some((n: { id: string }) => n.id === concept.id)).toBe(true);
+      expect(first.knowledge_tier.node_ids).not.toContain(concept.id);
+      finalizeCli(dir);
+      const second = graphOf(dir);
+      expect(second.nodes.some((n: { id: string }) => n.id === concept.id)).toBe(true);
+      expect(second.edges.some((e: { source: string }) => e.source === concept.id)).toBe(true);
+      expect(JSON.stringify(second)).toBe(JSON.stringify(first));
+    },
+    60000
+  );
 });

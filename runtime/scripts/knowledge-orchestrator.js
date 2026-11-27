@@ -28153,6 +28153,7 @@ __export(knowledge_orchestrator_exports, {
   emitRound1Candidates: () => emitRound1Candidates,
   emitRound2Candidates: () => emitRound2Candidates,
   findOrphanWikiPages: () => findOrphanWikiPages,
+  knowledgeTierRecord: () => knowledgeTierRecord,
   maybeSynthesizeFallbackRootTopic: () => maybeSynthesizeFallbackRootTopic,
   resolveGraphProject: () => resolveGraphProject,
   runKnowledgeStages: () => runKnowledgeStages
@@ -30531,20 +30532,41 @@ function carriedForwardSubset(g) {
     const r = x;
     return r.extractor === STRUCTURAL_EXTRACTOR || r.structural === true;
   };
-  const k4Domains = new Set(g.edges.filter((e) => e.type === "belongs_to_domain").map((e) => e.target));
+  const record = readKnowledgeTier(g.knowledge_tier);
+  const flowDomains = new Set(g.edges.filter((e) => e.type === "contains_flow").map((e) => e.source));
+  const emitted = (n) => record ? record.nodeIds.has(n.id) : KNOWLEDGE_TIER_NODE_TYPES.has(n.type) || n.type === "domain" && !flowDomains.has(n.id);
   const dropped = /* @__PURE__ */ new Set();
   const nodes = g.nodes.filter((n) => {
-    const knowledge = KNOWLEDGE_TIER_NODE_TYPES.has(n.type) || n.type === "domain" && k4Domains.has(n.id);
-    if (knowledge && !marked(n)) {
+    if (emitted(n) && !marked(n)) {
       dropped.add(n.id);
       return false;
     }
     return true;
   });
-  const edges = g.edges.filter(
-    (e) => marked(e) || !KNOWLEDGE_TIER_EDGE_TYPES.has(e.type) && !dropped.has(e.source) && !dropped.has(e.target)
-  );
+  const edges = g.edges.filter((e) => {
+    if (marked(e)) return true;
+    if (dropped.has(e.source) || dropped.has(e.target)) return false;
+    return record ? !record.edgeKeys.has(edgeEndpointKey(e)) : !KNOWLEDGE_TIER_EDGE_TYPES.has(e.type);
+  });
   return { nodes, edges };
+}
+var edgeEndpointKey = (e) => JSON.stringify([e.source, e.target]);
+function readKnowledgeTier(x) {
+  const r = x;
+  if (!r || typeof r !== "object" || !Array.isArray(r.node_ids) || !Array.isArray(r.edge_endpoints)) return null;
+  if (!r.node_ids.every((id2) => typeof id2 === "string")) return null;
+  if (!r.edge_endpoints.every((p) => Array.isArray(p) && p.length === 2 && p.every((s) => typeof s === "string"))) return null;
+  return {
+    nodeIds: new Set(r.node_ids),
+    edgeKeys: new Set(r.edge_endpoints.map(([source, target]) => edgeEndpointKey({ source, target })))
+  };
+}
+function knowledgeTierRecord(graph, input) {
+  const inNodes = new Set((input?.nodes ?? []).map((n) => n.id));
+  const inEdges = new Set((input?.edges ?? []).map(edgeEndpointKey));
+  const node_ids = [...new Set(graph.nodes.map((n) => n.id).filter((id2) => !inNodes.has(id2)))].sort();
+  const keys = [...new Set(graph.edges.map(edgeEndpointKey).filter((k) => !inEdges.has(k)))].sort();
+  return { node_ids, edge_endpoints: keys.map((k) => JSON.parse(k)) };
 }
 var UNKNOWN_GRAPH_PROJECT = { name: "unknown", description: "" };
 function resolveGraphProject(prior) {
@@ -31008,7 +31030,12 @@ async function runKnowledgeStages(repoRoot, filePaths, seams, opts = {}) {
   const canonEdges = validated.edges.map(
     (e) => isStructuralItem(e) ? e : canonicalizeEdge(e)
   );
-  const graph = { ...validated, nodes: canonNodes, edges: canonEdges };
+  const graph = {
+    ...validated,
+    nodes: canonNodes,
+    edges: canonEdges,
+    knowledge_tier: knowledgeTierRecord({ nodes: canonNodes, edges: canonEdges }, opts.structuralGraph)
+  };
   const sc3OrphanWikiPageIds = findOrphanWikiPages(graph);
   if (sc3OrphanWikiPageIds.length > 0) {
     throw new Error(
@@ -31114,7 +31141,7 @@ if (require.main === module) {
           if (prior.version === "guild.knowledge_graph.v1") {
             structuralGraph = { nodes: prior.nodes, edges: prior.edges, layers: prior.layers, tour: prior.tour };
           } else if (prior.version === "guild.knowledge_graph.v2") {
-            const sub = carriedForwardSubset({ nodes: prior.nodes, edges: prior.edges });
+            const sub = carriedForwardSubset({ nodes: prior.nodes, edges: prior.edges, knowledge_tier: prior.knowledge_tier });
             structuralGraph = { nodes: sub.nodes, edges: sub.edges, layers: prior.layers, tour: prior.tour };
           }
         }
@@ -31213,6 +31240,7 @@ function discoverFilePaths(repoRoot) {
   emitRound1Candidates,
   emitRound2Candidates,
   findOrphanWikiPages,
+  knowledgeTierRecord,
   maybeSynthesizeFallbackRootTopic,
   resolveGraphProject,
   runKnowledgeStages
