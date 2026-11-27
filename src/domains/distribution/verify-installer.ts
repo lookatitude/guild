@@ -302,6 +302,28 @@ function writeFakeHostBinary(binDir: string, name: string): void {
   fs.chmodSync(abs, 0o755);
 }
 
+/**
+ * Offline `npx` shim (issue #259). The plugin root ships no tsx, so a bare
+ * `npx tsx` re-resolves tsx against the npm registry on every install.sh run.
+ * The shim runs scripts/node_modules/.bin/tsx for `npx tsx ...` and defers any
+ * other call to the real npx (the shim dir must be first on PATH). install.sh
+ * still invokes `npx tsx ...` verbatim.
+ */
+function writeNpxShim(binDir: string, root: string): void {
+  const localTsx = path.join(root, "scripts", "node_modules", ".bin", "tsx");
+  const abs = path.join(binDir, "npx");
+  fs.writeFileSync(
+    abs,
+    [
+      "#!/usr/bin/env bash",
+      `if [ "$1" = "tsx" ] && [ -x "${localTsx}" ]; then shift; exec "${localTsx}" "$@"; fi`,
+      'PATH="${PATH#*:}" exec npx "$@"',
+      "",
+    ].join("\n")
+  );
+  fs.chmodSync(abs, 0o755);
+}
+
 function readLogLines(logFile: string): string[] {
   if (!fs.existsSync(logFile)) return [];
   return fs.readFileSync(logFile, "utf8").split(/\r?\n/).filter(Boolean);
@@ -417,6 +439,7 @@ export function verifyInstallerFixtureExecutions(options: VerifyOptions = {}): I
     for (const binary of ["claude", "codex", "pi", "agy", "cursor-agent", "gh", "opencode", "acli"]) {
       writeFakeHostBinary(fakeBin, binary);
     }
+    writeNpxShim(fakeBin, root);
 
     for (const expectation of INSTALLER_HOST_EXPECTATIONS) {
       const logFile = path.join(tmp, `${expectation.host}.log`);
@@ -494,6 +517,9 @@ export function verifyInstallerLiveIsolatedExecutions(options: VerifyOptions = {
       const data = path.join(tmp, "data");
       const state = path.join(tmp, "state");
       for (const dir of [home, config, cache, data, state]) fs.mkdirSync(dir, { recursive: true });
+      const shimBin = path.join(tmp, "shim-bin");
+      fs.mkdirSync(shimBin, { recursive: true });
+      writeNpxShim(shimBin, root);
 
       const res = spawnSync("bash", [installScript, "--host", expectation.host], {
         cwd: root,
@@ -505,7 +531,7 @@ export function verifyInstallerLiveIsolatedExecutions(options: VerifyOptions = {
           XDG_CACHE_HOME: cache,
           XDG_DATA_HOME: data,
           XDG_STATE_HOME: state,
-          PATH: pathEnv,
+          PATH: `${shimBin}${path.delimiter}${pathEnv}`,
           npm_config_cache: process.env["npm_config_cache"] ?? path.join(os.tmpdir(), "guild-npm-cache"),
         },
         timeout: 120_000,
