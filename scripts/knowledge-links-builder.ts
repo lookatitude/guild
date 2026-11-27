@@ -41,6 +41,7 @@
  * Zero runtime deps beyond Node builtins.
  */
 
+import { knowledgeIndexesDir, knowledgeIndexReadPath } from "../src/domains/state";
 import * as fs from "fs";
 import { sealSet } from '../src/domains/kernel';
 import * as path from "path";
@@ -857,15 +858,16 @@ export function buildKnowledgeLinks(opts: BuildOptions): BuildResult {
   //    state is held there that is not also in the canonical stores. If it is
   //    absent (NN#8 delete case), only the canonical-store edges appear.
   // ─────────────────────────────────────────────────────────────────────────
-  const klPath = path.join(durableGuildDir(root), "indexes", "knowledge-links.json");
+  const klPath = path.join(knowledgeIndexesDir(root), "knowledge-links.json");
+  const klReadPath = knowledgeIndexReadPath(root, "knowledge-links.json");
   let existingLinks: KnowledgeLink[] = [];
-  if (!dry_run && fs.existsSync(klPath)) {
+  if (!dry_run && fs.existsSync(klReadPath)) {
     // G2b-4 fix: read via the shared knowledge-links-io helper (tolerant of
     // both the current `schema_version` key and the legacy `version` key
     // written by pre-fix domain.ts/knowledge-links-traverse.ts rounds) rather
     // than a private JSON.parse — the on-disk version key is not otherwise
     // consulted here, only `.links`, so this is a read-path consistency fix.
-    const existing = loadKnowledgeLinksDoc(klPath);
+    const existing = loadKnowledgeLinksDoc(klReadPath);
     // Keep only engine-tagged edges (stage-5 touches from derive-domain.ts)
     // so we don't inherit stale builder edges from a prior run.
     existingLinks = existing.links.filter(

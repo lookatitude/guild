@@ -25,7 +25,7 @@ import { decisionPublicationRefs, type DecisionPublicationRefs, type EntityRef }
 import { readPublication, publicationSidecarPath, readPublicationRecord, type BasisRef, type ChannelRecord, type Sha256 } from "./publication";
 import { canonicalJson } from "./source-basis";
 import { sourceWorktreeId, type ChannelState } from "./source-basis";
-import { durableGuildDir } from "../state";
+import { knowledgeIndexesDir } from "../state";
 
 /** The hook never verifies: any hint makes the generation pending. */
 export const AFTER_EDIT_BUDGET: VerificationBudget = Object.freeze({ max_files: 0, max_bytes: 0 });
@@ -123,7 +123,8 @@ export function hintPublicationFromCwd(cwd: string, paths: readonly string[]): H
   try {
     const roots = worktreeRoots(cwd);
     if (!roots) return { recorded: false, generation: null, reason: "not a git worktree", paths: [] };
-    const indexesDir = path.join(durableGuildDir(roots.owner), "indexes");
+    // Write dir only: a hint appends a sidecar, and layout 2 writes nothing under `.guild/indexes`.
+    const indexesDir = knowledgeIndexesDir(roots.owner);
     const pub = path.join(indexesDir, "publication");
     if (!fs.existsSync(path.join(pub, "CURRENT")) && !fs.existsSync(path.join(pub, "successors", "root"))) {
       return { recorded: false, generation: null, reason: "nothing published", paths: [] };
@@ -202,6 +203,8 @@ export interface PublicationStatus {
  */
 export function publicationStatus(input: {
   indexesDir: string;
+  /** The owner's `.guild` dir (decision ledger). Defaults to the parent of `indexesDir` (layout 1). */
+  guildDir?: string;
   observe?: () => BasisRef;
   budget?: VerificationBudget;
   estimateBytes?: number;
@@ -245,7 +248,7 @@ export function publicationStatus(input: {
   }
 
   const newHints = hints.lines > (verification?.hint_lines ?? 0);
-  const decisions = liveDecisions(input.indexesDir, cur.manifest.decisions ?? null);
+  const decisions = liveDecisions(input.indexesDir, input.guildDir, cur.manifest.decisions ?? null);
   const channels = cur.record.channels.map((c) => {
     let state: ChannelState = c.state;
     let reason = c.reason;
@@ -298,10 +301,10 @@ function decisionView(r: DecisionPublicationRefs | null): string {
 }
 
 /** Compare the decisions bound into a generation with the owner's ledger and pins now. */
-function liveDecisions(indexesDir: string, published: DecisionPublicationRefs | null): PublicationStatus["decisions"] {
+function liveDecisions(indexesDir: string, guildDir: string | undefined, published: DecisionPublicationRefs | null): PublicationStatus["decisions"] {
   let live: DecisionPublicationRefs | null;
   try {
-    live = decisionPublicationRefs(path.dirname(path.resolve(indexesDir)));
+    live = decisionPublicationRefs(guildDir ?? path.dirname(path.resolve(indexesDir)));
   } catch (err) {
     return { state: "unknown", reason: `decision state unreadable: ${(err as Error).message}`, live: null };
   }

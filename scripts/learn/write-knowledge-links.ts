@@ -35,6 +35,7 @@
  *   const result = writeKnowledgeLinks({ graph, repoRoot, runId, generatedAt });
  */
 
+import { knowledgeIndexesDir } from "../../src/domains/state";
 import * as fs from "fs";
 import * as path from "path";
 import type { GraphNode, GraphEdge } from "./lib/schema";
@@ -229,7 +230,7 @@ export function writeRecallProvenance(
   repoRoot: string,
   info: { runId?: string; generatedAt?: string; nodeCount: number; edgeCount: number },
 ): string {
-  const indexesDir = path.join(durableGuildDir(repoRoot), "indexes");
+  const indexesDir = knowledgeIndexesDir(repoRoot);
   fs.mkdirSync(indexesDir, { recursive: true });
   const provenanceDoc = {
     schema_version: KNOWLEDGE_LINKS_PROVENANCE_SCHEMA_VERSION,
@@ -256,7 +257,7 @@ export function writeRecallProvenance(
 export function writeKnowledgeLinks(opts: WriteKnowledgeLinksOptions): WriteKnowledgeLinksResult {
   const { graph, repoRoot, runId, generatedAt } = opts;
   const recall = buildKnowledgeRecall(graph);
-  const indexesDir = path.join(durableGuildDir(repoRoot), "indexes");
+  const indexesDir = knowledgeIndexesDir(repoRoot);
   assertPublished(
     publishLearnArtifacts(
       { indexesDir, repoRoot, sourceRoot: repoRoot },

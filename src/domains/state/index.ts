@@ -18,6 +18,7 @@ export * from "./index-cache";
 export * from "./storage-artifact-registry";
 export * from "./storage-fs";
 export * from "./storage-janitor";
+export * from "./storage-indexes";
 export * from "./storage-layout";
 export * from "./storage-policy";
 export * from "./storage-roots";

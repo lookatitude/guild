@@ -26,6 +26,8 @@ import {
 import { decisionPublicationRefs } from "../../../src/domains/knowledge/decision-propagation";
 import { basisDigest, sourceWorktreeId, type SourceBasis } from "../../../src/domains/knowledge/source-basis";
 import { deepFreeze } from "../../../src/domains/kernel/sealed-collections";
+import { knowledgeIndexesDir, knowledgeIndexesReadDir } from "../../../src/domains/state";
+import { durableGuildDir } from "../../lib/state/ensure-storage-layout";
 import { computeLearnSourceBasis } from "./paths";
 import { STRUCTURAL_EXTRACTOR, structuralSubset } from "./structural";
 import type { GraphEdge, GraphNode } from "./schema";
@@ -181,7 +183,7 @@ export const LEARN_LAYERS: Partial<Record<LayerChannel, LayerSpec>> = Object.fre
 });
 
 export interface LearnPublishTarget {
-  /** Owner `.guild/indexes`. */
+  /** Owner indexes dir (`knowledgeIndexesDir`): the platform cache root on layout 2, `.guild/indexes` on layout 1. */
   indexesDir: string;
   /** Owner (durable) worktree root. */
   repoRoot: string;
@@ -218,7 +220,11 @@ export function baseFrom(pinned: PinnedGeneration | null, t: LearnPublishTarget)
 }
 
 export function readLearnBase(t: LearnPublishTarget): LearnBase {
-  return baseFrom(readPublication(t.indexesDir), t);
+  // Layout 2 with only a legacy `.guild/indexes` store: read it as the base (migration);
+  // the next publication is written to the cache root, never back into `.guild`.
+  const from = t.indexesDir === knowledgeIndexesDir(t.repoRoot) ? knowledgeIndexesReadDir(t.repoRoot, ["publication", GRAPH_ARTIFACT]) : t.indexesDir;
+  const rt = from === t.indexesDir ? t : { ...t, indexesDir: from };
+  return baseFrom(readPublication(rt.indexesDir), rt);
 }
 
 /** Same bytes `writeJson` produced, so exported files keep their shape. */
@@ -273,7 +279,7 @@ function publishBuilt(
         : undefined,
     exports: [GRAPH_ARTIFACT, RECALL_ARTIFACT],
     // K04: the owner's decision refs and replan signals ride on every generation.
-    decisions: () => decisionPublicationRefs(path.dirname(t.indexesDir)),
+    decisions: () => decisionPublicationRefs(durableGuildDir(t.repoRoot)),
     lockTimeoutMs: opts.lockTimeoutMs,
   });
 }

@@ -73,7 +73,7 @@ function main(): void {
   // METRIC 6 (DECISION=B): read the recall-optimised projection instead of the raw graph.
   // Graceful-empty: if knowledge-recall.json is absent or malformed, return an empty
   // successful result (exit 0) — consistent with recall.ts's absent-projection branch.
-  const graph = readJson<KnowledgeLinksDoc>(gp.knowledgeRecall);
+  const graph = readJson<KnowledgeLinksDoc>(gp.readPath(gp.knowledgeRecall));
   if (!graph) {
     const neighborOf = parseFlag(argv, "neighbors");
     const json = hasFlag(argv, "json");

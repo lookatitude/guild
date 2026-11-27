@@ -42,6 +42,7 @@
  *   npx tsx scripts/knowledge-links-traverse.ts --cwd <repo-root> --task-id <id> [--json]
  */
 
+import { knowledgeIndexReadPath } from "../src/domains/state";
 import * as fs from "node:fs";
 import { sealSet } from "../src/domains/kernel";
 import * as path from "node:path";
@@ -238,7 +239,7 @@ function main(): void {
     return; // advisory: never a hard failure exit
   }
 
-  const klPath = path.join(durableGuildDir(cwd), "indexes", "knowledge-links.json");
+  const klPath = knowledgeIndexReadPath(cwd, "knowledge-links.json");
   if (!fs.existsSync(klPath)) {
     const result = { task_id: taskId, connected: false, reachable_kinds: [], required_kinds: REQUIRED_KINDS, missing_kinds: REQUIRED_KINDS, note: "no knowledge-links.json found" };
     process.stdout.write(JSON.stringify(result, null, asJson ? 2 : 0) + "\n");

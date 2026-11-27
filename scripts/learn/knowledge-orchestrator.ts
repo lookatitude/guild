@@ -44,6 +44,7 @@
  *   node names/confs   → LLM-judged (via injected seams)
  */
 
+import { knowledgeIndexesDir } from "../../src/domains/state";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -1162,7 +1163,7 @@ export async function runKnowledgeStages(
   if (opts.base && !opts.basis) throw new Error("runKnowledgeStages: opts.base needs opts.basis taken before it was read");
   const basis = opts.basis ?? computeLearnSourceBasis(repoRoot);
   const startBase =
-    opts.base ?? readLearnBase({ indexesDir: path.join(durableGuildDir(repoRoot), "indexes"), repoRoot, sourceRoot: repoRoot });
+    opts.base ?? readLearnBase({ indexesDir: knowledgeIndexesDir(repoRoot), repoRoot, sourceRoot: repoRoot });
   // FIX 1 (codex G-lane): no staleness, no implicit previous graph. The
   // structural snapshot is an explicit input from the preceding deep-graph run.
   // ── K1→K4: assemble all nodes + edges (deterministic order) ───────────────
@@ -1304,7 +1305,7 @@ export async function runKnowledgeStages(
   // Persists ALL suppressed candidates from both drop points so no candidate
   // silently vanishes (retention invariant: candidates_in == classified_nodes
   // + suppressed.length). Not part of the SC-8 byte-set — sidecar only.
-  const indexesDir = path.join(durableGuildDir(repoRoot), "indexes");
+  const indexesDir = knowledgeIndexesDir(repoRoot);
   fs.mkdirSync(indexesDir, { recursive: true });
   const suppressedDoc: KnowledgeSuppressed = {
     schema: "guild.knowledge_suppressed.v1",
@@ -1418,7 +1419,7 @@ if (require.main === module) {
       const seams = buildFileBackedSeams(judgmentDir);
       // K03: read the structural input from the pinned generation and publish
       // against it; if another writer published first, rebuild and retry.
-      const target = { indexesDir: path.join(durableGuildDir(repoRoot), "indexes"), repoRoot, sourceRoot: repoRoot };
+      const target = { indexesDir: knowledgeIndexesDir(repoRoot), repoRoot, sourceRoot: repoRoot };
       let result: RunKnowledgeResult | null = null;
       for (let attempt = 0; attempt < 3 && !result; attempt++) {
         const basis = computeLearnSourceBasis(repoRoot);

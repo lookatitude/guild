@@ -97,7 +97,7 @@ function main(): void {
   // existing map is still exact — keep it so a re-init does not dirty the tree.
   let unchanged = false;
   try {
-    const prior = JSON.parse(fs.readFileSync(gp.codebaseMap, "utf8")) as Record<string, unknown>;
+    const prior = JSON.parse(fs.readFileSync(gp.readPath(gp.codebaseMap), "utf8")) as Record<string, unknown>;
     unchanged =
       JSON.stringify({ ...prior, generated_from_commit: codebaseMap.generated_from_commit }) ===
       JSON.stringify(codebaseMap);

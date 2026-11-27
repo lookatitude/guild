@@ -15,6 +15,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { execFileSync } from "child_process";
 import { durableGuildDir } from "../../lib/state/ensure-storage-layout";
+import { knowledgeIndexesDir, knowledgeIndexReadPath } from "../../../src/domains/state";
 import {
   computeSourceBasis,
   readContainedFile,
@@ -95,6 +96,14 @@ export interface GuildPaths {
   knowledgeRecall: string;
   fingerprint: string;
   partialGraph: string;
+  /**
+   * Existing bytes for one of the index paths above: the path itself, or the legacy
+   * `.guild/indexes` copy of the same file until the next upgrade removes it.
+   * Read-only; never a write target.
+   */
+  readPath(p: string): string;
+  /** Copy a legacy `.guild/indexes` file to its (absent) cache path so a read-modify-write starts from it. */
+  seed(p: string): void;
 }
 
 function isLink(p: string): boolean {
@@ -117,7 +126,7 @@ export function guildPaths(cwd: string): GuildPaths {
   const repoRoot = resolveMainRepoRoot(cwd);
   const sourceRoot = resolveSourceWorktreeRoot(cwd);
   const guildDir = durableGuildDir(repoRoot);
-  const indexesDir = path.join(guildDir, "indexes");
+  const indexesDir = knowledgeIndexesDir(repoRoot);
   const runsDir = path.join(guildDir, "runs");
   return {
     repoRoot,
@@ -131,6 +140,14 @@ export function guildPaths(cwd: string): GuildPaths {
     knowledgeRecall: path.join(indexesDir, "knowledge-recall.json"),
     fingerprint: path.join(indexesDir, "understand-fingerprint.json"),
     partialGraph: path.join(indexesDir, "understand-partial-graph.json"),
+    readPath: (p) => knowledgeIndexReadPath(repoRoot, path.relative(indexesDir, p)),
+    seed: (p) => {
+      if (fs.existsSync(p)) return;
+      const from = knowledgeIndexReadPath(repoRoot, path.relative(indexesDir, p));
+      if (from === p || !fs.existsSync(from)) return;
+      fs.mkdirSync(path.dirname(p), { recursive: true });
+      fs.copyFileSync(from, p);
+    },
   };
 }
 

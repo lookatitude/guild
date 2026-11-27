@@ -19,6 +19,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { guildPaths, parseCwd, hasFlag, writeJson, readJson, computeLearnSourceBasis } from "./lib/paths";
+import { knowledgeIndexesReadDir } from "../../src/domains/state";
 import { type ChannelState, type SourceBasis } from "../../src/domains/knowledge/source-basis";
 import { reconcileBoundary, type FreshnessMarker } from "../../src/domains/knowledge/freshness-boundary";
 import { publicationStatus, type PublicationStatus } from "../../src/domains/knowledge/publication-boundary";
@@ -69,12 +70,18 @@ function main(): void {
   // (consumes after-edit hints; a dropped hook still shows as drift).
   let publication: PublicationStatus | { error: string } | null = null;
   try {
-    publication = publicationStatus({ indexesDir: gp.indexesDir, observe: () => source });
+    // A legacy `.guild/indexes` fallback is read-only: verification records a sidecar.
+    const readDir = knowledgeIndexesReadDir(gp.repoRoot);
+    publication = publicationStatus({
+      indexesDir: readDir,
+      guildDir: gp.guildDir,
+      observe: readDir === gp.indexesDir ? () => source : undefined,
+    });
   } catch (err) {
     publication = { error: String((err as Error).message ?? err) };
   }
 
-  const store = readJson<FingerprintStore & FreshnessMarker>(gp.fingerprint);
+  const store = readJson<FingerprintStore & FreshnessMarker>(gp.readPath(gp.fingerprint));
   if (!store) {
     process.stderr.write("[staleness] no baseline — treat as FULL (run --baseline after a build)\n");
     const out = { state: "FULL", reason: "no fingerprint baseline", filesToReanalyze: Object.keys(tree), rerunArchitecture: true, publication };

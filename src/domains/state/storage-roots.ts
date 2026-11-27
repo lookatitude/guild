@@ -103,6 +103,11 @@ export function guildRootId(activeRoot: string): string {
   return `${base}-${digest}`;
 }
 
+/** The cache subtree for one Guild root: `<cache>/roots/<rootId>`. The only place that formula lives. */
+export function guildRootCacheBase(roots: Pick<GuildStorageRoots, "cache">, rootId: string): string {
+  return path.join(roots.cache, "roots", rootId);
+}
+
 /**
  * `<activeRoot>/.guild` — the durable root, for callers that already hold the root
  * and only need the directory. Pure; no resolution, no discovery (KTD15).

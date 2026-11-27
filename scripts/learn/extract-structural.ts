@@ -115,8 +115,18 @@ function main(): void {
   let outPath: string;
   let cachePath: string;
   try {
-    outPath = assertContained(repoRoot, parseFlag(argv, "out") ?? gp.knowledgeGraph, "--out path");
-    cachePath = assertContained(repoRoot, `${outPath}.structural-cache.json`, "cache path");
+    // A user-supplied --out, and the layout 1 default under `.guild/indexes`, stay
+    // inside the repo. The layout 2 default is the platform cache dir, off-tree by
+    // design and derived from the storage helper (never user input).
+    const outFlag = parseFlag(argv, "out");
+    const offTree = !outFlag && path.relative(repoRoot, gp.indexesDir).startsWith("..");
+    if (offTree) {
+      outPath = path.resolve(gp.knowledgeGraph);
+      cachePath = `${outPath}.structural-cache.json`;
+    } else {
+      outPath = assertContained(repoRoot, outFlag ?? gp.knowledgeGraph, "--out path");
+      cachePath = assertContained(repoRoot, `${outPath}.structural-cache.json`, "cache path");
+    }
   } catch (err) {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     process.exit(1);

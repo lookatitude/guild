@@ -109,7 +109,7 @@ function main(): void {
     input = JSON.parse(fs.readFileSync(0, "utf8"));
   } else {
     const inPath = parseFlag(argv, "in");
-    const resolved = inPath ? path.resolve(cwd, inPath) : gp.partialGraph;
+    const resolved = inPath ? path.resolve(cwd, inPath) : gp.readPath(gp.partialGraph);
     input = readJson(resolved);
     if (input === null) {
       process.stderr.write(`[validate] ERROR: cannot read input graph ${resolved}\n`);
@@ -143,7 +143,7 @@ function main(): void {
   // K03: a whole-graph replacement. It is built from no destination layer, so a
   // destination that moved since this read is refused, never rebased over.
   if (!dry) {
-    const guard = checkDowngradeGuard(gp.knowledgeGraph, result.data, force);
+    const guard = checkDowngradeGuard(gp.readPath(gp.knowledgeGraph), result.data, force);
     if (guard.refused) {
       const msg =
         `[validate] REFUSED: on-disk knowledge-graph.json is ${guard.onDiskVersion} (carries the knowledge ` +

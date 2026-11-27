@@ -82,7 +82,7 @@ import { ingestImportanceScore, resolveRecallImportance, wikiPageCategory } from
 // R-TRACE (Wave 6): additive trace emit — NEVER changes return value
 import { emitTraceEvent } from "../telemetry";
 import { makeAnalysisTraceEvent, makeRecallEvent, makeRecallDecisionEvent } from "../telemetry";
-import { durableGuildDir } from "../state";
+import { durableGuildDir, knowledgeIndexReadPath, knowledgeIndexesReadDir } from "../state";
 import { phaseStartRecall } from "./phase-start";
 import { scrubTraceText } from "../telemetry";
 import {
@@ -543,7 +543,7 @@ function kgQueryBranch(
   onExportRead?: (sha256: string) => void,
 ): RecallResult | null {
   // METRIC 6: read the recall projection, not the raw knowledge-graph
-  const projPath = path.join(durableGuildDir(cwd), "indexes", "knowledge-recall.json");
+  const projPath = knowledgeIndexReadPath(cwd, "knowledge-recall.json");
   if (!fs.existsSync(projPath)) return null;
 
   let proj: KnowledgeLinksDoc | null = null;
@@ -735,7 +735,7 @@ function structuralBranch(
   if (!intent) return null;
 
   // Read the FROZEN structural graph (source of truth; never the FTS cache).
-  const graphPath = path.join(durableGuildDir(cwd), "indexes", "knowledge-graph.json");
+  const graphPath = knowledgeIndexReadPath(cwd, "knowledge-graph.json");
   if (!fs.existsSync(graphPath)) return null;
   let doc: { nodes?: unknown; edges?: unknown } | null = null;
   try {
@@ -899,7 +899,7 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
     mode: opts.category ? "recall_category" : "recall",
     use_capture: r.use_capture ?? "supported",
     // The generation is named only from the bytes the KG branch actually read.
-    indexesDir: path.join(durableGuildDir(opts.cwd), "indexes"),
+    indexesDir: knowledgeIndexesReadDir(opts.cwd),
     ...(taskId ? { task_id: taskId } : {}),
     ...(r.identity ? { identity: r.identity } : {}),
     ...(r.query_id ? { query_id: r.query_id } : {}),

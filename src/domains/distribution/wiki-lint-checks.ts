@@ -41,7 +41,7 @@ import {
 import { lintKnowledgeNodes, type GraphNode } from "../knowledge";
 import { loadYamlApi } from "../kernel";
 import { WIKI_PAGE_TYPES, isWikiPageType } from "../knowledge";
-import { durableGuildDir } from "../state";
+import { durableGuildDir, knowledgeIndexReadPath } from "../state";
 
 const yaml = loadYamlApi();
 
@@ -203,7 +203,7 @@ export function lintWiki(root: string): Finding[] {
   // at .guild/indexes/knowledge-graph.json (produced by K-stages; absent before K2 runs).
   // Folds lintKnowledgeNodes() findings into the wiki-lint report so that
   // `/guild:wiki lint` → lintWiki() surfaces them even when .guild/wiki is absent.
-  const kgPath = path.join(durableGuildDir(root), "indexes", "knowledge-graph.json");
+  const kgPath = knowledgeIndexReadPath(root, "knowledge-graph.json");
   if (fs.existsSync(kgPath)) {
     try {
       const kg = JSON.parse(fs.readFileSync(kgPath, "utf8")) as { nodes?: unknown[] };
