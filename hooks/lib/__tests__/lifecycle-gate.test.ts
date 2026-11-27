@@ -38,6 +38,7 @@ import {
   gateStatePath,
   effectiveThreshold,
   isDriftCurrent,
+  isAutomatedPrompt,
   isGateDecisionReply,
   isLifecycleSkillCall,
   isOverridden,
@@ -67,12 +68,12 @@ function cleanup(dir: string): void {
 
 let tsCounter = 0;
 /**
- * Monotonically increasing ISO timestamps, anchored a few minutes in the PAST
+ * Monotonically increasing ISO timestamps, anchored 20 minutes in the PAST
  * so ordering is deterministic while still landing inside the gate's
  * drift-recency floor (`isDriftCurrent`). A fixed epoch would make every
  * fixture look like historical drift and silence the gate.
  */
-const TS_BASE_MS = Date.now() - 5 * 60 * 1000;
+const TS_BASE_MS = Date.now() - 20 * 60 * 1000;
 function nextTs(): string {
   tsCounter += 1;
   return new Date(TS_BASE_MS + tsCounter * 1000).toISOString();
@@ -819,6 +820,61 @@ describe("lifecycle-gate — evaluateLifecycleGate (real fixtures)", () => {
     const third = await evaluateLifecycleGate(root, RUN_ID, "keep going", cleanEnv());
     expect(third.block).toBeNull();
     expect(third.context).toBeNull();
+  });
+
+  describe("host-injected (automated) prompts, issue #264", () => {
+    const AUTOMATED = [
+      "<task-notification>\n<task-id>b1</task-id>\n</task-notification>",
+      '<teammate-message teammate_id="lane-a" color="blue">receipt</teammate-message>',
+      "<cross-session-message from=\"x\">hi</cross-session-message>",
+      "[SYSTEM NOTIFICATION - NOT USER INPUT] background task finished",
+      "[Cross-session idle notice] peer idle",
+      "  \n\t<task-notification>leading whitespace</task-notification>",
+      "<system-reminder>ctx</system-reminder>\n<task-notification>x</task-notification>",
+    ];
+    const OPERATOR = [
+      "keep going",
+      "please look at this <task-notification> thing",
+      "he wrote: [SYSTEM NOTIFICATION - NOT USER INPUT] and it blocked me",
+      "<system-reminder>ctx</system-reminder>\nkeep going",
+      "<task-notificationx>not a marker</task-notificationx>",
+      "",
+    ];
+
+    it("isAutomatedPrompt matches only prompts that START with a host marker", () => {
+      for (const p of AUTOMATED) expect(isAutomatedPrompt(p)).toBe(true);
+      for (const p of OPERATOR) expect(isAutomatedPrompt(p)).toBe(false);
+      expect(isAutomatedPrompt(null)).toBe(false);
+    });
+
+    it("returns silent above threshold and leaves gate state bytes unchanged", async () => {
+      appendAdHoc(runDir, 6, 3);
+      for (const p of AUTOMATED) {
+        const before = fs.existsSync(gateStatePath(runDir))
+          ? fs.readFileSync(gateStatePath(runDir))
+          : null;
+        const r = await evaluateLifecycleGate(root, RUN_ID, p, cleanEnv());
+        expect(r).toEqual({ block: null, context: null });
+        const after = fs.existsSync(gateStatePath(runDir))
+          ? fs.readFileSync(gateStatePath(runDir))
+          : null;
+        expect(after).toEqual(before);
+      }
+      // The crossing was not consumed: the next operator prompt still blocks.
+      const op = await evaluateLifecycleGate(root, RUN_ID, "keep going", cleanEnv());
+      expect(op.block).toContain(LIFECYCLE_GATE_MARKER);
+    });
+
+    it("an operator prompt above threshold still blocks, including one that quotes a marker mid-text", async () => {
+      for (const p of OPERATOR.filter((x) => x.length > 0)) {
+        const r2 = makeRun(root, { runId: RUN_ID });
+        fs.rmSync(gateStatePath(r2), { force: true });
+        appendAdHoc(r2, 6, 3);
+        const r = await evaluateLifecycleGate(root, RUN_ID, p, cleanEnv());
+        expect(r.block).toContain(LIFECYCLE_GATE_MARKER);
+        fs.rmSync(path.join(r2, "logs"), { recursive: true, force: true });
+      }
+    });
   });
 
   it("lets an exact approval reply reach the pending gate and injects the correction", async () => {

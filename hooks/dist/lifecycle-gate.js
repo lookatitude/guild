@@ -54641,8 +54641,21 @@ function isDriftCurrent(latestTs, env = process.env, nowMs = Date.now()) {
   const age = nowMs - parsed;
   return age >= 0 && age <= driftRecencyMs(env);
 }
+var AUTOMATED_PROMPT_MARKER = /^(?:<(?:task-notification|teammate-message|cross-session-message)(?![\w-])|\[SYSTEM NOTIFICATION - NOT USER INPUT\]|\[Cross-session idle notice\])/;
+var LEADING_SYSTEM_REMINDER = /^\s*<system-reminder>[\s\S]*?<\/system-reminder>/;
+function isAutomatedPrompt(promptText) {
+  if (typeof promptText !== "string") return false;
+  let text = promptText;
+  for (; ; ) {
+    const m = LEADING_SYSTEM_REMINDER.exec(text);
+    if (m === null) break;
+    text = text.slice(m[0].length);
+  }
+  return AUTOMATED_PROMPT_MARKER.test(text.trimStart());
+}
 async function evaluateLifecycleGate(guildRoot, runId, promptText, env = process.env) {
   const silent = { block: null, context: null };
+  if (isAutomatedPrompt(promptText)) return silent;
   const config = readLifecycleGateConfig(guildRoot);
   if (!config.enabled) return silent;
   const ctx = await resolveGateContext(guildRoot, runId, env);

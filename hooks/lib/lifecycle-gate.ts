@@ -1028,6 +1028,29 @@ export interface LifecycleGateResult {
   context: string | null;
 }
 
+const AUTOMATED_PROMPT_MARKER =
+  /^(?:<(?:task-notification|teammate-message|cross-session-message)(?![\w-])|\[SYSTEM NOTIFICATION - NOT USER INPUT\]|\[Cross-session idle notice\])/;
+const LEADING_SYSTEM_REMINDER = /^\s*<system-reminder>[\s\S]*?<\/system-reminder>/;
+
+/**
+ * True when the prompt was injected by the host (background-task completion,
+ * teammate receipt, cross-session message), not typed by the operator. The
+ * host discards a blocked prompt, so the gate must never block these. Anchored
+ * to the START of the prompt (after whitespace and any leading
+ * `<system-reminder>` blocks): an operator prompt that merely quotes a marker
+ * later in its text is still an operator prompt.
+ */
+export function isAutomatedPrompt(promptText: string | null): boolean {
+  if (typeof promptText !== "string") return false;
+  let text = promptText;
+  for (;;) {
+    const m = LEADING_SYSTEM_REMINDER.exec(text);
+    if (m === null) break;
+    text = text.slice(m[0].length);
+  }
+  return AUTOMATED_PROMPT_MARKER.test(text.trimStart());
+}
+
 /**
  * The ACTIVE UserPromptSubmit gate. Returns the blocking body, the deferred
  * correction for an accepted prompt, or neither (zero-noise contract). Never
@@ -1047,6 +1070,8 @@ export async function evaluateLifecycleGate(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<LifecycleGateResult> {
   const silent: LifecycleGateResult = { block: null, context: null };
+  // Host-injected prompts are silent before any gate state is read or written.
+  if (isAutomatedPrompt(promptText)) return silent;
   const config = readLifecycleGateConfig(guildRoot);
   if (!config.enabled) return silent;
 
