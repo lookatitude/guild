@@ -40,7 +40,8 @@
       "lib/result-normalizer",
       "lib/support-matrix",
       "host-smoke",
-      "generate-support-matrix"
+      "generate-support-matrix",
+      "check-host-mcp-claims"
     ],
     "script_id_prefixes": [
       "lib/host-adapters/"

@@ -68,7 +68,7 @@ model_tiers:
 
 mcp:
   stdio: false                  # no local stdio; Anthropic cloud connects to remote server
-  http: true                    # remote HTTP MCP (required transport)
+  http: false                   # corrected 2026-11-27 (#116): authoritative row is stdio:false, http:false (INFERRED) - UNVERIFIED; the design needs remote HTTP but the row does not assert it
   plugin_bundled: false
   core_provides_mcp: false      # Guild must host a remote MCP server
 
@@ -104,7 +104,7 @@ ttl_seconds: 3600
 | (4) Dispatch | Enqueue-only (`dispatch.deferred`) via `guild_enqueue_codex_task` or equivalent | No in-process or parallel dispatch | `DispatchAdapter` returns `dispatch.deferred`; execution happens on the configured execution host. Receipt collection is a read-MCP-tool call, not a local file read. |
 | (5) Permissions | Connector-side confirmation tool (if implemented) | No local ask UI | `ScopePolicy.resolve()` is not run locally. Write/destructive MCP tools enforce scope server-side; connector implements its own confirmation contract or declines. |
 | (6) Model tiers | Backend-determined | Tier ladder not applicable | Tiers are advisory only; the remote execution host resolves actual models. Connector records `tier: <requested>` in enqueue payload. |
-| (7) MCP | Remote HTTP MCP only | No stdio | The Guild connector IS a remote MCP server. Auth + workspace scoping required. Anthropic cloud connects from its infrastructure; local device is not involved. |
+| (7) MCP | **UNVERIFIED — authoritative row is `mcp: {stdio: false, http: false}` (provenance `inferred`)**; design intent is remote HTTP only | No stdio | corrected 2026-11-27 (#116): no transport is asserted by the row. | The Guild connector IS a remote MCP server. Auth + workspace scoping required. Anthropic cloud connects from its infrastructure; local device is not involved. |
 | (8) Team visibility | None (Rung 4, enqueue-only) | Full team visibility unavailable | No tmux, no app threads, no parallel sessions. Single serial enqueue path. `backend_rung: 4`. |
 
 ## Per-feature degradation matrix
@@ -123,7 +123,7 @@ ttl_seconds: 3600
 | FDC-10 Visuals / UI | Host-native | Connector output in Claude.ai chat | Status summaries, trace digests, and artifact previews returned as MCP tool text/markdown. No interactive dashboard. |
 | FDC-11 Security / permissions | Policy core + ask path | Server-side policy only | Connector enforces auth and scope server-side. No `ScopePolicy` run on connector side. Write tools require server-side authorization. |
 | FDC-12 Cost + subscription | Native billing | `cost_path: remote_mcp` | All execution costs are on the execution host. Connector itself is a read/enqueue facade; no model invocations on connector. |
-| FDC-13 MCP | stdio / HTTP | Remote HTTP only | The connector IS the remote MCP server. No stdio. Auth + workspace scoping mandatory. |
+| FDC-13 MCP | stdio / HTTP | UNVERIFIED (design: remote HTTP only; row asserts neither) | The connector IS the remote MCP server. No stdio. Auth + workspace scoping mandatory. |
 | FDC-14 Host-native subagents | Parallel agents | Not applicable | No dispatch capability on connector. Enqueue target (execution host) handles parallelism. |
 | FDC-15 Work isolation | Worktrees | Not applicable locally | Worktrees managed by execution host. Connector has no filesystem view. |
 | FDC-16 Telemetry + replay | Normalized trace | Read-only via `guild_get_run_trace` | Trace is produced and stored by execution host. Connector exposes summaries; FROZEN `guild.trace_event.v1` lives on execution host. |

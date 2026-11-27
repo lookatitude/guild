@@ -67,8 +67,8 @@ model_tiers:
   powerful: { model: "opus" }
 
 mcp:
-  stdio: true                   # local sessions
-  http: true
+  stdio: false                  # corrected 2026-11-27 (#116): authoritative row (claude-code-app) is stdio:false, http:false (INFERRED) - UNVERIFIED; the local-session claim was never exercised
+  http: false
   plugin_bundled: true
   core_provides_mcp: true
 
@@ -104,7 +104,7 @@ ttl_seconds: 3600
 | (4) Dispatch | Agent() in-process + app parallel sessions (Rung 2) | Cloud sessions degrade to Rung 3 or serial | Local: Rung 2 (app independent sessions) or Rung 3 (Agent tool). Cloud: Rung 4. `backend_rung` recorded. |
 | (5) Permissions | `PreToolUse ask` for local sessions | Cloud: file-bus pause | Local: same as CLI reference. Cloud: `ask_renderer: file_bus_pause`. |
 | (6) Model tiers | `haiku / sonnet / opus` (local sessions) | Cloud may differ per environment | `ModelResolver` reads active session type; local sessions use CLI model mapping. |
-| (7) MCP | stdio (local); HTTP (both) | Cloud: remote-only | `McpAdapter` detects local vs cloud session at startup and emits appropriate transport. |
+| (7) MCP | **UNVERIFIED — authoritative row (`claude-code-app`) is `mcp: {stdio: false, http: false}` (provenance `inferred`)**; design intent: stdio (local), HTTP (both) | Cloud: remote-only | corrected 2026-11-27 (#116): no transport is asserted by the row. `McpAdapter` detects local vs cloud session at startup and emits appropriate transport. |
 | (8) Team visibility | Rung 2 (app parallel sessions) → Rung 3 (Agent tool) | No tmux in app context | `app_threads: true`; `has_tmux: false`. Team backend is `HostIndependentAgentBackend` (app sessions), not `TmuxTeamBackend`. |
 
 ## Per-feature degradation matrix
@@ -123,7 +123,7 @@ ttl_seconds: 3600
 | FDC-10 Visuals / UI | Host-native | App panes, visual diff, app preview, startup card | App surfaces (visual diff, side chat, PR monitoring) used for review visualization; no tmux startup card. |
 | FDC-11 Security / permissions | Policy core + ask path | `PreToolUse ask` (local) / file-bus pause (cloud) | Local: identical to CLI. Cloud: `ask_renderer: file_bus_pause`. |
 | FDC-12 Cost + subscription | Native billing | `cost_path: native_integration` | Same invariant as CLI: prefer `Agent()` / plugin; no shell-spawned `claude -c` by default. |
-| FDC-13 MCP | stdio / HTTP | Full (local); remote HTTP (cloud) | MCP bundled in plugin for local; cloud needs environment-mediated MCP. |
+| FDC-13 MCP | stdio / HTTP | UNVERIFIED (design: full local, remote HTTP cloud; row asserts neither) | MCP bundled in plugin for local; cloud needs environment-mediated MCP. |
 | FDC-14 Host-native subagents | Parallel agents | App parallel sessions (Rung 2) | `HostIndependentAgentBackend` maps Guild lanes to app parallel sessions. |
 | FDC-15 Work isolation | Worktrees | App Git isolation | Desktop app has built-in Git isolation; worktrees available. |
 | FDC-16 Telemetry + replay | Normalized trace | Full (local); synthesized (cloud) | Local: `source: host_hook`, `fidelity: full`. Cloud: `source: file_bus_synthesis`, `fidelity: reduced`. |

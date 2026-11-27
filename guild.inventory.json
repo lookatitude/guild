@@ -829,6 +829,11 @@
       "kind": "cli"
     },
     {
+      "id": "check-host-mcp-claims",
+      "source_path": "scripts/check-host-mcp-claims.ts",
+      "kind": "cli"
+    },
+    {
       "id": "check-lane-liveness",
       "source_path": "scripts/check-lane-liveness.ts",
       "kind": "cli"

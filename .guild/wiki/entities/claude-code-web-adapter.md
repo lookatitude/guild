@@ -68,7 +68,7 @@ model_tiers:
 
 mcp:
   stdio: false                  # no local stdio processes in cloud VM
-  http: true                    # environment-mediated remote MCP
+  http: false                   # corrected 2026-11-27 (#116): authoritative row (claude-code-web) is stdio:false, http:false (INFERRED) - UNVERIFIED; environment-mediated remote MCP is design intent only
   plugin_bundled: false         # plugin bundle not loaded
   core_provides_mcp: false      # local MCP servers not started; remote HTTP only
 
@@ -104,7 +104,7 @@ ttl_seconds: 3600
 | (4) Dispatch | Cloud Agent() subagents / parallel cloud sessions (Rung 2) → serial (Rung 4) | No tmux | `HostIndependentAgentBackend` maps Guild lanes to cloud parallel sessions. Rung 1 (tmux) unavailable. |
 | (5) Permissions | File-bus `approval_request` + pause | No `PreToolUse ask` | `ScopePolicy.resolve()` runs in-process; emitter always degrades to `ask_renderer: file_bus_pause` (FDC-11). |
 | (6) Model tiers | `haiku / sonnet / opus` (same as CLI) | — | `ModelResolver` uses Claude model names; cloud VM runs Anthropic models. |
-| (7) MCP | Remote HTTP MCP only | No stdio | `McpAdapter` for cloud uses environment-mediated remote MCP. No `guild-memory` / `guild-telemetry` stdio servers; must use remote HTTP endpoints or fs fallback. |
+| (7) MCP | **UNVERIFIED — authoritative row is `mcp: {stdio: false, http: false}` (provenance `inferred`)**; design intent: remote HTTP only | No stdio | corrected 2026-11-27 (#116): no transport is asserted by the row. `McpAdapter` for cloud uses environment-mediated remote MCP. No `guild-memory` / `guild-telemetry` stdio servers; must use remote HTTP endpoints or fs fallback. |
 | (8) Team visibility | Rung 2 (cloud parallel sessions) → Rung 4 (serial) | No tmux, no local panes | `app_threads: true`; `has_tmux: false`. Backend rung = 2 when cloud parallel sessions available, else 4. |
 
 ## Per-feature degradation matrix
@@ -123,7 +123,7 @@ ttl_seconds: 3600
 | FDC-10 Visuals / UI | Host-native | Native branch/PR review in cloud app | Cloud surface has branch-level diffs and PR review; no local terminal dashboard. |
 | FDC-11 Security / permissions | Policy core + ask | File-bus pause | `ScopePolicy` runs; all ask → `approval_request` + pause. `ask_renderer: file_bus_pause`. |
 | FDC-12 Cost + subscription | Native billing | `cost_path: native_integration` | Cloud VM runs within Anthropic-managed subscription path. |
-| FDC-13 MCP | stdio / HTTP | Remote HTTP only | `mcp.stdio_available: false`; `mcp.http_available: true`; `fallback_reader: fs_scanner`. |
+| FDC-13 MCP | stdio / HTTP | UNVERIFIED (design: remote HTTP only; row asserts neither) | `mcp.stdio_available: false`; `mcp.http_available: true`; `fallback_reader: fs_scanner`. |
 | FDC-14 Host-native subagents | Parallel agents | Cloud parallel sessions (Rung 2) | `coordination.parallelism: host_native`; cloud Agent/subagent dispatch. |
 | FDC-15 Work isolation | Worktrees | Branch/session isolation | Cloud VM per-session isolation; no explicit worktree allocation; conflicting lanes serialized. |
 | FDC-16 Telemetry + replay | Normalized trace | Synthesized from file bus | No hook payloads; `source: file_bus_synthesis`, `fidelity: reduced`. FROZEN `guild.trace_event.v1` still produced. |

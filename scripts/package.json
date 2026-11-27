@@ -14,6 +14,7 @@
     "check:module-source-of-truth": "npm run check:modules -- --root .. && npm run check:claude-install -- --root ..",
     "verify:host-packages": "npx tsx build-host-packages.ts --check-claude-install --root .. && npx tsx verify-host-packages.ts --root ..",
     "check:host-support-matrix": "npx tsx generate-support-matrix.ts --check",
+    "check:host-mcp-claims": "npx tsx check-host-mcp-claims.ts --entities ../.guild/wiki/entities",
     "check:channel-integrity": "npx tsx check-channel-integrity.ts",
     "check:stable-promotion": "npx tsx check-channel-integrity.ts promotion",
     "capture:activated-host": "node dist/activated-host-conformance.js capture",
