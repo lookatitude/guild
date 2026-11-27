@@ -38,8 +38,8 @@ import {
   type GuildScope,
   type StorageClass,
 } from "./storage-policy";
+import { guildRootCacheBase } from "./storage-root-cache";
 import {
-  guildRootCacheBase,
   guildRootId,
   resolveStorageRoots,
   type GuildStorageRoots,

@@ -14,7 +14,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { assertClassPlacement } from "./storage-policy";
-import { guildRootCacheBase, guildRootId, resolveStorageRoots } from "./storage-roots";
+import { guildRootCacheBase } from "./storage-root-cache";
+import { guildRootId, resolveStorageRoots } from "./storage-roots";
 
 /**
  * Resolve symlinks before the root id is derived.
