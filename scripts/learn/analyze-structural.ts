@@ -13,9 +13,8 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { guildPaths, parseCwd, hasFlag, writeJson, readJson, SCHEMA } from "./lib/paths";
+import { guildPaths, parseCwd, hasFlag, writeJson, SCHEMA, scannedFileList } from "./lib/paths";
 import { headSha } from "./lib/git";
-import { walkRepo } from "./lib/walk";
 import { buildPartialGraph, mergeReport } from "./lib/graph";
 import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
 
@@ -26,11 +25,10 @@ function main(): void {
   const gp = guildPaths(cwd);
 
   // Prefer the scan's file list; fall back to a fresh walk.
-  const cm = readJson<{ files: { path: string }[] }>(gp.codebaseMap);
-  const relFiles = cm?.files?.map((f) => f.path) ?? walkRepo(gp.repoRoot).files;
+  const relFiles = scannedFileList(gp);
 
   const partial = buildPartialGraph(
-    gp.repoRoot,
+    gp.sourceRoot,
     relFiles,
     (abs) => fs.readFileSync(abs, "utf8"),
   );
@@ -39,7 +37,7 @@ function main(): void {
   const out = {
     version: SCHEMA.knowledgeGraph,
     kind: "codebase" as const,
-    generated_from_commit: headSha(gp.repoRoot),
+    generated_from_commit: headSha(gp.sourceRoot),
     project: { name: path.basename(gp.repoRoot), description: "" },
     nodes: partial.nodes,
     edges: partial.edges,

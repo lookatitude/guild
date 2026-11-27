@@ -1,0 +1,630 @@
+{
+ "note": "Vendored from contracts/guild-stack/v2/fixtures (cases.json, regressions.json), schema followup-transfer. Regenerate from the frozen A02 checkout; never hand-edit.",
+ "cases": [
+  {
+   "id": "followup-transfer-valid",
+   "origin": "cases",
+   "valid": true,
+   "expected_errors": [],
+   "instance": {
+    "schema_version": "guild.followup_transfer.v1",
+    "operation_id": "transfer-1",
+    "source_work": {
+     "source_id": "source-a",
+     "kind": "logical_task",
+     "id": "task-1",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expected_disposition_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "reserved_disposition_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "destination_work": {
+     "source_id": "source-b",
+     "kind": "logical_task",
+     "id": "task-2",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "destination_policy_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "payload_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "state": "reserved",
+    "source_commit": null,
+    "target_activation": null,
+    "target_ack": null,
+    "prepared_target_executable": false,
+    "recorded_at": "2026-10-26T00:00:00Z"
+   }
+  },
+  {
+   "id": "followup-transfer-unknown-field",
+   "origin": "cases",
+   "valid": false,
+   "expected_errors": [],
+   "instance": {
+    "schema_version": "guild.followup_transfer.v1",
+    "operation_id": "transfer-1",
+    "source_work": {
+     "source_id": "source-a",
+     "kind": "logical_task",
+     "id": "task-1",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expected_disposition_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "reserved_disposition_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "destination_work": {
+     "source_id": "source-b",
+     "kind": "logical_task",
+     "id": "task-2",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "destination_policy_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "payload_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "state": "reserved",
+    "source_commit": null,
+    "target_activation": null,
+    "target_ack": null,
+    "prepared_target_executable": false,
+    "recorded_at": "2026-10-26T00:00:00Z",
+    "undeclared_secret": "must refuse"
+   }
+  },
+  {
+   "id": "P10-qualified-transfer-journal",
+   "origin": "regressions",
+   "valid": true,
+   "expected_errors": [],
+   "instance": {
+    "schema_version": "guild.followup_transfer.v1",
+    "operation_id": "transfer-1",
+    "source_work": {
+     "source_id": "source-a",
+     "kind": "logical_task",
+     "id": "task-1",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expected_disposition_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "reserved_disposition_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "destination_work": {
+     "source_id": "source-b",
+     "kind": "logical_task",
+     "id": "task-2",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "destination_policy_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "payload_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "state": "acknowledged",
+    "source_commit": {
+     "source_id": "unregistered-c",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "target_activation": {
+     "source_id": "unregistered-c",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "target_ack": {
+     "source_id": "unregistered-c",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "prepared_target_executable": false,
+    "recorded_at": "2026-10-26T00:00:00Z"
+   }
+  },
+  {
+   "id": "G4-A2-transfer-ack-missing",
+   "origin": "regressions",
+   "valid": false,
+   "expected_errors": [
+    "source completion needs retained target ack evidence"
+   ],
+   "instance": {
+    "schema_version": "guild.followup_transfer.v1",
+    "operation_id": "transfer-1",
+    "source_work": {
+     "source_id": "source-a",
+     "kind": "logical_task",
+     "id": "task-1",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expected_disposition_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "reserved_disposition_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "destination_work": {
+     "source_id": "source-b",
+     "kind": "logical_task",
+     "id": "task-2",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "destination_policy_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "payload_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "state": "acknowledged",
+    "source_commit": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "target_activation": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "target_ack": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "missing",
+     "reason": "ack missing"
+    },
+    "prepared_target_executable": false,
+    "recorded_at": "2026-10-26T00:00:00Z"
+   }
+  },
+  {
+   "id": "G4-A2-transfer-ack-unsupported",
+   "origin": "regressions",
+   "valid": false,
+   "expected_errors": [
+    "source completion needs retained target ack evidence"
+   ],
+   "instance": {
+    "schema_version": "guild.followup_transfer.v1",
+    "operation_id": "transfer-1",
+    "source_work": {
+     "source_id": "source-a",
+     "kind": "logical_task",
+     "id": "task-1",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expected_disposition_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "reserved_disposition_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "destination_work": {
+     "source_id": "source-b",
+     "kind": "logical_task",
+     "id": "task-2",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "destination_policy_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "payload_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "state": "acknowledged",
+    "source_commit": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "target_activation": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "target_ack": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "unsupported",
+     "reason": "ack unsupported"
+    },
+    "prepared_target_executable": false,
+    "recorded_at": "2026-10-26T00:00:00Z"
+   }
+  },
+  {
+   "id": "G4-A2-transfer-ack-expired-without-reason",
+   "origin": "regressions",
+   "valid": false,
+   "expected_errors": [
+    "source completion needs retained target ack evidence"
+   ],
+   "instance": {
+    "schema_version": "guild.followup_transfer.v1",
+    "operation_id": "transfer-1",
+    "source_work": {
+     "source_id": "source-a",
+     "kind": "logical_task",
+     "id": "task-1",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expected_disposition_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "reserved_disposition_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "destination_work": {
+     "source_id": "source-b",
+     "kind": "logical_task",
+     "id": "task-2",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "destination_policy_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "payload_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "state": "acknowledged",
+    "source_commit": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "target_activation": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "target_ack": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "expired",
+     "reason": null
+    },
+    "prepared_target_executable": false,
+    "recorded_at": "2026-10-26T00:00:00Z"
+   }
+  },
+  {
+   "id": "G4-A2-transfer-ack-redacted-without-reason",
+   "origin": "regressions",
+   "valid": false,
+   "expected_errors": [
+    "source completion needs retained target ack evidence"
+   ],
+   "instance": {
+    "schema_version": "guild.followup_transfer.v1",
+    "operation_id": "transfer-1",
+    "source_work": {
+     "source_id": "source-a",
+     "kind": "logical_task",
+     "id": "task-1",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expected_disposition_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "reserved_disposition_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "destination_work": {
+     "source_id": "source-b",
+     "kind": "logical_task",
+     "id": "task-2",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "destination_policy_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "payload_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "state": "acknowledged",
+    "source_commit": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "target_activation": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "target_ack": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "redacted",
+     "reason": null
+    },
+    "prepared_target_executable": false,
+    "recorded_at": "2026-10-26T00:00:00Z"
+   }
+  },
+  {
+   "id": "G4-A2-transfer-ack-available-ok",
+   "origin": "regressions",
+   "valid": true,
+   "expected_errors": [],
+   "instance": {
+    "schema_version": "guild.followup_transfer.v1",
+    "operation_id": "transfer-1",
+    "source_work": {
+     "source_id": "source-a",
+     "kind": "logical_task",
+     "id": "task-1",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expected_disposition_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "reserved_disposition_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "destination_work": {
+     "source_id": "source-b",
+     "kind": "logical_task",
+     "id": "task-2",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "destination_policy_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "payload_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "state": "acknowledged",
+    "source_commit": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "target_activation": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "target_ack": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "prepared_target_executable": false,
+    "recorded_at": "2026-10-26T00:00:00Z"
+   }
+  },
+  {
+   "id": "G4-A2-transfer-ack-expired-retention-ok",
+   "origin": "regressions",
+   "valid": true,
+   "expected_errors": [],
+   "instance": {
+    "schema_version": "guild.followup_transfer.v1",
+    "operation_id": "transfer-1",
+    "source_work": {
+     "source_id": "source-a",
+     "kind": "logical_task",
+     "id": "task-1",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expected_disposition_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "reserved_disposition_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "destination_work": {
+     "source_id": "source-b",
+     "kind": "logical_task",
+     "id": "task-2",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "destination_policy_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "payload_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "state": "acknowledged",
+    "source_commit": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "target_activation": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "available",
+     "reason": null
+    },
+    "target_ack": {
+     "source_id": "source-a",
+     "path": "runs/run-20261026-000000-demo/evidence.json",
+     "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema_version": "guild.evidence.v1",
+     "observed_at": "2026-10-26T00:00:00Z",
+     "availability": "expired",
+     "reason": "ack expired"
+    },
+    "prepared_target_executable": false,
+    "recorded_at": "2026-10-26T00:00:00Z"
+   }
+  },
+  {
+   "id": "G4-A2-transfer-reserved-no-evidence-ok",
+   "origin": "regressions",
+   "valid": true,
+   "expected_errors": [],
+   "instance": {
+    "schema_version": "guild.followup_transfer.v1",
+    "operation_id": "transfer-1",
+    "source_work": {
+     "source_id": "source-a",
+     "kind": "logical_task",
+     "id": "task-1",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expected_disposition_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "reserved_disposition_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "destination_work": {
+     "source_id": "source-b",
+     "kind": "logical_task",
+     "id": "task-2",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "destination_policy_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "payload_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "state": "reserved",
+    "source_commit": null,
+    "target_activation": null,
+    "target_ack": null,
+    "prepared_target_executable": false,
+    "recorded_at": "2026-10-26T00:00:00Z"
+   }
+  },
+  {
+   "id": "G4-S-inventory:followup-transfer/source_work/source_id",
+   "origin": "regressions",
+   "valid": true,
+   "expected_errors": [],
+   "instance": {
+    "schema_version": "guild.followup_transfer.v1",
+    "operation_id": "transfer-1",
+    "source_work": {
+     "source_id": "source-z",
+     "kind": "logical_task",
+     "id": "task-1",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expected_disposition_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "reserved_disposition_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "destination_work": {
+     "source_id": "source-b",
+     "kind": "logical_task",
+     "id": "task-2",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "destination_policy_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "payload_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "state": "reserved",
+    "source_commit": null,
+    "target_activation": null,
+    "target_ack": null,
+    "prepared_target_executable": false,
+    "recorded_at": "2026-10-26T00:00:00Z"
+   }
+  },
+  {
+   "id": "G4-S-inventory:followup-transfer/destination_work/source_id",
+   "origin": "regressions",
+   "valid": true,
+   "expected_errors": [],
+   "instance": {
+    "schema_version": "guild.followup_transfer.v1",
+    "operation_id": "transfer-1",
+    "source_work": {
+     "source_id": "source-a",
+     "kind": "logical_task",
+     "id": "task-1",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expected_disposition_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "reserved_disposition_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "destination_work": {
+     "source_id": "source-z",
+     "kind": "logical_task",
+     "id": "task-2",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "destination_policy_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "payload_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "state": "reserved",
+    "source_commit": null,
+    "target_activation": null,
+    "target_ack": null,
+    "prepared_target_executable": false,
+    "recorded_at": "2026-10-26T00:00:00Z"
+   }
+  },
+  {
+   "id": "G4-S-transfer-cross-source-destination-ok",
+   "origin": "regressions",
+   "valid": true,
+   "expected_errors": [],
+   "instance": {
+    "schema_version": "guild.followup_transfer.v1",
+    "operation_id": "transfer-1",
+    "source_work": {
+     "source_id": "source-a",
+     "kind": "logical_task",
+     "id": "task-1",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expected_disposition_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "reserved_disposition_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "destination_work": {
+     "source_id": "source-c",
+     "kind": "logical_task",
+     "id": "task-2",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "destination_policy_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "payload_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "state": "reserved",
+    "source_commit": null,
+    "target_activation": null,
+    "target_ack": null,
+    "prepared_target_executable": false,
+    "recorded_at": "2026-10-26T00:00:00Z"
+   }
+  },
+  {
+   "id": "G5-C-coordinated-move:followup-transfer",
+   "origin": "regressions",
+   "valid": true,
+   "expected_errors": [],
+   "instance": {
+    "schema_version": "guild.followup_transfer.v1",
+    "operation_id": "transfer-1",
+    "source_work": {
+     "source_id": "source-z",
+     "kind": "logical_task",
+     "id": "task-1",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expected_disposition_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "reserved_disposition_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "destination_work": {
+     "source_id": "source-z",
+     "kind": "logical_task",
+     "id": "task-2",
+     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "destination_policy_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "payload_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "state": "reserved",
+    "source_commit": null,
+    "target_activation": null,
+    "target_ack": null,
+    "prepared_target_executable": false,
+    "recorded_at": "2026-10-26T00:00:00Z"
+   }
+  }
+ ]
+}

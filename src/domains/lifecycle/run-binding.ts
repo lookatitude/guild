@@ -24,7 +24,8 @@
 import * as crypto from "crypto";
 import * as fsReal from "fs";
 import * as path from "path";
-import { writeContainedFile } from "../kernel";
+import { RUN_KIND_FILE, assertRunKindAllows, parseRunKind, claimRunKind, reservedIdentityFieldsIn, writeContainedFile } from "../kernel";
+import { RUN_BINDING_V1_FIELDS } from "./run-binding-fields";
 import { initStableLockfile, withStableLock } from "./stable-lock";
 import { durableGuildDir } from "../state";
 
@@ -251,6 +252,11 @@ export function mintRunBinding(opts: RunBindingLocator & { readonly reserved_bin
     state: "open",
   };
   fs.mkdirp(path.dirname(p));
+  // R01: claim the run as v1 before the binding exists; a v2 logical run that
+  // claimed first makes this throw (RunKindConflictError) and nothing is written.
+  // An injected BindingFs cannot claim exclusively; it gets the check-only gate.
+  if (opts.fs === undefined) claimRunKind(path.dirname(p), "v1");
+  else assertRunKindAllows(path.dirname(p), "v1", { readFile: (f) => fs.readFile(f), exists: (f) => fs.exists(f) });
   const contents = JSON.stringify(record, null, 2) + "\n";
   // Production adapters publish the binding with O_EXCL. The preliminary
   // exists check above improves the normal diagnostic but is not the race
@@ -281,6 +287,8 @@ export function validateRunBindingRecord(
   if (parsed === null || typeof parsed !== "object") return null;
   const o = parsed as Record<string, unknown>;
   if (o["schema_version"] !== "guild.run_binding.v1") return null;
+  // R01: a v1 binding that carries a v2 identity field is refused, not trimmed.
+  if (reservedIdentityFieldsIn(o, RUN_BINDING_V1_FIELDS).length > 0) return null;
   if (typeof o["run_id"] !== "string" || o["run_id"] !== expectedRunId) return null;
   const ref = o["binding_ref"];
   if (typeof ref !== "string" || !/^rb-[A-Za-z0-9_-]+$/.test(ref)) return null;
@@ -310,6 +318,10 @@ export function readRunBindingRecord(opts: RunBindingLocator): RunBindingReadRes
   const fs = opts.fs ?? realBindingFs();
   const raw = fs.readFile(runBindingPath(opts.root, opts.run_id));
   if (raw === null) return { status: "absent" };
+  // R01: a v1 binding inside a run claimed as v2 is a mixed layout — closed, never writable.
+  const kindRaw = fs.readFile(path.join(path.dirname(runBindingPath(opts.root, opts.run_id)), RUN_KIND_FILE));
+  const kind = parseRunKind(kindRaw);
+  if (kind !== null && kind !== "v1") return { status: "malformed" };
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);

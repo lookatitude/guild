@@ -13,7 +13,8 @@
  */
 
 import * as path from "path";
-import { guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson } from "./lib/paths";
+import { guildPaths, parseCwd, parseFlag, hasFlag } from "./lib/paths";
+import { runGraphStage } from "./lib/publish";
 import { deriveDomain, appendKnowledgeLinks } from "./lib/domain";
 import type { KnowledgeGraph } from "./lib/schema";
 import { durableGuildDir } from "../lib/state/storage";
@@ -39,22 +40,30 @@ function main(): void {
   const target = inPath ? path.resolve(cwd, inPath) : gp.knowledgeGraph;
   const runId = resolveRunId(cwd, argv);
 
-  const graph = readJson<KnowledgeGraph>(target);
+  // K03: the owner graph is read from and published to the generation store.
+  let nodes: ReturnType<typeof deriveDomain>["nodes"] = [];
+  let edges: ReturnType<typeof deriveDomain>["edges"] = [];
+  const graph = runGraphStage<KnowledgeGraph>(gp, {
+    target: inPath ? target : null,
+    who: "domain",
+    channels: ["semantic_graph"],
+    transform: (g) => {
+      ({ nodes, edges } = deriveDomain(g));
+      // Splice the scaffold in (dedupe by id/key).
+      const ids = new Set(g.nodes.map((n) => n.id));
+      for (const n of nodes) if (!ids.has(n.id)) g.nodes.push(n);
+      const ek = new Set(g.edges.map((e) => `${e.type}|${e.source}|${e.target}`));
+      for (const e of edges) {
+        const k = `${e.type}|${e.source}|${e.target}`;
+        if (!ek.has(k)) g.edges.push(e);
+      }
+      return g;
+    },
+  });
   if (!graph) {
     process.stderr.write(`[domain] ERROR: cannot read ${target}\n`);
     process.exit(1);
   }
-
-  const { nodes, edges } = deriveDomain(graph);
-  // Splice the scaffold in (dedupe by id/key).
-  const ids = new Set(graph.nodes.map((n) => n.id));
-  for (const n of nodes) if (!ids.has(n.id)) graph.nodes.push(n);
-  const ek = new Set(graph.edges.map((e) => `${e.type}|${e.source}|${e.target}`));
-  for (const e of edges) {
-    const k = `${e.type}|${e.source}|${e.target}`;
-    if (!ek.has(k)) graph.edges.push(e);
-  }
-  writeJson(target, graph);
 
   const kl = appendKnowledgeLinks(gp.knowledgeLinks, graph, runId);
 

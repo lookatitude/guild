@@ -420,8 +420,8 @@ var require_null = __commonJS({
     function constructYamlNull() {
       return null;
     }
-    function isNull(object) {
-      return object === null;
+    function isNull(object2) {
+      return object2 === null;
     }
     module2.exports = new Type("tag:yaml.org,2002:null", {
       kind: "scalar",
@@ -463,8 +463,8 @@ var require_bool = __commonJS({
     function constructYamlBoolean(data) {
       return data === "true" || data === "True" || data === "TRUE";
     }
-    function isBoolean(object) {
-      return Object.prototype.toString.call(object) === "[object Boolean]";
+    function isBoolean(object2) {
+      return Object.prototype.toString.call(object2) === "[object Boolean]";
     }
     module2.exports = new Type("tag:yaml.org,2002:bool", {
       kind: "scalar",
@@ -472,14 +472,14 @@ var require_bool = __commonJS({
       construct: constructYamlBoolean,
       predicate: isBoolean,
       represent: {
-        lowercase: function(object) {
-          return object ? "true" : "false";
+        lowercase: function(object2) {
+          return object2 ? "true" : "false";
         },
-        uppercase: function(object) {
-          return object ? "TRUE" : "FALSE";
+        uppercase: function(object2) {
+          return object2 ? "TRUE" : "FALSE";
         },
-        camelcase: function(object) {
-          return object ? "True" : "False";
+        camelcase: function(object2) {
+          return object2 ? "True" : "False";
         }
       },
       defaultStyle: "lowercase"
@@ -570,8 +570,8 @@ var require_int = __commonJS({
     function constructYamlInteger(data) {
       return parseYamlInteger(data);
     }
-    function isInteger(object) {
-      return Object.prototype.toString.call(object) === "[object Number]" && (object % 1 === 0 && !common.isNegativeZero(object));
+    function isInteger(object2) {
+      return Object.prototype.toString.call(object2) === "[object Number]" && (object2 % 1 === 0 && !common.isNegativeZero(object2));
     }
     module2.exports = new Type("tag:yaml.org,2002:int", {
       kind: "scalar",
@@ -640,8 +640,8 @@ var require_float = __commonJS({
       return sign * parseFloat(value, 10);
     }
     var SCIENTIFIC_WITHOUT_DOT = /^[-+]?[0-9]+e/;
-    function representYamlFloat(object, style) {
-      if (isNaN(object)) {
+    function representYamlFloat(object2, style) {
+      if (isNaN(object2)) {
         switch (style) {
           case "lowercase":
             return ".nan";
@@ -650,7 +650,7 @@ var require_float = __commonJS({
           case "camelcase":
             return ".NaN";
         }
-      } else if (Number.POSITIVE_INFINITY === object) {
+      } else if (Number.POSITIVE_INFINITY === object2) {
         switch (style) {
           case "lowercase":
             return ".inf";
@@ -659,7 +659,7 @@ var require_float = __commonJS({
           case "camelcase":
             return ".Inf";
         }
-      } else if (Number.NEGATIVE_INFINITY === object) {
+      } else if (Number.NEGATIVE_INFINITY === object2) {
         switch (style) {
           case "lowercase":
             return "-.inf";
@@ -668,14 +668,14 @@ var require_float = __commonJS({
           case "camelcase":
             return "-.Inf";
         }
-      } else if (common.isNegativeZero(object)) {
+      } else if (common.isNegativeZero(object2)) {
         return "-0.0";
       }
-      const res = object.toString(10);
+      const res = object2.toString(10);
       return SCIENTIFIC_WITHOUT_DOT.test(res) ? res.replace("e", ".e") : res;
     }
-    function isFloat(object) {
-      return Object.prototype.toString.call(object) === "[object Number]" && (object % 1 !== 0 || common.isNegativeZero(object));
+    function isFloat(object2) {
+      return Object.prototype.toString.call(object2) === "[object Number]" && (object2 % 1 !== 0 || common.isNegativeZero(object2));
     }
     module2.exports = new Type("tag:yaml.org,2002:float", {
       kind: "scalar",
@@ -760,8 +760,8 @@ var require_timestamp = __commonJS({
       if (delta) date.setTime(date.getTime() - delta);
       return date;
     }
-    function representYamlTimestamp(object) {
-      return object.toISOString();
+    function representYamlTimestamp(object2) {
+      return object2.toISOString();
     }
     module2.exports = new Type("tag:yaml.org,2002:timestamp", {
       kind: "scalar",
@@ -834,10 +834,10 @@ var require_binary = __commonJS({
       }
       return new Uint8Array(result);
     }
-    function representYamlBinary(object) {
+    function representYamlBinary(object2) {
       let result = "";
       let bits = 0;
-      const max = object.length;
+      const max = object2.length;
       const map = BASE64_MAP;
       for (let idx = 0; idx < max; idx++) {
         if (idx % 3 === 0 && idx) {
@@ -846,7 +846,7 @@ var require_binary = __commonJS({
           result += map[bits >> 6 & 63];
           result += map[bits & 63];
         }
-        bits = (bits << 8) + object[idx];
+        bits = (bits << 8) + object2[idx];
       }
       const tail = max % 3;
       if (tail === 0) {
@@ -890,9 +890,9 @@ var require_omap = __commonJS({
     function resolveYamlOmap(data) {
       if (data === null) return true;
       const objectKeys = {};
-      const object = data;
-      for (let index = 0, length = object.length; index < length; index += 1) {
-        const pair = object[index];
+      const object2 = data;
+      for (let index = 0, length = object2.length; index < length; index += 1) {
+        const pair = object2[index];
         let pairHasKey = false;
         if (_toString.call(pair) !== "[object Object]") return false;
         let pairKey;
@@ -927,10 +927,10 @@ var require_pairs = __commonJS({
     var _toString = Object.prototype.toString;
     function resolveYamlPairs(data) {
       if (data === null) return true;
-      const object = data;
-      const result = new Array(object.length);
-      for (let index = 0, length = object.length; index < length; index += 1) {
-        const pair = object[index];
+      const object2 = data;
+      const result = new Array(object2.length);
+      for (let index = 0, length = object2.length; index < length; index += 1) {
+        const pair = object2[index];
         if (_toString.call(pair) !== "[object Object]") return false;
         const keys = Object.keys(pair);
         if (keys.length !== 1) return false;
@@ -940,10 +940,10 @@ var require_pairs = __commonJS({
     }
     function constructYamlPairs(data) {
       if (data === null) return [];
-      const object = data;
-      const result = new Array(object.length);
-      for (let index = 0, length = object.length; index < length; index += 1) {
-        const pair = object[index];
+      const object2 = data;
+      const result = new Array(object2.length);
+      for (let index = 0, length = object2.length; index < length; index += 1) {
+        const pair = object2[index];
         const keys = Object.keys(pair);
         result[index] = [keys[0], pair[keys[0]]];
       }
@@ -965,10 +965,10 @@ var require_set = __commonJS({
     var _hasOwnProperty = Object.prototype.hasOwnProperty;
     function resolveYamlSet(data) {
       if (data === null) return true;
-      const object = data;
-      for (const key in object) {
-        if (_hasOwnProperty.call(object, key)) {
-          if (object[key] !== null) return false;
+      const object2 = data;
+      for (const key in object2) {
+        if (_hasOwnProperty.call(object2, key)) {
+          if (object2[key] !== null) return false;
         }
       }
       return true;
@@ -1118,16 +1118,16 @@ var require_loader = __commonJS({
         (c - 65536 & 1023) + 56320
       );
     }
-    function setProperty(object, key, value) {
+    function setProperty(object2, key, value) {
       if (key === "__proto__") {
-        Object.defineProperty(object, key, {
+        Object.defineProperty(object2, key, {
           configurable: true,
           enumerable: true,
           writable: true,
           value
         });
       } else {
-        object[key] = value;
+        object2[key] = value;
       }
     }
     var simpleEscapeCheck = new Array(256);
@@ -2535,10 +2535,10 @@ var require_dumper = __commonJS({
     function generateNextLine(state, level) {
       return "\n" + common.repeat(" ", state.indent * level);
     }
-    function testImplicitResolving(state, str) {
+    function testImplicitResolving(state, str2) {
       for (let index = 0, length = state.implicitTypes.length; index < length; index += 1) {
         const type = state.implicitTypes[index];
-        if (type.resolve(str)) {
+        if (type.resolve(str2)) {
           return true;
         }
       }
@@ -2761,13 +2761,13 @@ var require_dumper = __commonJS({
       }
       return result;
     }
-    function writeFlowSequence(state, level, object) {
+    function writeFlowSequence(state, level, object2) {
       let _result = "";
       const _tag = state.tag;
-      for (let index = 0, length = object.length; index < length; index += 1) {
-        let value = object[index];
+      for (let index = 0, length = object2.length; index < length; index += 1) {
+        let value = object2[index];
         if (state.replacer) {
-          value = state.replacer.call(object, String(index), value);
+          value = state.replacer.call(object2, String(index), value);
         }
         if (writeNode(state, level, value, false, false) || typeof value === "undefined" && writeNode(state, level, null, false, false)) {
           if (_result !== "") _result += "," + (!state.condenseFlow ? " " : "");
@@ -2777,13 +2777,13 @@ var require_dumper = __commonJS({
       state.tag = _tag;
       state.dump = "[" + _result + "]";
     }
-    function writeBlockSequence(state, level, object, compact) {
+    function writeBlockSequence(state, level, object2, compact) {
       let _result = "";
       const _tag = state.tag;
-      for (let index = 0, length = object.length; index < length; index += 1) {
-        let value = object[index];
+      for (let index = 0, length = object2.length; index < length; index += 1) {
+        let value = object2[index];
         if (state.replacer) {
-          value = state.replacer.call(object, String(index), value);
+          value = state.replacer.call(object2, String(index), value);
         }
         if (writeNode(state, level + 1, value, true, true, false, true) || typeof value === "undefined" && writeNode(state, level + 1, null, true, true, false, true)) {
           if (!compact || _result !== "") {
@@ -2800,18 +2800,18 @@ var require_dumper = __commonJS({
       state.tag = _tag;
       state.dump = _result || "[]";
     }
-    function writeFlowMapping(state, level, object) {
+    function writeFlowMapping(state, level, object2) {
       let _result = "";
       const _tag = state.tag;
-      const objectKeyList = Object.keys(object);
+      const objectKeyList = Object.keys(object2);
       for (let index = 0, length = objectKeyList.length; index < length; index += 1) {
         let pairBuffer = "";
         if (_result !== "") pairBuffer += ", ";
         if (state.condenseFlow) pairBuffer += '"';
         const objectKey = objectKeyList[index];
-        let objectValue = object[objectKey];
+        let objectValue = object2[objectKey];
         if (state.replacer) {
-          objectValue = state.replacer.call(object, objectKey, objectValue);
+          objectValue = state.replacer.call(object2, objectKey, objectValue);
         }
         if (!writeNode(state, level, objectKey, false, false)) {
           continue;
@@ -2827,10 +2827,10 @@ var require_dumper = __commonJS({
       state.tag = _tag;
       state.dump = "{" + _result + "}";
     }
-    function writeBlockMapping(state, level, object, compact) {
+    function writeBlockMapping(state, level, object2, compact) {
       let _result = "";
       const _tag = state.tag;
-      const objectKeyList = Object.keys(object);
+      const objectKeyList = Object.keys(object2);
       if (state.sortKeys === true) {
         objectKeyList.sort();
       } else if (typeof state.sortKeys === "function") {
@@ -2844,9 +2844,9 @@ var require_dumper = __commonJS({
           pairBuffer += generateNextLine(state, level);
         }
         const objectKey = objectKeyList[index];
-        let objectValue = object[objectKey];
+        let objectValue = object2[objectKey];
         if (state.replacer) {
-          objectValue = state.replacer.call(object, objectKey, objectValue);
+          objectValue = state.replacer.call(object2, objectKey, objectValue);
         }
         if (!writeNode(state, level + 1, objectKey, true, true, true)) {
           continue;
@@ -2877,14 +2877,14 @@ var require_dumper = __commonJS({
       state.tag = _tag;
       state.dump = _result || "{}";
     }
-    function detectType(state, object, explicit) {
+    function detectType(state, object2, explicit) {
       const typeList = explicit ? state.explicitTypes : state.implicitTypes;
       for (let index = 0, length = typeList.length; index < length; index += 1) {
         const type = typeList[index];
-        if ((type.instanceOf || type.predicate) && (!type.instanceOf || typeof object === "object" && object instanceof type.instanceOf) && (!type.predicate || type.predicate(object))) {
+        if ((type.instanceOf || type.predicate) && (!type.instanceOf || typeof object2 === "object" && object2 instanceof type.instanceOf) && (!type.predicate || type.predicate(object2))) {
           if (explicit) {
             if (type.multi && type.representName) {
-              state.tag = type.representName(object);
+              state.tag = type.representName(object2);
             } else {
               state.tag = type.tag;
             }
@@ -2895,9 +2895,9 @@ var require_dumper = __commonJS({
             const style = state.styleMap[type.tag] || type.defaultStyle;
             let _result;
             if (_toString.call(type.represent) === "[object Function]") {
-              _result = type.represent(object, style);
+              _result = type.represent(object2, style);
             } else if (_hasOwnProperty.call(type.represent, style)) {
-              _result = type.represent[style](object, style);
+              _result = type.represent[style](object2, style);
             } else {
               throw new YAMLException("!<" + type.tag + '> tag resolver accepts not "' + style + '" style');
             }
@@ -2908,11 +2908,11 @@ var require_dumper = __commonJS({
       }
       return false;
     }
-    function writeNode(state, level, object, block, compact, iskey, isblockseq) {
+    function writeNode(state, level, object2, block, compact, iskey, isblockseq) {
       state.tag = null;
-      state.dump = object;
-      if (!detectType(state, object, false)) {
-        detectType(state, object, true);
+      state.dump = object2;
+      if (!detectType(state, object2, false)) {
+        detectType(state, object2, true);
       }
       const type = _toString.call(state.dump);
       const inblock = block;
@@ -2923,7 +2923,7 @@ var require_dumper = __commonJS({
       let duplicateIndex;
       let duplicate;
       if (objectOrArray) {
-        duplicateIndex = state.duplicates.indexOf(object);
+        duplicateIndex = state.duplicates.indexOf(object2);
         duplicate = duplicateIndex !== -1;
       }
       if (state.tag !== null && state.tag !== "?" || duplicate || state.indent !== 2 && level > 0) {
@@ -2989,33 +2989,33 @@ var require_dumper = __commonJS({
       }
       return true;
     }
-    function getDuplicateReferences(object, state) {
+    function getDuplicateReferences(object2, state) {
       const objects = [];
       const duplicatesIndexes = [];
-      inspectNode(object, objects, duplicatesIndexes);
+      inspectNode(object2, objects, duplicatesIndexes);
       const length = duplicatesIndexes.length;
       for (let index = 0; index < length; index += 1) {
         state.duplicates.push(objects[duplicatesIndexes[index]]);
       }
       state.usedDuplicates = new Array(length);
     }
-    function inspectNode(object, objects, duplicatesIndexes) {
-      if (object !== null && typeof object === "object") {
-        const index = objects.indexOf(object);
+    function inspectNode(object2, objects, duplicatesIndexes) {
+      if (object2 !== null && typeof object2 === "object") {
+        const index = objects.indexOf(object2);
         if (index !== -1) {
           if (duplicatesIndexes.indexOf(index) === -1) {
             duplicatesIndexes.push(index);
           }
         } else {
-          objects.push(object);
-          if (Array.isArray(object)) {
-            for (let i = 0, length = object.length; i < length; i += 1) {
-              inspectNode(object[i], objects, duplicatesIndexes);
+          objects.push(object2);
+          if (Array.isArray(object2)) {
+            for (let i = 0, length = object2.length; i < length; i += 1) {
+              inspectNode(object2[i], objects, duplicatesIndexes);
             }
           } else {
-            const objectKeyList = Object.keys(object);
+            const objectKeyList = Object.keys(object2);
             for (let i = 0, length = objectKeyList.length; i < length; i += 1) {
-              inspectNode(object[objectKeyList[i]], objects, duplicatesIndexes);
+              inspectNode(object2[objectKeyList[i]], objects, duplicatesIndexes);
             }
           }
         }
@@ -3088,11 +3088,11 @@ __export(pane_dispatch_trace_exports, {
   parseLaneSpec: () => parseLaneSpec
 });
 module.exports = __toCommonJS(pane_dispatch_trace_exports);
-var path19 = __toESM(require("node:path"));
+var path21 = __toESM(require("node:path"));
 
 // src/domains/telemetry/receipt-journal.ts
 var fs11 = __toESM(require("node:fs"));
-var path14 = __toESM(require("node:path"));
+var path15 = __toESM(require("node:path"));
 var crypto3 = __toESM(require("node:crypto"));
 
 // src/domains/state/atomic-write.ts
@@ -3177,10 +3177,10 @@ function findPluginRoot(fromDir) {
 
 // src/domains/kernel/yaml-loader.ts
 function pluginLocalScriptsRoots() {
-  const own = findPluginRoot(__dirname);
+  const own2 = findPluginRoot(__dirname);
   return [
     // The package this code shipped in, whatever the bundle depth (runtime/scripts).
-    ...own === null ? [] : [path4.join(own, "scripts")],
+    ...own2 === null ? [] : [path4.join(own2, "scripts")],
     // Source TS layout (src/domains/<id>) and the bundled agent-team hook layout
     // (hooks/agent-team/dist) both sit three levels under plugin/.
     path4.resolve(__dirname, "..", "..", "..", "scripts"),
@@ -3477,6 +3477,76 @@ var TIER_BUS_CONTRACT = deepFreeze({
   tier_source: "the attempt record on disk, or the run's minted binding_ref \u2014 never the payload"
 });
 
+// src/domains/kernel/reserved-identity-fields.ts
+var path6 = __toESM(require("node:path"));
+var RESERVED_IDENTITY_FIELDS = Object.freeze([
+  // logical-run
+  "source_id",
+  "run_id",
+  "initiative_id",
+  "parent_run",
+  "created_at",
+  "phase",
+  "initial_command",
+  "initial_prompt_ref",
+  "controller",
+  "workflow_hash",
+  "settings_hash",
+  "execution_refs",
+  "goal_refs",
+  "state",
+  // execution-segment
+  "lineage",
+  "original_host_id",
+  "host_session_id",
+  "issued_controller_epoch",
+  "adapter_capability_hash",
+  "pins",
+  "admission",
+  "interval",
+  "observation_manifest",
+  "seal_evidence",
+  // task-assignment v3
+  "assignment_hash",
+  "result_scope_hash",
+  "grant_id",
+  "goal_contributions",
+  "input_refs",
+  // stack task-attempt
+  "assignment_ref",
+  "ordinal",
+  "result_refs",
+  "acceptance_subject_hash",
+  "accepted_by_controller_epoch",
+  "receipt_loss_reconciled",
+  "uncertain_effects",
+  // run-binding v2
+  "controller_source_id",
+  "controller_host_id",
+  "controller_epoch",
+  "writer_grant_id",
+  "writer_scope_hash",
+  "logical_run_manifest_hash",
+  // execution-lineage receipt
+  "run_schema",
+  "requested_host",
+  "observed_host",
+  "requested_model",
+  "observed_identity",
+  "authority",
+  "attempt_grant_ref",
+  "handoffs",
+  "evidence",
+  // lineage keys
+  "execution_id",
+  "goal_id",
+  "logical_task_id",
+  "attempt_id",
+  "agent_instance_id",
+  "request_id"
+]);
+var RUN_KIND_V2_MANIFEST_RELPATH = path6.join("lineage", "logical-run.json");
+
 // src/domains/state/dependency-graph-schema.ts
 var DEPENDENCY_GRAPH_SCHEMA_VERSION = "guild.dependency_graph.v1";
 var DEPENDENCY_GRAPH_V1_EXAMPLE = deepFreeze({
@@ -3493,28 +3563,28 @@ var DEPENDENCY_GRAPH_V1_EXAMPLE = deepFreeze({
 });
 
 // src/domains/state/storage-roots.ts
-var path6 = __toESM(require("node:path"));
+var path7 = __toESM(require("node:path"));
 function durableGuildDir(activeRoot) {
-  return path6.join(activeRoot, ".guild");
+  return path7.join(activeRoot, ".guild");
 }
 
 // src/domains/state/guild-root.ts
 var fs5 = __toESM(require("node:fs"));
-var path7 = __toESM(require("node:path"));
+var path8 = __toESM(require("node:path"));
 function resolveGuildRoot(startDir) {
-  const resolvedStart = path7.resolve(startDir);
+  const resolvedStart = path8.resolve(startDir);
   let current = resolvedStart;
   let nearestGuildDir = null;
   for (; ; ) {
-    if (fs5.existsSync(path7.join(current, ".git"))) return current;
+    if (fs5.existsSync(path8.join(current, ".git"))) return current;
     if (nearestGuildDir === null) {
-      const guildDir = path7.join(current, ".guild");
+      const guildDir = path8.join(current, ".guild");
       try {
         if (fs5.existsSync(guildDir) && fs5.statSync(guildDir).isDirectory()) nearestGuildDir = current;
       } catch {
       }
     }
-    const parent = path7.dirname(current);
+    const parent = path8.dirname(current);
     if (parent === current) return nearestGuildDir ?? resolvedStart;
     current = parent;
   }
@@ -3523,7 +3593,7 @@ function resolveGuildRoot(startDir) {
 // src/domains/state/index-migrate.ts
 var import_node_child_process = require("node:child_process");
 var fs6 = __toESM(require("node:fs"));
-var path8 = __toESM(require("node:path"));
+var path9 = __toESM(require("node:path"));
 function openDatabase(dbPath) {
   const { DatabaseSync } = require("node:sqlite");
   const db = new DatabaseSync(dbPath);
@@ -3538,12 +3608,12 @@ function resolveGuildRoot2(cwd) {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"]
     }).trim();
-    const abs = path8.isAbsolute(raw) ? raw : path8.resolve(cwd, raw);
-    const root = path8.dirname(abs);
+    const abs = path9.isAbsolute(raw) ? raw : path9.resolve(cwd, raw);
+    const root = path9.dirname(abs);
     if (fs6.existsSync(root)) return root;
   } catch {
   }
-  return path8.resolve(cwd);
+  return path9.resolve(cwd);
 }
 var MIGRATIONS = [
   // ── v1: core tables ───────────────────────────────────────────────────────
@@ -3711,7 +3781,7 @@ function runMigrations(dbPath) {
   let db;
   let fromVersion = 0;
   try {
-    fs6.mkdirSync(path8.dirname(dbPath), { recursive: true });
+    fs6.mkdirSync(path9.dirname(dbPath), { recursive: true });
     db = openDatabase(dbPath);
     db.exec("PRAGMA journal_mode = WAL");
     db.exec("PRAGMA synchronous = NORMAL");
@@ -3776,7 +3846,7 @@ function runIndexMigrateCli() {
   }
   if (!dbPath) {
     const guildRoot = resolveGuildRoot2(cwd);
-    dbPath = path8.join(guildRoot, ".guild", "index.sqlite");
+    dbPath = path9.join(guildRoot, ".guild", "index.sqlite");
   }
   const result = runMigrations(dbPath);
   if (result.ok) {
@@ -3795,7 +3865,7 @@ if (typeof module !== "undefined" && require.main === module && /^index-migrate\
 }
 
 // src/domains/state/storage-policy.ts
-var path9 = __toESM(require("node:path"));
+var path10 = __toESM(require("node:path"));
 var NON_DURABLE_CLASSES = sealSet(
   ["runtime", "cache", "managed-resource", "temporary"],
   "NON_DURABLE_CLASSES"
@@ -3821,7 +3891,7 @@ var DURABLE_SUBTREES = deepFreeze({
    * `definition("sources", id)` — the one logical name that maps elsewhere, onto
    * the durable sources tree that already exists, so R59 does not invent a third home.
    */
-  sources: path9.join("knowledge", "sources"),
+  sources: path10.join("knowledge", "sources"),
   initiatives: "initiatives",
   /** KTD16 freeze. */
   runs: "runs",
@@ -4030,7 +4100,7 @@ var BY_ID = new Map(STORAGE_ARTIFACT_REGISTRY.map((p) => [p.id, p]));
 
 // src/domains/state/storage-fs.ts
 var fs7 = __toESM(require("node:fs"));
-var path10 = __toESM(require("node:path"));
+var path11 = __toESM(require("node:path"));
 function lstatSafe(p) {
   try {
     return fs7.lstatSync(p);
@@ -4056,8 +4126,8 @@ function resolveContainedRealDir(abs, root) {
   } catch {
     return null;
   }
-  const rel2 = path10.relative(realRoot, real);
-  if (rel2 === "" || rel2.startsWith("..") || path10.isAbsolute(rel2)) return null;
+  const rel2 = path11.relative(realRoot, real);
+  if (rel2 === "" || rel2.startsWith("..") || path11.isAbsolute(rel2)) return null;
   return real;
 }
 function isContainedRealDir(abs, root) {
@@ -4131,7 +4201,7 @@ var LOCK_STALE_MS = 15 * 60 * 1e3;
 // src/domains/state/upgrade-steps.ts
 var crypto2 = __toESM(require("node:crypto"));
 var fs8 = __toESM(require("node:fs"));
-var path11 = __toESM(require("node:path"));
+var path12 = __toESM(require("node:path"));
 var KNOWLEDGE_PREFIX = `.guild/${DURABLE_SUBTREES.knowledge}`;
 var DERIVED_PATTERNS = Object.freeze([
   /^indexes(\/|$)/,
@@ -4144,11 +4214,11 @@ var DERIVED_PATTERNS = Object.freeze([
   /(^|\/)\.tmp-[^/]+$/
 ]);
 function classifyPath(relToGuild) {
-  const rel2 = relToGuild.split(path11.sep).join("/");
+  const rel2 = relToGuild.split(path12.sep).join("/");
   return DERIVED_PATTERNS.some((re) => re.test(rel2)) ? "derived" : "durable";
 }
 function rel(ctx, abs) {
-  return path11.relative(ctx.root, abs).split(path11.sep).join("/");
+  return path12.relative(ctx.root, abs).split(path12.sep).join("/");
 }
 function knowledgeDir(ctx, ...segments) {
   const scope = ctx.storage.project ?? ctx.storage.workspace;
@@ -4166,7 +4236,7 @@ function readIfFile(abs) {
 }
 function writeFile(ctx, abs, text) {
   if (ctx.dryRun) return;
-  fs8.mkdirSync(path11.dirname(abs), { recursive: true });
+  fs8.mkdirSync(path12.dirname(abs), { recursive: true });
   fs8.writeFileSync(abs, text, "utf8");
 }
 function sha256(text) {
@@ -4174,7 +4244,7 @@ function sha256(text) {
 }
 function filesUnder(dir, out = []) {
   for (const name of readdirSafe(dir)) {
-    const abs = path11.join(dir, name);
+    const abs = path12.join(dir, name);
     const st = lstatSafe(abs);
     if (!st) continue;
     if (st.isDirectory()) filesUnder(abs, out);
@@ -4248,7 +4318,7 @@ var settingsPolicySplit = {
   source: "proposal \xA721.6",
   affects: [".guild/settings.json", ".guild/config"],
   apply(ctx) {
-    const legacy = readIfFile(path11.join(ctx.guildDir, "settings.json"));
+    const legacy = readIfFile(path12.join(ctx.guildDir, "settings.json"));
     if (legacy === null) return { status: "skipped", detail: "no .guild/settings.json to split", paths: [] };
     let parsed;
     try {
@@ -4395,8 +4465,8 @@ function splitInlineValue(rawValue) {
     const rest = text.slice(i + 1).trim();
     return { value: text.slice(1, i), comment: rest.startsWith("#") ? rest : null };
   }
-  const hash = rawValue.search(/[ \t]#/);
-  if (hash >= 0) return { value: rawValue.slice(0, hash).trim(), comment: rawValue.slice(hash + 1).trim() };
+  const hash2 = rawValue.search(/[ \t]#/);
+  if (hash2 >= 0) return { value: rawValue.slice(0, hash2).trim(), comment: rawValue.slice(hash2 + 1).trim() };
   return { value: rawValue.trim(), comment: null };
 }
 function scanLines(lines) {
@@ -4617,7 +4687,7 @@ var ktd22Strip = {
       return { status: "failed", detail: "no policy classifier injected; host/model pins left in place", paths: [] };
     }
     const cfg = ctx.policy;
-    const roots = ["initiatives", "team", "teams"].map((d) => path11.join(ctx.guildDir, d));
+    const roots = ["initiatives", "team", "teams"].map((d) => path12.join(ctx.guildDir, d));
     const touched = [];
     let removedTotal = 0;
     for (const dir of roots) {
@@ -4677,7 +4747,7 @@ var cachesOut = {
   apply(ctx) {
     const removed = [];
     for (const name of CACHE_TARGETS) {
-      const abs = path11.join(ctx.guildDir, name);
+      const abs = path12.join(ctx.guildDir, name);
       const st = lstatSafe(abs);
       if (!st) continue;
       if (classifyPath(name) !== "derived") {
@@ -4736,7 +4806,7 @@ var closedRunReceipts = {
   source: "proposal \xA721.10",
   affects: [".guild/runs"],
   apply(ctx) {
-    const runsDir = path11.join(ctx.guildDir, "runs");
+    const runsDir = path12.join(ctx.guildDir, "runs");
     if (!isContainedRealDir(runsDir, ctx.guildDir)) {
       return { status: "skipped", detail: "no .guild/runs tree", paths: [] };
     }
@@ -4744,11 +4814,11 @@ var closedRunReceipts = {
     let open = 0;
     for (const name of readdirSafe(runsDir)) {
       if (name.startsWith("_")) continue;
-      const runDir = path11.join(runsDir, name);
+      const runDir = path12.join(runsDir, name);
       if (!isContainedRealDir(runDir, ctx.guildDir)) continue;
-      const receipt = path11.join(runDir, "receipt.json");
+      const receipt = path12.join(runDir, "receipt.json");
       if (lstatSafe(receipt)) continue;
-      const runYaml = readIfFile(path11.join(runDir, "run.yaml"));
+      const runYaml = readIfFile(path12.join(runDir, "run.yaml"));
       if (runYaml === null) continue;
       const status = terminalRunStatus(runYaml);
       if (status === null) {
@@ -4793,7 +4863,7 @@ var currentRunIdRetire = {
   source: "proposal \xA721.10",
   affects: [],
   apply(ctx) {
-    const abs = path11.join(ctx.guildDir, "current-run-id");
+    const abs = path12.join(ctx.guildDir, "current-run-id");
     const text = readIfFile(abs);
     if (text === null) return { status: "skipped", detail: "no current-run-id sentinel", paths: [] };
     const captured = text.trim();
@@ -4820,7 +4890,7 @@ var skillVersionsDelete = {
   source: "proposal \xA721.12 / R60",
   affects: [],
   apply(ctx) {
-    const dir = path11.join(ctx.guildDir, LEGACY_VERSION_TREE);
+    const dir = path12.join(ctx.guildDir, LEGACY_VERSION_TREE);
     if (!isContainedRealDir(dir, ctx.guildDir)) {
       return { status: "skipped", detail: `no leftover ${LEGACY_VERSION_TREE} tree`, paths: [] };
     }
@@ -4830,7 +4900,7 @@ var skillVersionsDelete = {
       return { status: "completed", detail: `removed the empty ${LEGACY_VERSION_TREE} tree`, paths: [rel(ctx, dir)] };
     }
     const live = /* @__PURE__ */ new Set();
-    const skillsDir = path11.join(ctx.guildDir, "skills");
+    const skillsDir = path12.join(ctx.guildDir, "skills");
     if (isContainedRealDir(skillsDir, ctx.guildDir)) {
       for (const abs of filesUnder(skillsDir)) {
         const text = readIfFile(abs);
@@ -4866,25 +4936,25 @@ var registryYamlRetire = {
   affects: [".guild/loops", ".guild/workflows", ".guild/agents/registry.yaml", ".guild/skills/registry.yaml"],
   apply(ctx) {
     const changed = [];
-    for (const relPath of DERIVED_REGISTRIES) {
-      const abs = path11.join(ctx.guildDir, relPath);
+    for (const relPath2 of DERIVED_REGISTRIES) {
+      const abs = path12.join(ctx.guildDir, relPath2);
       if (!lstatSafe(abs)) continue;
-      if (classifyPath(relPath) !== "derived") continue;
+      if (classifyPath(relPath2) !== "derived") continue;
       if (!ctx.dryRun) fs8.rmSync(abs, { force: true });
       changed.push(rel(ctx, abs));
     }
-    for (const relPath of AUTHORED_REGISTRIES) {
-      const abs = path11.join(ctx.guildDir, relPath);
+    for (const relPath2 of AUTHORED_REGISTRIES) {
+      const abs = path12.join(ctx.guildDir, relPath2);
       const text = readIfFile(abs);
       if (text === null) continue;
-      const target = path11.join(ctx.guildDir, "artifacts", "legacy", relPath.replace("/", "-"));
+      const target = path12.join(ctx.guildDir, "artifacts", "legacy", relPath2.replace("/", "-"));
       if (lstatSafe(target)) {
         if (readIfFile(target) !== text) {
           return {
             status: "blocked_confirm",
-            detail: `.guild/${relPath} differs from its preserved copy ${rel(ctx, target)}`,
+            detail: `.guild/${relPath2} differs from its preserved copy ${rel(ctx, target)}`,
             paths: [rel(ctx, abs), rel(ctx, target)],
-            question: `registry-yaml-retire found .guild/${relPath} and a different preserved copy at ${rel(ctx, target)}. Keep which one?`
+            question: `registry-yaml-retire found .guild/${relPath2} and a different preserved copy at ${rel(ctx, target)}. Keep which one?`
           };
         }
         if (!ctx.dryRun) fs8.rmSync(abs, { force: true });
@@ -4949,9 +5019,9 @@ var STRUCTURAL_BASENAMES = sealSet([
 
 // src/domains/state/federated-query.ts
 var fs9 = __toESM(require("fs"));
-var path12 = __toESM(require("path"));
+var path13 = __toESM(require("path"));
 function federatedQuery(root, query, scope) {
-  const manifestPath = path12.join(durableGuildDir(root), "workspace.json");
+  const manifestPath = path13.join(durableGuildDir(root), "workspace.json");
   if (!fs9.existsSync(manifestPath)) {
     throw new Error(`workspace.json not found at ${manifestPath}`);
   }
@@ -4977,7 +5047,7 @@ function federatedQuery(root, query, scope) {
   }
   const steps = [];
   for (const sg of candidates) {
-    const subAbsPath = path12.resolve(root, sg.path);
+    const subAbsPath = path13.resolve(root, sg.path);
     steps.push({
       type: "query",
       sub_guild: sg.name,
@@ -5012,9 +5082,9 @@ function runFederatedQueryCli(argv = process.argv.slice(2)) {
 `);
     process.exit(1);
   }
-  if (!fs9.existsSync(path12.join(durableGuildDir(cwd), "workspace.json"))) {
+  if (!fs9.existsSync(path13.join(durableGuildDir(cwd), "workspace.json"))) {
     process.stderr.write(
-      `[workspace/federated-query] ERROR: no workspace.json at ${path12.join(durableGuildDir(cwd), "workspace.json")}
+      `[workspace/federated-query] ERROR: no workspace.json at ${path13.join(durableGuildDir(cwd), "workspace.json")}
 `
     );
     process.exit(1);
@@ -5034,7 +5104,7 @@ if (typeof module !== "undefined" && require.main === module && /^federated-quer
 
 // src/domains/state/promote-upstream.ts
 var fs10 = __toESM(require("fs"));
-var path13 = __toESM(require("path"));
+var path14 = __toESM(require("path"));
 function validateRunId(runId) {
   if (!runId || !runId.trim()) return false;
   if (runId.includes("\0")) return false;
@@ -5051,7 +5121,7 @@ function isCrossCutting(candidate) {
   return false;
 }
 function readSubGuilds(workspaceRoot) {
-  const manifestPath = path13.join(durableGuildDir(workspaceRoot), "workspace.json");
+  const manifestPath = path14.join(durableGuildDir(workspaceRoot), "workspace.json");
   if (!fs10.existsSync(manifestPath)) return [];
   try {
     const raw = JSON.parse(fs10.readFileSync(manifestPath, "utf8"));
@@ -5066,13 +5136,13 @@ function readSubGuilds(workspaceRoot) {
   }
 }
 function findHarvestFiles(childDir) {
-  const runsDir = path13.join(durableGuildDir(childDir), "runs");
+  const runsDir = path14.join(durableGuildDir(childDir), "runs");
   if (!fs10.existsSync(runsDir)) return [];
   const results = [];
   try {
     const runIds = fs10.readdirSync(runsDir);
     for (const runId of runIds) {
-      const candidate = path13.join(runsDir, runId, "learn", "harvest-candidates.json");
+      const candidate = path14.join(runsDir, runId, "learn", "harvest-candidates.json");
       if (fs10.existsSync(candidate)) {
         results.push(candidate);
       }
@@ -5088,7 +5158,7 @@ function extractFromHarvestFile(harvestPath, childName, workspaceRoot) {
   } catch {
     return [];
   }
-  const sourcePath = path13.relative(workspaceRoot, harvestPath);
+  const sourcePath = path14.relative(workspaceRoot, harvestPath);
   const staged = [];
   const wikiCandidates = Array.isArray(raw.wiki_candidates) ? raw.wiki_candidates : [];
   const decisionCandidates = Array.isArray(raw.decision_candidates) ? raw.decision_candidates : [];
@@ -5134,7 +5204,7 @@ function collectUpstreamCandidates(opts) {
   }
   const all = [];
   for (const child of children) {
-    const childDir = path13.join(workspaceRoot, child.path);
+    const childDir = path14.join(workspaceRoot, child.path);
     const harvestFiles = findHarvestFiles(childDir);
     for (const hf of harvestFiles) {
       const from = extractFromHarvestFile(hf, child.name, workspaceRoot);
@@ -5185,10 +5255,10 @@ function runPromoteUpstreamCli(argv = process.argv.slice(2)) {
   }
   try {
     const candidates = collectUpstreamCandidates({ workspaceRoot, child });
-    const runsBase = path13.resolve(durableGuildDir(workspaceRoot), "runs");
-    const runsDir = path13.join(runsBase, runId);
-    const manifestPath = path13.join(runsDir, "upstream-candidates.json");
-    const resolvedRunsDir = path13.resolve(runsDir);
+    const runsBase = path14.resolve(durableGuildDir(workspaceRoot), "runs");
+    const runsDir = path14.join(runsBase, runId);
+    const manifestPath = path14.join(runsDir, "upstream-candidates.json");
+    const resolvedRunsDir = path14.resolve(runsDir);
     if (!isWithin(resolvedRunsDir, runsBase) || resolvedRunsDir === runsBase) {
       process.stderr.write(
         `[promote-upstream] ERROR: resolved run dir "${resolvedRunsDir}" is not a strict subdirectory of the runs base
@@ -5454,7 +5524,7 @@ var defaultJournalIo = {
       fs11.fsyncSync(bound.fd);
       return;
     }
-    fs11.mkdirSync(path14.dirname(journalPath), { recursive: true });
+    fs11.mkdirSync(path15.dirname(journalPath), { recursive: true });
     const fd = fs11.openSync(journalPath, "a");
     try {
       fs11.writeSync(fd, text, null, "utf8");
@@ -5494,7 +5564,7 @@ var defaultJournalIo = {
   // has the same guarantee locally but is famously unreliable over NFS, and
   // Guild journals can live on a shared volume.
   acquireLock(lockPath) {
-    fs11.mkdirSync(path14.dirname(lockPath), { recursive: true });
+    fs11.mkdirSync(path15.dirname(lockPath), { recursive: true });
     try {
       fs11.mkdirSync(lockPath);
     } catch (err) {
@@ -5539,20 +5609,20 @@ function readlinkOrNull(target) {
   }
 }
 function canonicalJournalPath(journalPath) {
-  let current = path14.resolve(journalPath);
+  let current = path15.resolve(journalPath);
   for (let hop = 0; hop < CANONICAL_PATH_MAX_LINK_HOPS; hop += 1) {
     const real = realpathOrNull(current);
     if (real !== null) return real;
     const link = readlinkOrNull(current);
     if (link !== null) {
-      const next = path14.resolve(path14.dirname(current), link);
+      const next = path15.resolve(path15.dirname(current), link);
       if (next === current) return current;
       current = next;
       continue;
     }
-    const parent = path14.dirname(current);
+    const parent = path15.dirname(current);
     if (parent === current) return current;
-    return path14.join(canonicalJournalPath(parent), path14.basename(current));
+    return path15.join(canonicalJournalPath(parent), path15.basename(current));
   }
   return current;
 }
@@ -5748,12 +5818,12 @@ function acquireJournalAuthority(journalPath, io = defaultJournalIo, lockOptions
   const acquisition = acquireJournalLockHeld(identity.lock, io, lockOptions);
   if (acquisition.failure !== null) return { ok: false, authority: null, identity, failure: acquisition.failure };
   const grant = acquisition.grant;
-  const journalParent = path14.dirname(identity.path);
+  const journalParent = path15.dirname(identity.path);
   const parentStat = statOrNull(journalParent);
   const parentDevice = parentStat !== null ? parentStat.dev : null;
   const parentInode = parentStat !== null ? parentStat.ino : null;
-  const checkpointParentPath = checkpointPath === null ? null : canonicalJournalPath(path14.dirname(checkpointPath));
-  const checkpointCanonical = checkpointParentPath === null || checkpointPath === null ? null : path14.join(checkpointParentPath, path14.basename(checkpointPath));
+  const checkpointParentPath = checkpointPath === null ? null : canonicalJournalPath(path15.dirname(checkpointPath));
+  const checkpointCanonical = checkpointParentPath === null || checkpointPath === null ? null : path15.join(checkpointParentPath, path15.basename(checkpointPath));
   const checkpointParent = checkpointParentPath === null || checkpointParentPath === journalParent ? null : checkpointParentPath;
   let checkpointParentPin = null;
   let handle = null;
@@ -5853,7 +5923,7 @@ function acquireJournalAuthority(journalPath, io = defaultJournalIo, lockOptions
       }
     }
     if (parentInode !== null && parentDevice !== null) {
-      const parentNow = statOrNull(path14.dirname(identity.path));
+      const parentNow = statOrNull(path15.dirname(identity.path));
       if (parentNow === null || parentNow.dev !== parentDevice || parentNow.ino !== parentInode) {
         return unstable(
           `the directory holding "${identity.path}" and its lock was replaced ${stage} \u2014 this writer's exclusion moved with the old directory and no longer covers this path`
@@ -5897,7 +5967,7 @@ function acquireJournalAuthority(journalPath, io = defaultJournalIo, lockOptions
           );
         }
       }
-      const parentNamedNow = canonicalJournalPath(path14.dirname(checkpointPath));
+      const parentNamedNow = canonicalJournalPath(path15.dirname(checkpointPath));
       if (parentNamedNow !== checkpointParentPath) {
         return unstable(
           `the checkpoint "${checkpointPath}" now resolves into "${parentNamedNow}" rather than "${checkpointParentPath}" ${stage} \u2014 this writer holds the directory it was granted, not that one`
@@ -6607,7 +6677,7 @@ function reconcileWithin(opts, io, denial, journalPath, authority) {
       actual: opts.producerCheckpoint.record_count
     });
   }
-  const foreignRun = mergedAnalysis.run_ids.find((id) => id !== opts.run_id);
+  const foreignRun = mergedAnalysis.run_ids.find((id2) => id2 !== opts.run_id);
   if (foreignRun !== void 0) {
     checkpoint_disagreements.push({
       code: "merged_run_identity_mismatch",
@@ -6748,7 +6818,7 @@ var DEBUG_BUNDLE_SECTION_KINDS = Object.freeze([
 
 // src/domains/telemetry/receipt-journal-conformance-evaluator.ts
 var fs12 = __toESM(require("node:fs"));
-var path15 = __toESM(require("node:path"));
+var path16 = __toESM(require("node:path"));
 function freezeDeep(value) {
   const seen = /* @__PURE__ */ new Set();
   const walk = (node) => {
@@ -6941,9 +7011,9 @@ var JOURNAL_LEAF = "journal-lines";
 var CHECKPOINT_LEAF = "checkpoint-state";
 var CHECKPOINT_SCHEMA = "guild.receipt_checkpoint.v1";
 function makeProbePaths(parent, name) {
-  const dir = path15.join(parent, name);
+  const dir = path16.join(parent, name);
   fs12.mkdirSync(dir, { recursive: true });
-  return { dir, journal: path15.join(dir, JOURNAL_LEAF), checkpoint: path15.join(dir, CHECKPOINT_LEAF) };
+  return { dir, journal: path16.join(dir, JOURNAL_LEAF), checkpoint: path16.join(dir, CHECKPOINT_LEAF) };
 }
 function probeInput(identity, runId, over) {
   const base = makeReceiptInput({
@@ -7412,7 +7482,7 @@ var PROBES = Object.freeze({
 
 // src/domains/telemetry/guild-trace-emit.ts
 var fs13 = __toESM(require("node:fs"));
-var path16 = __toESM(require("node:path"));
+var path17 = __toESM(require("node:path"));
 
 // src/domains/telemetry/guild-trace-events.ts
 var ANALYSIS_EVENT_CLASSES = Object.freeze([
@@ -7890,7 +7960,7 @@ function makeDispatchEvent(fields) {
 
 // src/domains/telemetry/guild-trace-emit.ts
 function liveLogPath(runDir) {
-  return path16.join(runDir, "logs", "v1.4-events.jsonl");
+  return path17.join(runDir, "logs", "v1.4-events.jsonl");
 }
 function emitTraceEvent(event, runDir) {
   if (!runDir) return false;
@@ -7906,7 +7976,7 @@ function emitTraceEvent(event, runDir) {
   }
   try {
     const live = liveLogPath(runDir);
-    const dir = path16.dirname(live);
+    const dir = path17.dirname(live);
     fs13.mkdirSync(dir, { recursive: true });
     const line = JSON.stringify(event) + "\n";
     fs13.appendFileSync(live, line, "utf8");
@@ -7943,7 +8013,7 @@ var TASK_CELL_LIFECYCLE_EVENTS = Object.freeze([
 var EVENT_NAMES = new Set(TASK_CELL_LIFECYCLE_EVENTS);
 
 // src/domains/telemetry/run-analysis.ts
-var path17 = __toESM(require("node:path"));
+var path18 = __toESM(require("node:path"));
 var SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 var REQUIRED_COVERAGE = Object.freeze(["prompt", "agent", "tool", "phase", "loop", "gate", "close"]);
 var COMPLETENESS_REQUIREMENTS = Object.freeze(["run identity", "plugin-config-snapshot.json", "trace parseability", "trace validity", ...REQUIRED_COVERAGE]);
@@ -7968,7 +8038,7 @@ function asRecord(value) {
 function validEvidenceRef(value) {
   if (!value.startsWith(".guild/") || value.includes("\\") || /[\0\r\n]/.test(value)) return false;
   const filePart = value.split("#", 1)[0];
-  const normalized = path17.posix.normalize(filePart);
+  const normalized = path18.posix.normalize(filePart);
   return normalized === filePart && !normalized.split("/").includes("..");
 }
 function evidenceRunId(value) {
@@ -8054,11 +8124,361 @@ var SIDECAR_VALIDATORS = Object.freeze({
     return hasOnlyKeys(v, keysOf("assessed_input_hash", "assessed_input_ref", "instructions", "instructions_complete", "clarification_required_tasks", "required_phases")) && hashRef(v["assessed_input_hash"]) && nonEmptyString(v["assessed_input_ref"]) && instructions !== null && instructions.every((item) => hasOnlyKeys(item, /* @__PURE__ */ new Set(["instruction_id", "requirement_hash"])) && typeof item["instruction_id"] === "string" && SAFE_ID.test(item["instruction_id"]) && hashRef(item["requirement_hash"])) && new Set(instructions.map((item) => item["instruction_id"])).size === instructions.length && typeof v["instructions_complete"] === "boolean" && arrayOf(v["clarification_required_tasks"], nonEmptyString) && arrayOf(v["required_phases"], nonEmptyString);
   },
   "guild.instruction_evidence.v1": (v, runId) => hasOnlyKeys(v, keysOf("instruction_id", "requirement_hash", "verifier_kind", "verifier_ref", "result", "verified_input_hash", "verification_input_ref", "evidence_refs")) && typeof v["instruction_id"] === "string" && SAFE_ID.test(v["instruction_id"]) && hashRef(v["requirement_hash"]) && ["done_when", "configured_check", "review_gate"].includes(String(v["verifier_kind"])) && runEvidenceRef(runId)(v["verifier_ref"]) && ["passed", "failed", "unobservable"].includes(String(v["result"])) && hashRef(v["verified_input_hash"]) && nonEmptyString(v["verification_input_ref"]) && arrayOf(v["evidence_refs"], runEvidenceRef(runId)),
-  "guild.outcome_record.v1": (v) => hasOnlyKeys(v, keysOf("kind", "result", "verified_input_hash", "reopen_transitions", "findings_complete", "unresolved_finding_ids")) && ["review", "verify"].includes(String(v["kind"])) && ["passed", "failed"].includes(String(v["result"])) && hashRef(v["verified_input_hash"]) && integerAtLeast(v["reopen_transitions"], 0) && typeof v["findings_complete"] === "boolean" && arrayOf(v["unresolved_finding_ids"], (id) => typeof id === "string" && SAFE_ID.test(id)),
+  "guild.outcome_record.v1": (v) => hasOnlyKeys(v, keysOf("kind", "result", "verified_input_hash", "reopen_transitions", "findings_complete", "unresolved_finding_ids")) && ["review", "verify"].includes(String(v["kind"])) && ["passed", "failed"].includes(String(v["result"])) && hashRef(v["verified_input_hash"]) && integerAtLeast(v["reopen_transitions"], 0) && typeof v["findings_complete"] === "boolean" && arrayOf(v["unresolved_finding_ids"], (id2) => typeof id2 === "string" && SAFE_ID.test(id2)),
   "guild.capability_evidence.v1": (v, runId) => hasOnlyKeys(v, keysOf("action_signature", "owner", "capability_kind", "target", "evidence_refs")) && typeof v["action_signature"] === "string" && /^\S{1,256}$/.test(v["action_signature"]) && (v["owner"] === "project" && String(v["capability_kind"]) in PROJECT_CAPABILITY_KINDS || v["owner"] === "plugin" && String(v["capability_kind"]) in PLUGIN_CAPABILITY_KINDS) && typeof v["target"] === "string" && SAFE_ID.test(v["target"]) && arrayOf(v["evidence_refs"], runEvidenceRef(runId)),
   "guild.lookup_result.v1": (v, runId) => hasOnlyKeys(v, keysOf("outcome", "result_ref")) && ["hit", "miss"].includes(String(v["outcome"])) && runEvidenceRef(runId)(v["result_ref"]),
   "guild.prompt_context.v1": (v) => hasOnlyKeys(v, keysOf("prompt_hash", "context_hash", "retry_authorized")) && nonEmptyString(v["prompt_hash"]) && hashRef(v["context_hash"]) && typeof v["retry_authorized"] === "boolean",
   "guild.phase_cursor.v1": (v) => hasOnlyKeys(v, keysOf("visited_phases", "bypassed_phases")) && arrayOf(v["visited_phases"], nonEmptyString) && arrayOf(v["bypassed_phases"], nonEmptyString)
+});
+
+// src/domains/security/safe-object.ts
+var PROTO_POISON_KEYS = sealSet(["__proto__", "prototype", "constructor"], "PROTO_POISON_KEYS");
+
+// src/domains/security/redact-log.ts
+var FIELD_SIZE_CAP_BYTES = 4 * 1024;
+var TOKEN_SHAPE_PATTERNS = Object.freeze([
+  Object.freeze(/Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g),
+  Object.freeze(/\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g),
+  Object.freeze(/\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g),
+  Object.freeze(/\bghp_[A-Za-z0-9]{36}\b/g),
+  Object.freeze(/\bgh[suor]_[A-Za-z0-9]{36}\b/g),
+  Object.freeze(/\bgithub_pat_[A-Za-z0-9_]{82}\b/g),
+  Object.freeze(/\bxox[bp]-[A-Za-z0-9-]{10,}/g),
+  Object.freeze(/\bAKIA[0-9A-Z]{16}\b/g),
+  Object.freeze(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g)
+]);
+var SENSITIVE_HOME_DIRS = Object.freeze([
+  ".claude",
+  ".codex",
+  ".ssh",
+  ".aws",
+  ".gnupg"
+]);
+var REDACTABLE_FIELD_NAMES = Object.freeze([
+  "command_redacted",
+  "result_excerpt_redacted",
+  "payload_excerpt_redacted",
+  "prompt_excerpt",
+  "assumption_text",
+  "result"
+]);
+var REDACTABLE_FIELDS = sealSet(REDACTABLE_FIELD_NAMES, "REDACTABLE_FIELDS");
+
+// src/domains/security/events.ts
+var SECURITY_EVENT_TYPES = Object.freeze([
+  "capability_scope_violation",
+  "capability_scope_degrade",
+  "bypass_permission_allowed",
+  "mcp_description_mismatch",
+  "mcp_description_unverifiable",
+  "mcp_description_unpinned",
+  "secret_scrub_failure",
+  "injection_attempt_detected",
+  "secret_scrub_blocked",
+  "recall_quarantine",
+  "dispatch_attribution_missing",
+  "backend_degradation",
+  "tier_dispatch_untiered",
+  "harvest_promoted",
+  "harvest_refused",
+  "playbook_auto_replace",
+  "wiki_cas_conflict",
+  "harvest_reverted",
+  "lane_wiki_write_refused",
+  "queue_drain_refused"
+]);
+var KNOWN_GUILD_HOST_KINDS = Object.freeze([
+  "claude-code-cli",
+  "codex-cli",
+  "pi-cli",
+  "antigravity-cli",
+  "agents-file",
+  "claude-code-app",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector"
+]);
+var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
+
+// src/domains/security/secret-patterns.ts
+var SECRET_PATTERNS = Object.freeze([
+  // NOTE: labels deliberately drop the `=` so the redaction replacement
+  // (e.g. `<REDACTED:password-assignment>`) cannot itself re-match the pattern
+  // on a subsequent scrub pass. Idempotency depends on this — every label below
+  // is checked against every pattern above it, and none re-matches.
+  Object.freeze([Object.freeze(/password\s*=\s*["']?[^\s"']{6,}/), "password-assignment"]),
+  Object.freeze([Object.freeze(/api_key\s*=\s*["']?[^\s"']{6,}/i), "api_key-assignment"]),
+  Object.freeze([Object.freeze(/secret\s*=\s*["']?[^\s"']{8,}/i), "secret-assignment"]),
+  Object.freeze([Object.freeze(/AKIA[0-9A-Z]{16}/), "AWS access key"]),
+  Object.freeze([Object.freeze(/AIza[0-9A-Za-z_-]{35}/), "GCP API key"]),
+  Object.freeze([Object.freeze(/ghp_[0-9A-Za-z]{36}/), "GitHub personal access token"]),
+  Object.freeze([Object.freeze(/ghs_[0-9A-Za-z]{36}/), "GitHub server token"]),
+  Object.freeze([Object.freeze(/-----BEGIN (?:RSA |EC )?PRIVATE KEY/), "PEM private key block"]),
+  // ── Provider credential / bearer-token forms (T6B-R1-B1) ─────────────────
+  // Round-1 review proved the list above blind to the shapes an inspection
+  // surface is most likely to echo out of a persisted artifact: an
+  // `Authorization: Bearer …` header, a `sk-…` provider key, and the
+  // `<something>_token = …` assignment family. A display surface that renders
+  // a persisted evidence string verbatim leaked all three past the applier.
+  //
+  // Every pattern is anchored on the CREDENTIAL PREFIX (not on entropy) so it
+  // stays specific, and each replacement label is inert against every pattern
+  // in this list (no whitespace/`:`/`=` follows the trigger word in a label),
+  // which is what keeps `redact` idempotent.
+  Object.freeze([Object.freeze(/\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i), "bearer-token"]),
+  Object.freeze([Object.freeze(/\bauthorization\s*:\s*["']?[A-Za-z0-9._~+/=-]{12,}/i), "authorization-header"]),
+  Object.freeze([Object.freeze(/\b(?:auth|access|refresh|id|api|bearer|session)[-_]?token\s*[:=]\s*["']?[^\s"',]{8,}/i), "token-assignment"]),
+  // OpenAI/Anthropic-style provider keys: sk-…, sk-proj-…, sk-ant-….
+  Object.freeze([Object.freeze(/\bsk-[A-Za-z0-9_-]{12,}/), "provider-api-key"]),
+  Object.freeze([Object.freeze(/\bxox[abprs]-[A-Za-z0-9-]{10,}/), "Slack token"]),
+  Object.freeze([Object.freeze(/\bgh[uor]_[0-9A-Za-z]{36}/), "GitHub token"]),
+  Object.freeze([Object.freeze(/\bglpat-[0-9A-Za-z_-]{20}/), "GitLab personal access token"]),
+  Object.freeze([Object.freeze(/\bnpm_[0-9A-Za-z]{36}/), "npm token"]),
+  Object.freeze([Object.freeze(/\bhf_[0-9A-Za-z]{34}/), "HuggingFace token"]),
+  // ── Personally identifying forms retained by public evidence projections ─
+  // Task objectives and handoff prose are operator-authored and can contain
+  // direct contact details or tenant identifiers. Those artifacts are copied
+  // into migration evidence, so the share scrubber must recognize them before
+  // publication. Keep the patterns prefix-shaped and their labels inert so the
+  // redaction remains deterministic and idempotent.
+  Object.freeze([Object.freeze(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i), "email-address"]),
+  Object.freeze([Object.freeze(/\b(?:acct|cus|cust|usr)_[A-Za-z0-9][A-Za-z0-9_-]{4,}\b/i), "customer-identifier"]),
+  Object.freeze([Object.freeze(/\b(?:customer|account|user)[_-]?id\s*[:=]\s*["']?[A-Za-z0-9][A-Za-z0-9._-]{3,}/i), "customer-identifier"]),
+  // High-entropy string heuristic: 40+ hex chars (SHA-like)
+  Object.freeze([Object.freeze(/\b[0-9a-f]{40,}\b/), "high-entropy hex string (potential secret)"])
+]);
+
+// src/domains/security/share-set.ts
+var path19 = __toESM(require("path"));
+var SHARED_SCRUBBED_NAMES = sealSet([
+  "verify.md",
+  "review.md",
+  "provenance.json",
+  "summary.md",
+  "run.yaml",
+  "run-state.json"
+], "SHARED_SCRUBBED_NAMES");
+var CANONICAL_RUN_LOG = path19.join("logs", "v1.4-events.jsonl");
+
+// src/domains/security/prose-scrub.ts
+var PROSE_SECRET_LABELS = /* @__PURE__ */ new Set([
+  "password-assignment",
+  "api_key-assignment",
+  "secret-assignment",
+  "AWS access key",
+  "GCP API key",
+  "GitHub personal access token",
+  "GitHub server token",
+  "PEM private key block",
+  "bearer-token",
+  "provider-api-key",
+  "Slack token",
+  "GitHub token",
+  "GitLab personal access token",
+  "npm token",
+  "HuggingFace token"
+]);
+var TOKEN_SHAPE_EXTRAS = [
+  ["\\bgithub_pat_", "GitHub fine-grained token"],
+  ["\\beyJ", "JWT"]
+];
+var PROSE_CREDENTIAL_PATTERNS = deepFreeze([
+  // The canonical password form is case-sensitive; prose also catches `PASSWORD=`.
+  ...SECRET_PATTERNS.filter(([, label]) => PROSE_SECRET_LABELS.has(label)).map(
+    ([re, label]) => re.flags.includes("i") ? [re, label] : Object.freeze([new RegExp(re.source, re.flags + "i"), label])
+  ),
+  ...TOKEN_SHAPE_EXTRAS.flatMap(
+    ([prefix, label]) => TOKEN_SHAPE_PATTERNS.filter((re) => re.source.startsWith(prefix)).map(
+      (re) => Object.freeze([re, label])
+    )
+  )
+]);
+var PROSE_WRITE_TOOLS = sealSet(["Write", "Edit", "MultiEdit"]);
+
+// src/domains/security/privileged-actions.ts
+var RELEASE_LIKE_ROOTS = Object.freeze(["release", "publish", "deploy", "rollout"]);
+var RELEASE_LIKE_TOKENS = Object.freeze(["ship", "merge", "promote"]);
+var PRIVILEGED_ROOTS = Object.freeze(["permission", "credential", "secret", "privilege", "sudo"]);
+var PRIVILEGED_TOKENS = Object.freeze(["grant", "grants", "admin"]);
+
+// src/domains/telemetry/trace-analysis-v3.ts
+var TRACE_ANALYSIS_V3_SCHEMA = "guild.trace.analysis.v3";
+var TRACE_EVENT_CLASSES = Object.freeze([
+  "prompt",
+  "dispatch",
+  "request_started",
+  "request_completed",
+  "handoff",
+  "phase",
+  "obligation",
+  "transfer",
+  "knowledge",
+  "retrieval",
+  "loss"
+]);
+var TRACE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+var HASH_RE = /^sha256:[a-f0-9]{64}$/;
+var TIME_RE = /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:[Zz]|[+-](\d{2}):(\d{2}))$/;
+var REL_PATH_RE = /^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*[\\%\x00-\x1f])[^:]+$/u;
+var own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+var isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+var fail = (errs, at, msg) => {
+  errs.push(`${at}: ${msg}`);
+};
+var cpLength = (s) => [...s].length;
+function isRfc3339(v) {
+  const m = TIME_RE.exec(v);
+  if (!m) return false;
+  const [y, mo, d, h, mi, s] = m.slice(1, 7).map(Number);
+  const daysIn = [31, y % 4 === 0 && y % 100 !== 0 || y % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (mo < 1 || mo > 12 || d < 1 || d > daysIn[mo - 1] || h > 23 || mi > 59 || s > 59) return false;
+  if (m[7] !== void 0 && (Number(m[7]) > 23 || Number(m[8]) > 59)) return false;
+  return true;
+}
+var id = (v, at, e) => {
+  if (typeof v !== "string" || !TRACE_ID_RE.test(v)) fail(e, at, "not an id");
+};
+var hash = (v, at, e) => {
+  if (typeof v !== "string" || !HASH_RE.test(v)) fail(e, at, "not a sha256 hash");
+};
+var time = (v, at, e) => {
+  if (typeof v !== "string" || !isRfc3339(v)) fail(e, at, "not a date-time");
+};
+var str = (v, at, e) => {
+  if (typeof v !== "string" || cpLength(v) < 1 || cpLength(v) > 4096) fail(e, at, "not a bounded string");
+};
+var int0 = (v, at, e) => {
+  if (typeof v !== "number" || !Number.isInteger(v) || v < 0) fail(e, at, "not a non-negative integer");
+};
+var num0 = (v, at, e) => {
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0) fail(e, at, "not a non-negative number");
+};
+var bool = (v, at, e) => {
+  if (typeof v !== "boolean") fail(e, at, "not a boolean");
+};
+var konst = (c) => (v, at, e) => {
+  if (v !== c) fail(e, at, `must equal ${c}`);
+};
+var oneOf = (...vals) => (v, at, e) => {
+  if (typeof v !== "string" || !vals.includes(v)) fail(e, at, `not one of ${vals.join("|")}`);
+};
+var nullable = (c) => (v, at, e) => {
+  if (v !== null) c(v, at, e);
+};
+var relPath = (v, at, e) => {
+  if (typeof v !== "string" || cpLength(v) < 1 || cpLength(v) > 1024 || !REL_PATH_RE.test(v)) fail(e, at, "not a contained relative path");
+};
+var array = (item, max) => (v, at, e) => {
+  if (!Array.isArray(v)) return fail(e, at, "not an array");
+  if (v.length > max) fail(e, at, `more than ${max} items`);
+  for (let i = 0; i < v.length; i++) item(v[i], `${at}[${i}]`, e);
+};
+var object = (shape2) => (v, at, e) => {
+  if (!isObj(v)) return fail(e, at, "not an object");
+  for (const k of Object.keys(v)) if (!own(shape2, k)) fail(e, `${at}.${k}`, "unknown field");
+  for (const k of Object.keys(shape2)) {
+    if (!own(v, k)) fail(e, `${at}.${k}`, "required");
+    else shape2[k](v[k], `${at}.${k}`, e);
+  }
+};
+var evidence = object({
+  source_id: id,
+  path: relPath,
+  sha256: hash,
+  schema_version: str,
+  observed_at: time,
+  availability: oneOf("available", "expired", "redacted", "missing", "unsupported"),
+  reason: nullable(str)
+});
+var coverage = object({
+  eligible: nullable(int0),
+  covered: int0,
+  excluded: int0,
+  missing: nullable(int0),
+  state: oneOf("complete", "partial", "unavailable"),
+  reason: nullable(str),
+  exclusion_reasons: array(object({ code: id, count: int0 }), 100)
+});
+var lineage = object({
+  source_id: id,
+  run_id: id,
+  execution_id: id,
+  host_session_id: nullable(id),
+  initiative_id: nullable(id),
+  goal_id: nullable(id),
+  logical_task_id: nullable(id),
+  attempt_id: nullable(id),
+  agent_instance_id: nullable(id),
+  request_id: nullable(id)
+});
+var pins = object({ assignment: hash, definition: hash, configuration: hash, workflow: hash, policy: hash });
+var interval = object({
+  start: time,
+  end: nullable(time),
+  duration_ms: nullable(num0),
+  clock: object({ domain: id, basis: oneOf("controller", "local_monotonic", "provider", "unknown"), comparable: bool, skew_bound_ms: nullable(num0) })
+});
+var usage = object({
+  granularity: oneOf("leaf_request", "native_session"),
+  observation_id: id,
+  revision: int0,
+  final: bool,
+  accounting_identity: id,
+  parent_accounting_identity: nullable(id),
+  inclusion: oneOf("leaf_exclusive", "parent_inclusive", "session_cumulative"),
+  input_inclusive: nullable(int0),
+  output: nullable(int0),
+  cache_read_subset: nullable(int0),
+  cache_write_subset: nullable(int0),
+  total: nullable(int0),
+  cost_usd: nullable(num0),
+  cost_basis: oneOf("measured", "derived_estimate", "native_estimate", "unavailable"),
+  currency: konst("USD"),
+  pricing_version: nullable(str),
+  usage_semantics: oneOf("inclusive_input_cache_subset.v1", "provider_session_only.v1", "unknown"),
+  coverage,
+  native_baseline_usd: nullable(num0),
+  native_cumulative_usd: nullable(num0)
+});
+var shape = object({
+  schema_version: konst(TRACE_ANALYSIS_V3_SCHEMA),
+  event_id: id,
+  sequence: int0,
+  event_class: oneOf(...TRACE_EVENT_CLASSES),
+  at: time,
+  lineage,
+  operation_id: nullable(id),
+  component_invocation_id: nullable(id),
+  actor_id: id,
+  pins,
+  requested_model: nullable(str),
+  observed_identity: object({ provider: nullable(str), model: nullable(str), status: oneOf("observed", "unavailable"), reason: nullable(str) }),
+  usage: nullable(usage),
+  payload_ref: nullable(evidence),
+  prompt_hash: nullable(hash),
+  redaction_version: str,
+  capture: coverage,
+  interval: nullable(interval)
+});
+var TRACE_V3_CHECKS = Object.freeze({ id, hash, time, str, int0, num0, bool, konst, oneOf, nullable, relPath, array, object, evidence, coverage, usage });
+
+// src/domains/telemetry/trace-capture-v3.ts
+var TRACE_CAPTURE_LIMITS = Object.freeze({
+  max_host_event_bytes: 256 * 1024,
+  max_sidecar_bytes: 32 * 1024,
+  max_trace_events: 1e5,
+  max_json_depth: 16,
+  lock_wait_ms: 2e3,
+  stale_lock_ms: 3e4
+});
+var DISPATCH_CAPTURE_PATHS = Object.freeze(["agent", "cmux", "tmux", "remote", "task_cell", "stack_launch", "unknown"]);
+var SENSITIVE_KEY_SRC = "(?:[A-Za-z0-9]+[_-])*(?:password|passwd|passphrase|secret|api[_-]?key|apikey|token|authorization|credential|credentials|private[_-]?key|client[_-]?secret|cookie|reasoning|thinking|chain[_-]?of[_-]?thought|redacted[_-]?thinking|encrypted[_-]?reasoning)(?:[_-][A-Za-z0-9]+)*";
+var CREDENTIAL_KEY_RE = new RegExp(`^${SENSITIVE_KEY_SRC}$`, "i");
+var QUOTED_KEY_RE = new RegExp(`(["'])(${SENSITIVE_KEY_SRC})\\1\\s*:\\s*`, "gi");
+var UNQUOTED_KEY_RE = new RegExp(`\\b(${SENSITIVE_KEY_SRC})\\s*[:=]\\s*(?=[{\\["'])`, "gi");
+var USAGE_FAMILY_BY_HOST = Object.freeze({
+  claude: "anthropic_messages",
+  codex: "openai_responses"
 });
 
 // scripts/lib/guild-trace-emit.ts
@@ -8069,15 +8489,15 @@ var makeDispatchEvent2 = makeDispatchEvent;
 
 // scripts/lib/state/ensure-storage-layout.ts
 var fs14 = __toESM(require("node:fs"));
-var path18 = __toESM(require("node:path"));
+var path20 = __toESM(require("node:path"));
 var CURRENT_LAYOUT_VERSION = 2;
 function markerPath(root) {
-  return path18.join(root, ".guild", "storage-layout.json");
+  return path20.join(root, ".guild", "storage-layout.json");
 }
 function detect2(cwd = process.cwd()) {
   const root = resolveGuildRoot(cwd);
   const marker = markerPath(root);
-  if (!fs14.existsSync(path18.join(root, ".guild"))) {
+  if (!fs14.existsSync(path20.join(root, ".guild"))) {
     return { state: "absent", version: null, root, marker };
   }
   let version = null;
@@ -8095,9 +8515,9 @@ var upgradeChunk = null;
 function upgradeChain() {
   if (upgradeChunk === null) {
     const candidates = [
-      path18.join(__dirname, "upgrade-chain.js"),
-      path18.join(__dirname, "lib", "state", "upgrade-chain"),
-      path18.join(__dirname, "upgrade-chain")
+      path20.join(__dirname, "upgrade-chain.js"),
+      path20.join(__dirname, "lib", "state", "upgrade-chain"),
+      path20.join(__dirname, "upgrade-chain")
     ];
     const spec = candidates.find((c) => fs14.existsSync(c) || fs14.existsSync(`${c}.ts`)) ?? candidates[2];
     upgradeChunk = require(spec);
@@ -8154,7 +8574,7 @@ if (isProcessEntry()) {
 // scripts/lib/host/pane-dispatch-trace.ts
 var PANE_BACKEND_RUNG = 1;
 var DEFAULT_PANE_DISPATCH_PHASE = "execute";
-var EVENTS_RELPATH = path19.join("logs", "v1.4-events.jsonl");
+var EVENTS_RELPATH = path21.join("logs", "v1.4-events.jsonl");
 var SURFACE_TO_BACKEND = {
   tmux: "tmux",
   cmux: "cmux",
@@ -8170,7 +8590,7 @@ function emitPaneDispatchEvents(opts) {
     const surface = opts.surface ?? "tmux";
     const backend = SURFACE_TO_BACKEND[surface] ?? "unknown";
     const paneBackend = surface !== backend ? surface : void 0;
-    const runDir = path19.join(durableGuildDir(opts.cwd), "runs", opts.runId);
+    const runDir = path21.join(durableGuildDir(opts.cwd), "runs", opts.runId);
     const now = opts.now ?? (() => /* @__PURE__ */ new Date());
     let emitted = 0;
     for (const lane of opts.lanes) {
@@ -8253,7 +8673,7 @@ ${USAGE}`);
     process.exit(1);
   }
   const emitted = emitPaneDispatchEvents({
-    cwd: path19.resolve(parsed.cwd),
+    cwd: path21.resolve(parsed.cwd),
     runId: parsed.runId,
     target: parsed.target,
     surface: parsed.surface,
