@@ -419,8 +419,8 @@ var require_null = __commonJS({
     function constructYamlNull() {
       return null;
     }
-    function isNull(object) {
-      return object === null;
+    function isNull(object2) {
+      return object2 === null;
     }
     module2.exports = new Type("tag:yaml.org,2002:null", {
       kind: "scalar",
@@ -462,8 +462,8 @@ var require_bool = __commonJS({
     function constructYamlBoolean(data) {
       return data === "true" || data === "True" || data === "TRUE";
     }
-    function isBoolean(object) {
-      return Object.prototype.toString.call(object) === "[object Boolean]";
+    function isBoolean(object2) {
+      return Object.prototype.toString.call(object2) === "[object Boolean]";
     }
     module2.exports = new Type("tag:yaml.org,2002:bool", {
       kind: "scalar",
@@ -471,14 +471,14 @@ var require_bool = __commonJS({
       construct: constructYamlBoolean,
       predicate: isBoolean,
       represent: {
-        lowercase: function(object) {
-          return object ? "true" : "false";
+        lowercase: function(object2) {
+          return object2 ? "true" : "false";
         },
-        uppercase: function(object) {
-          return object ? "TRUE" : "FALSE";
+        uppercase: function(object2) {
+          return object2 ? "TRUE" : "FALSE";
         },
-        camelcase: function(object) {
-          return object ? "True" : "False";
+        camelcase: function(object2) {
+          return object2 ? "True" : "False";
         }
       },
       defaultStyle: "lowercase"
@@ -569,8 +569,8 @@ var require_int = __commonJS({
     function constructYamlInteger(data) {
       return parseYamlInteger(data);
     }
-    function isInteger(object) {
-      return Object.prototype.toString.call(object) === "[object Number]" && (object % 1 === 0 && !common.isNegativeZero(object));
+    function isInteger(object2) {
+      return Object.prototype.toString.call(object2) === "[object Number]" && (object2 % 1 === 0 && !common.isNegativeZero(object2));
     }
     module2.exports = new Type("tag:yaml.org,2002:int", {
       kind: "scalar",
@@ -639,8 +639,8 @@ var require_float = __commonJS({
       return sign * parseFloat(value, 10);
     }
     var SCIENTIFIC_WITHOUT_DOT = /^[-+]?[0-9]+e/;
-    function representYamlFloat(object, style) {
-      if (isNaN(object)) {
+    function representYamlFloat(object2, style) {
+      if (isNaN(object2)) {
         switch (style) {
           case "lowercase":
             return ".nan";
@@ -649,7 +649,7 @@ var require_float = __commonJS({
           case "camelcase":
             return ".NaN";
         }
-      } else if (Number.POSITIVE_INFINITY === object) {
+      } else if (Number.POSITIVE_INFINITY === object2) {
         switch (style) {
           case "lowercase":
             return ".inf";
@@ -658,7 +658,7 @@ var require_float = __commonJS({
           case "camelcase":
             return ".Inf";
         }
-      } else if (Number.NEGATIVE_INFINITY === object) {
+      } else if (Number.NEGATIVE_INFINITY === object2) {
         switch (style) {
           case "lowercase":
             return "-.inf";
@@ -667,14 +667,14 @@ var require_float = __commonJS({
           case "camelcase":
             return "-.Inf";
         }
-      } else if (common.isNegativeZero(object)) {
+      } else if (common.isNegativeZero(object2)) {
         return "-0.0";
       }
-      const res = object.toString(10);
+      const res = object2.toString(10);
       return SCIENTIFIC_WITHOUT_DOT.test(res) ? res.replace("e", ".e") : res;
     }
-    function isFloat(object) {
-      return Object.prototype.toString.call(object) === "[object Number]" && (object % 1 !== 0 || common.isNegativeZero(object));
+    function isFloat(object2) {
+      return Object.prototype.toString.call(object2) === "[object Number]" && (object2 % 1 !== 0 || common.isNegativeZero(object2));
     }
     module2.exports = new Type("tag:yaml.org,2002:float", {
       kind: "scalar",
@@ -759,8 +759,8 @@ var require_timestamp = __commonJS({
       if (delta) date.setTime(date.getTime() - delta);
       return date;
     }
-    function representYamlTimestamp(object) {
-      return object.toISOString();
+    function representYamlTimestamp(object2) {
+      return object2.toISOString();
     }
     module2.exports = new Type("tag:yaml.org,2002:timestamp", {
       kind: "scalar",
@@ -833,10 +833,10 @@ var require_binary = __commonJS({
       }
       return new Uint8Array(result2);
     }
-    function representYamlBinary(object) {
+    function representYamlBinary(object2) {
       let result2 = "";
       let bits = 0;
-      const max = object.length;
+      const max = object2.length;
       const map = BASE64_MAP;
       for (let idx = 0; idx < max; idx++) {
         if (idx % 3 === 0 && idx) {
@@ -845,7 +845,7 @@ var require_binary = __commonJS({
           result2 += map[bits >> 6 & 63];
           result2 += map[bits & 63];
         }
-        bits = (bits << 8) + object[idx];
+        bits = (bits << 8) + object2[idx];
       }
       const tail = max % 3;
       if (tail === 0) {
@@ -889,9 +889,9 @@ var require_omap = __commonJS({
     function resolveYamlOmap(data) {
       if (data === null) return true;
       const objectKeys = {};
-      const object = data;
-      for (let index = 0, length = object.length; index < length; index += 1) {
-        const pair = object[index];
+      const object2 = data;
+      for (let index = 0, length = object2.length; index < length; index += 1) {
+        const pair = object2[index];
         let pairHasKey = false;
         if (_toString.call(pair) !== "[object Object]") return false;
         let pairKey;
@@ -926,10 +926,10 @@ var require_pairs = __commonJS({
     var _toString = Object.prototype.toString;
     function resolveYamlPairs(data) {
       if (data === null) return true;
-      const object = data;
-      const result2 = new Array(object.length);
-      for (let index = 0, length = object.length; index < length; index += 1) {
-        const pair = object[index];
+      const object2 = data;
+      const result2 = new Array(object2.length);
+      for (let index = 0, length = object2.length; index < length; index += 1) {
+        const pair = object2[index];
         if (_toString.call(pair) !== "[object Object]") return false;
         const keys = Object.keys(pair);
         if (keys.length !== 1) return false;
@@ -939,10 +939,10 @@ var require_pairs = __commonJS({
     }
     function constructYamlPairs(data) {
       if (data === null) return [];
-      const object = data;
-      const result2 = new Array(object.length);
-      for (let index = 0, length = object.length; index < length; index += 1) {
-        const pair = object[index];
+      const object2 = data;
+      const result2 = new Array(object2.length);
+      for (let index = 0, length = object2.length; index < length; index += 1) {
+        const pair = object2[index];
         const keys = Object.keys(pair);
         result2[index] = [keys[0], pair[keys[0]]];
       }
@@ -964,10 +964,10 @@ var require_set = __commonJS({
     var _hasOwnProperty = Object.prototype.hasOwnProperty;
     function resolveYamlSet(data) {
       if (data === null) return true;
-      const object = data;
-      for (const key in object) {
-        if (_hasOwnProperty.call(object, key)) {
-          if (object[key] !== null) return false;
+      const object2 = data;
+      for (const key in object2) {
+        if (_hasOwnProperty.call(object2, key)) {
+          if (object2[key] !== null) return false;
         }
       }
       return true;
@@ -1117,16 +1117,16 @@ var require_loader = __commonJS({
         (c - 65536 & 1023) + 56320
       );
     }
-    function setProperty(object, key, value) {
+    function setProperty(object2, key, value) {
       if (key === "__proto__") {
-        Object.defineProperty(object, key, {
+        Object.defineProperty(object2, key, {
           configurable: true,
           enumerable: true,
           writable: true,
           value
         });
       } else {
-        object[key] = value;
+        object2[key] = value;
       }
     }
     var simpleEscapeCheck = new Array(256);
@@ -2534,10 +2534,10 @@ var require_dumper = __commonJS({
     function generateNextLine(state, level) {
       return "\n" + common.repeat(" ", state.indent * level);
     }
-    function testImplicitResolving(state, str) {
+    function testImplicitResolving(state, str2) {
       for (let index = 0, length = state.implicitTypes.length; index < length; index += 1) {
         const type = state.implicitTypes[index];
-        if (type.resolve(str)) {
+        if (type.resolve(str2)) {
           return true;
         }
       }
@@ -2760,13 +2760,13 @@ var require_dumper = __commonJS({
       }
       return result2;
     }
-    function writeFlowSequence(state, level, object) {
+    function writeFlowSequence(state, level, object2) {
       let _result = "";
       const _tag = state.tag;
-      for (let index = 0, length = object.length; index < length; index += 1) {
-        let value = object[index];
+      for (let index = 0, length = object2.length; index < length; index += 1) {
+        let value = object2[index];
         if (state.replacer) {
-          value = state.replacer.call(object, String(index), value);
+          value = state.replacer.call(object2, String(index), value);
         }
         if (writeNode(state, level, value, false, false) || typeof value === "undefined" && writeNode(state, level, null, false, false)) {
           if (_result !== "") _result += "," + (!state.condenseFlow ? " " : "");
@@ -2776,13 +2776,13 @@ var require_dumper = __commonJS({
       state.tag = _tag;
       state.dump = "[" + _result + "]";
     }
-    function writeBlockSequence(state, level, object, compact) {
+    function writeBlockSequence(state, level, object2, compact) {
       let _result = "";
       const _tag = state.tag;
-      for (let index = 0, length = object.length; index < length; index += 1) {
-        let value = object[index];
+      for (let index = 0, length = object2.length; index < length; index += 1) {
+        let value = object2[index];
         if (state.replacer) {
-          value = state.replacer.call(object, String(index), value);
+          value = state.replacer.call(object2, String(index), value);
         }
         if (writeNode(state, level + 1, value, true, true, false, true) || typeof value === "undefined" && writeNode(state, level + 1, null, true, true, false, true)) {
           if (!compact || _result !== "") {
@@ -2799,18 +2799,18 @@ var require_dumper = __commonJS({
       state.tag = _tag;
       state.dump = _result || "[]";
     }
-    function writeFlowMapping(state, level, object) {
+    function writeFlowMapping(state, level, object2) {
       let _result = "";
       const _tag = state.tag;
-      const objectKeyList = Object.keys(object);
+      const objectKeyList = Object.keys(object2);
       for (let index = 0, length = objectKeyList.length; index < length; index += 1) {
         let pairBuffer = "";
         if (_result !== "") pairBuffer += ", ";
         if (state.condenseFlow) pairBuffer += '"';
         const objectKey = objectKeyList[index];
-        let objectValue = object[objectKey];
+        let objectValue = object2[objectKey];
         if (state.replacer) {
-          objectValue = state.replacer.call(object, objectKey, objectValue);
+          objectValue = state.replacer.call(object2, objectKey, objectValue);
         }
         if (!writeNode(state, level, objectKey, false, false)) {
           continue;
@@ -2826,10 +2826,10 @@ var require_dumper = __commonJS({
       state.tag = _tag;
       state.dump = "{" + _result + "}";
     }
-    function writeBlockMapping(state, level, object, compact) {
+    function writeBlockMapping(state, level, object2, compact) {
       let _result = "";
       const _tag = state.tag;
-      const objectKeyList = Object.keys(object);
+      const objectKeyList = Object.keys(object2);
       if (state.sortKeys === true) {
         objectKeyList.sort();
       } else if (typeof state.sortKeys === "function") {
@@ -2843,9 +2843,9 @@ var require_dumper = __commonJS({
           pairBuffer += generateNextLine(state, level);
         }
         const objectKey = objectKeyList[index];
-        let objectValue = object[objectKey];
+        let objectValue = object2[objectKey];
         if (state.replacer) {
-          objectValue = state.replacer.call(object, objectKey, objectValue);
+          objectValue = state.replacer.call(object2, objectKey, objectValue);
         }
         if (!writeNode(state, level + 1, objectKey, true, true, true)) {
           continue;
@@ -2876,14 +2876,14 @@ var require_dumper = __commonJS({
       state.tag = _tag;
       state.dump = _result || "{}";
     }
-    function detectType(state, object, explicit) {
+    function detectType(state, object2, explicit) {
       const typeList = explicit ? state.explicitTypes : state.implicitTypes;
       for (let index = 0, length = typeList.length; index < length; index += 1) {
         const type = typeList[index];
-        if ((type.instanceOf || type.predicate) && (!type.instanceOf || typeof object === "object" && object instanceof type.instanceOf) && (!type.predicate || type.predicate(object))) {
+        if ((type.instanceOf || type.predicate) && (!type.instanceOf || typeof object2 === "object" && object2 instanceof type.instanceOf) && (!type.predicate || type.predicate(object2))) {
           if (explicit) {
             if (type.multi && type.representName) {
-              state.tag = type.representName(object);
+              state.tag = type.representName(object2);
             } else {
               state.tag = type.tag;
             }
@@ -2894,9 +2894,9 @@ var require_dumper = __commonJS({
             const style = state.styleMap[type.tag] || type.defaultStyle;
             let _result;
             if (_toString.call(type.represent) === "[object Function]") {
-              _result = type.represent(object, style);
+              _result = type.represent(object2, style);
             } else if (_hasOwnProperty.call(type.represent, style)) {
-              _result = type.represent[style](object, style);
+              _result = type.represent[style](object2, style);
             } else {
               throw new YAMLException("!<" + type.tag + '> tag resolver accepts not "' + style + '" style');
             }
@@ -2907,11 +2907,11 @@ var require_dumper = __commonJS({
       }
       return false;
     }
-    function writeNode(state, level, object, block, compact, iskey, isblockseq) {
+    function writeNode(state, level, object2, block, compact, iskey, isblockseq) {
       state.tag = null;
-      state.dump = object;
-      if (!detectType(state, object, false)) {
-        detectType(state, object, true);
+      state.dump = object2;
+      if (!detectType(state, object2, false)) {
+        detectType(state, object2, true);
       }
       const type = _toString.call(state.dump);
       const inblock = block;
@@ -2922,7 +2922,7 @@ var require_dumper = __commonJS({
       let duplicateIndex;
       let duplicate;
       if (objectOrArray) {
-        duplicateIndex = state.duplicates.indexOf(object);
+        duplicateIndex = state.duplicates.indexOf(object2);
         duplicate = duplicateIndex !== -1;
       }
       if (state.tag !== null && state.tag !== "?" || duplicate || state.indent !== 2 && level > 0) {
@@ -2988,33 +2988,33 @@ var require_dumper = __commonJS({
       }
       return true;
     }
-    function getDuplicateReferences(object, state) {
+    function getDuplicateReferences(object2, state) {
       const objects = [];
       const duplicatesIndexes = [];
-      inspectNode(object, objects, duplicatesIndexes);
+      inspectNode(object2, objects, duplicatesIndexes);
       const length = duplicatesIndexes.length;
       for (let index = 0; index < length; index += 1) {
         state.duplicates.push(objects[duplicatesIndexes[index]]);
       }
       state.usedDuplicates = new Array(length);
     }
-    function inspectNode(object, objects, duplicatesIndexes) {
-      if (object !== null && typeof object === "object") {
-        const index = objects.indexOf(object);
+    function inspectNode(object2, objects, duplicatesIndexes) {
+      if (object2 !== null && typeof object2 === "object") {
+        const index = objects.indexOf(object2);
         if (index !== -1) {
           if (duplicatesIndexes.indexOf(index) === -1) {
             duplicatesIndexes.push(index);
           }
         } else {
-          objects.push(object);
-          if (Array.isArray(object)) {
-            for (let i = 0, length = object.length; i < length; i += 1) {
-              inspectNode(object[i], objects, duplicatesIndexes);
+          objects.push(object2);
+          if (Array.isArray(object2)) {
+            for (let i = 0, length = object2.length; i < length; i += 1) {
+              inspectNode(object2[i], objects, duplicatesIndexes);
             }
           } else {
-            const objectKeyList = Object.keys(object);
+            const objectKeyList = Object.keys(object2);
             for (let i = 0, length = objectKeyList.length; i < length; i += 1) {
-              inspectNode(object[objectKeyList[i]], objects, duplicatesIndexes);
+              inspectNode(object2[objectKeyList[i]], objects, duplicatesIndexes);
             }
           }
         }
@@ -3147,10 +3147,12 @@ __export(index_exports, {
   resolveJournalIdentity: () => resolveJournalIdentity,
   routeRecommendation: () => routeRecommendation,
   scanReceiptJournal: () => scanReceiptJournal,
+  scrubTraceText: () => scrubTraceText,
   sealReceiptRecord: () => sealReceiptRecord,
   summarizeTaskCellTelemetry: () => summarizeTaskCellTelemetry,
   toolActionSignature: () => toolActionSignature,
   toolDenialSignature: () => toolDenialSignature,
+  traceStringIsUnsafe: () => traceStringIsUnsafe,
   updateRecommendationStatus: () => updateRecommendationStatus,
   validateAnalysisTraceEvent: () => validateAnalysisTraceEvent,
   validateConfigResolutionEvent: () => validateConfigResolutionEvent,
@@ -3255,10 +3257,10 @@ function findPluginRoot(fromDir) {
 
 // src/domains/kernel/yaml-loader.ts
 function pluginLocalScriptsRoots() {
-  const own2 = findPluginRoot(__dirname);
+  const own3 = findPluginRoot(__dirname);
   return [
     // The package this code shipped in, whatever the bundle depth (runtime/scripts).
-    ...own2 === null ? [] : [path4.join(own2, "scripts")],
+    ...own3 === null ? [] : [path4.join(own3, "scripts")],
     // Source TS layout (src/domains/<id>) and the bundled agent-team hook layout
     // (hooks/agent-team/dist) both sit three levels under plugin/.
     path4.resolve(__dirname, "..", "..", "..", "scripts"),
@@ -4537,8 +4539,8 @@ function splitInlineValue(rawValue) {
     const rest = text.slice(i + 1).trim();
     return { value: text.slice(1, i), comment: rest.startsWith("#") ? rest : null };
   }
-  const hash = rawValue.search(/[ \t]#/);
-  if (hash >= 0) return { value: rawValue.slice(0, hash).trim(), comment: rawValue.slice(hash + 1).trim() };
+  const hash2 = rawValue.search(/[ \t]#/);
+  if (hash2 >= 0) return { value: rawValue.slice(0, hash2).trim(), comment: rawValue.slice(hash2 + 1).trim() };
   return { value: rawValue.trim(), comment: null };
 }
 function scanLines(lines) {
@@ -5008,25 +5010,25 @@ var registryYamlRetire = {
   affects: [".guild/loops", ".guild/workflows", ".guild/agents/registry.yaml", ".guild/skills/registry.yaml"],
   apply(ctx) {
     const changed = [];
-    for (const relPath of DERIVED_REGISTRIES) {
-      const abs = path11.join(ctx.guildDir, relPath);
+    for (const relPath2 of DERIVED_REGISTRIES) {
+      const abs = path11.join(ctx.guildDir, relPath2);
       if (!lstatSafe(abs)) continue;
-      if (classifyPath(relPath) !== "derived") continue;
+      if (classifyPath(relPath2) !== "derived") continue;
       if (!ctx.dryRun) fs7.rmSync(abs, { force: true });
       changed.push(rel(ctx, abs));
     }
-    for (const relPath of AUTHORED_REGISTRIES) {
-      const abs = path11.join(ctx.guildDir, relPath);
+    for (const relPath2 of AUTHORED_REGISTRIES) {
+      const abs = path11.join(ctx.guildDir, relPath2);
       const text = readIfFile(abs);
       if (text === null) continue;
-      const target = path11.join(ctx.guildDir, "artifacts", "legacy", relPath.replace("/", "-"));
+      const target = path11.join(ctx.guildDir, "artifacts", "legacy", relPath2.replace("/", "-"));
       if (lstatSafe(target)) {
         if (readIfFile(target) !== text) {
           return {
             status: "blocked_confirm",
-            detail: `.guild/${relPath} differs from its preserved copy ${rel(ctx, target)}`,
+            detail: `.guild/${relPath2} differs from its preserved copy ${rel(ctx, target)}`,
             paths: [rel(ctx, abs), rel(ctx, target)],
-            question: `registry-yaml-retire found .guild/${relPath} and a different preserved copy at ${rel(ctx, target)}. Keep which one?`
+            question: `registry-yaml-retire found .guild/${relPath2} and a different preserved copy at ${rel(ctx, target)}. Keep which one?`
           };
         }
         if (!ctx.dryRun) fs7.rmSync(abs, { force: true });
@@ -6840,7 +6842,7 @@ function reconcileWithin(opts, io, denial, journalPath, authority) {
       actual: opts.producerCheckpoint.record_count
     });
   }
-  const foreignRun = mergedAnalysis.run_ids.find((id) => id !== opts.run_id);
+  const foreignRun = mergedAnalysis.run_ids.find((id2) => id2 !== opts.run_id);
   if (foreignRun !== void 0) {
     checkpoint_disagreements.push({
       code: "merged_run_identity_mismatch",
@@ -7098,7 +7100,7 @@ var filesystemEvidenceResolver = {
 };
 function buildDebugBundle(opts) {
   const io = opts.io ?? defaultJournalIo;
-  const evidence = opts.evidence ?? filesystemEvidenceResolver;
+  const evidence2 = opts.evidence ?? filesystemEvidenceResolver;
   const scan = scanReceiptJournal(opts.journalPath, io);
   const checkpointRead = readCheckpointState(opts.checkpointPath, io);
   const checkpoint = checkpointRead.checkpoint;
@@ -7173,7 +7175,7 @@ function buildDebugBundle(opts) {
       reject("unclean_receipt");
       continue;
     }
-    const resolved = evidence.resolve(link.ref);
+    const resolved = evidence2.resolve(link.ref);
     if (!resolved) {
       reject("evidence_unresolved");
       continue;
@@ -8042,7 +8044,7 @@ function evaluateReceiptJournalConformance(request) {
   } finally {
     removeQuietly(workspace);
   }
-  const evidence = MH06_SCENARIO_IDS.map((stableId2) => ({
+  const evidence2 = MH06_SCENARIO_IDS.map((stableId2) => ({
     stable_id: stableId2,
     satisfied: verdicts[stableId2].satisfied,
     observed: verdicts[stableId2].observed
@@ -8086,7 +8088,7 @@ function evaluateReceiptJournalConformance(request) {
         owner_key: MH06_OWNER_KEY,
         suite_id: MH06_SUITE_ID,
         suite_version: MH06_SUITE_VERSION,
-        evidence
+        evidence: evidence2
       }
     }),
     packet: freezeDeep(packet)
@@ -8830,24 +8832,24 @@ function appendTaskCellLifecycleEvent(input) {
   return event;
 }
 function recordTaskCellUsage(input) {
-  const usage = usageRecord(input.usage);
-  if (!usage) throw new Error("invalid guild.task_cell_usage.v1");
-  const dir = containedChildDir(telemetryDir(input.cwd, usage.run_id), "usage");
-  const file = path17.join(dir, `${usage.instance_id}.json`);
+  const usage2 = usageRecord(input.usage);
+  if (!usage2) throw new Error("invalid guild.task_cell_usage.v1");
+  const dir = containedChildDir(telemetryDir(input.cwd, usage2.run_id), "usage");
+  const file = path17.join(dir, `${usage2.instance_id}.json`);
   if (fs14.existsSync(file)) {
     const stat = fs14.lstatSync(file);
-    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`usage record is not a regular file: ${usage.instance_id}`);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`usage record is not a regular file: ${usage2.instance_id}`);
     let existing;
     try {
       existing = JSON.parse(fs14.readFileSync(file, "utf8"));
     } catch {
-      throw new Error(`invalid existing usage record: ${usage.instance_id}`);
+      throw new Error(`invalid existing usage record: ${usage2.instance_id}`);
     }
     const validated = usageRecord(existing);
-    if (!validated || JSON.stringify(validated) !== JSON.stringify(usage)) throw new Error(`conflicting usage record already exists: ${usage.instance_id}`);
+    if (!validated || JSON.stringify(validated) !== JSON.stringify(usage2)) throw new Error(`conflicting usage record already exists: ${usage2.instance_id}`);
     return path17.relative(fs14.realpathSync(path17.resolve(input.cwd)), file);
   }
-  fs14.writeFileSync(file, `${JSON.stringify(usage, null, 2)}
+  fs14.writeFileSync(file, `${JSON.stringify(usage2, null, 2)}
 `, { encoding: "utf8", flag: "wx" });
   return path17.relative(fs14.realpathSync(path17.resolve(input.cwd)), file);
 }
@@ -8991,9 +8993,9 @@ function readUsage(cwd, runId, instanceId) {
   } catch {
     throw new Error(`invalid usage record: ${instanceId}`);
   }
-  const usage = usageRecord(raw);
-  if (!usage || usage.run_id !== runId || usage.instance_id !== instanceId) throw new Error(`invalid usage record: ${instanceId}`);
-  return usage;
+  const usage2 = usageRecord(raw);
+  if (!usage2 || usage2.run_id !== runId || usage2.instance_id !== instanceId) throw new Error(`invalid usage record: ${instanceId}`);
+  return usage2;
 }
 function millis(events, from, to) {
   const a = events.find((item) => item.event_name === from);
@@ -9023,7 +9025,7 @@ function summarizeTaskCellTelemetry(input) {
     const terminal = terminals.at(-1) ?? null;
     const spawnCount = ordered.filter((item) => item.event_name === "spawn_started").length;
     if (spawnCount > 1) duplicateCount += spawnCount - 1;
-    const usage = readUsage(input.cwd, input.runId, instanceId);
+    const usage2 = readUsage(input.cwd, input.runId, instanceId);
     const degradation = [...new Set(ordered.flatMap((item) => item.degradation_reasons))].sort();
     instances.push({
       run_id: first.run_id,
@@ -9053,7 +9055,7 @@ function summarizeTaskCellTelemetry(input) {
         projection_hash: metadata.projection_hash ?? null,
         context_bundle_bytes: metadata.context_bundle_bytes ?? null
       },
-      usage: usage ? { status: "measured", tokens: usage.tokens, cost_usd: usage.cost_usd, source: usage.source, measured_at: usage.measured_at } : { status: "unavailable", tokens: null, cost_usd: null, reason: "no measured usage record" },
+      usage: usage2 ? { status: "measured", tokens: usage2.tokens, cost_usd: usage2.cost_usd, source: usage2.source, measured_at: usage2.measured_at } : { status: "unavailable", tokens: null, cost_usd: null, reason: "no measured usage record" },
       terminal_event: terminal ? terminal.event_name : null,
       orphaned: ordered.some((item) => item.event_name === "orphaned"),
       leaked: terminal === null
@@ -9459,7 +9461,7 @@ function assertRecommendation(value, label) {
   if (!stringArray(item["evidence_refs"]) || item["evidence_refs"].length === 0 || !item["evidence_refs"].every(validEvidenceRef)) {
     throw new Error(`${label}.evidence_refs must contain safe .guild refs`);
   }
-  if (!stringArray(item["affected_runs"]) || item["affected_runs"].length === 0 || !item["affected_runs"].every((id) => SAFE_ID.test(id) && id !== "." && id !== "..")) {
+  if (!stringArray(item["affected_runs"]) || item["affected_runs"].length === 0 || !item["affected_runs"].every((id2) => SAFE_ID.test(id2) && id2 !== "." && id2 !== "..")) {
     throw new Error(`${label}.affected_runs must contain safe run ids`);
   }
   if (!item["affected_runs"].every((runId) => item["evidence_refs"].some((ref) => evidenceRunId(ref) === runId)) || !item["evidence_refs"].every((ref) => item["affected_runs"].includes(evidenceRunId(ref) ?? ""))) {
@@ -10262,7 +10264,7 @@ var SIDECAR_VALIDATORS = Object.freeze({
     return hasOnlyKeys(v, keysOf("assessed_input_hash", "assessed_input_ref", "instructions", "instructions_complete", "clarification_required_tasks", "required_phases")) && hashRef(v["assessed_input_hash"]) && nonEmptyString(v["assessed_input_ref"]) && instructions !== null && instructions.every((item) => hasOnlyKeys(item, /* @__PURE__ */ new Set(["instruction_id", "requirement_hash"])) && typeof item["instruction_id"] === "string" && SAFE_ID.test(item["instruction_id"]) && hashRef(item["requirement_hash"])) && new Set(instructions.map((item) => item["instruction_id"])).size === instructions.length && typeof v["instructions_complete"] === "boolean" && arrayOf(v["clarification_required_tasks"], nonEmptyString) && arrayOf(v["required_phases"], nonEmptyString);
   },
   "guild.instruction_evidence.v1": (v, runId) => hasOnlyKeys(v, keysOf("instruction_id", "requirement_hash", "verifier_kind", "verifier_ref", "result", "verified_input_hash", "verification_input_ref", "evidence_refs")) && typeof v["instruction_id"] === "string" && SAFE_ID.test(v["instruction_id"]) && hashRef(v["requirement_hash"]) && ["done_when", "configured_check", "review_gate"].includes(String(v["verifier_kind"])) && runEvidenceRef(runId)(v["verifier_ref"]) && ["passed", "failed", "unobservable"].includes(String(v["result"])) && hashRef(v["verified_input_hash"]) && nonEmptyString(v["verification_input_ref"]) && arrayOf(v["evidence_refs"], runEvidenceRef(runId)),
-  "guild.outcome_record.v1": (v) => hasOnlyKeys(v, keysOf("kind", "result", "verified_input_hash", "reopen_transitions", "findings_complete", "unresolved_finding_ids")) && ["review", "verify"].includes(String(v["kind"])) && ["passed", "failed"].includes(String(v["result"])) && hashRef(v["verified_input_hash"]) && integerAtLeast(v["reopen_transitions"], 0) && typeof v["findings_complete"] === "boolean" && arrayOf(v["unresolved_finding_ids"], (id) => typeof id === "string" && SAFE_ID.test(id)),
+  "guild.outcome_record.v1": (v) => hasOnlyKeys(v, keysOf("kind", "result", "verified_input_hash", "reopen_transitions", "findings_complete", "unresolved_finding_ids")) && ["review", "verify"].includes(String(v["kind"])) && ["passed", "failed"].includes(String(v["result"])) && hashRef(v["verified_input_hash"]) && integerAtLeast(v["reopen_transitions"], 0) && typeof v["findings_complete"] === "boolean" && arrayOf(v["unresolved_finding_ids"], (id2) => typeof id2 === "string" && SAFE_ID.test(id2)),
   "guild.capability_evidence.v1": (v, runId) => hasOnlyKeys(v, keysOf("action_signature", "owner", "capability_kind", "target", "evidence_refs")) && typeof v["action_signature"] === "string" && /^\S{1,256}$/.test(v["action_signature"]) && (v["owner"] === "project" && String(v["capability_kind"]) in PROJECT_CAPABILITY_KINDS || v["owner"] === "plugin" && String(v["capability_kind"]) in PLUGIN_CAPABILITY_KINDS) && typeof v["target"] === "string" && SAFE_ID.test(v["target"]) && arrayOf(v["evidence_refs"], runEvidenceRef(runId)),
   "guild.lookup_result.v1": (v, runId) => hasOnlyKeys(v, keysOf("outcome", "result_ref")) && ["hit", "miss"].includes(String(v["outcome"])) && runEvidenceRef(runId)(v["result_ref"]),
   "guild.prompt_context.v1": (v) => hasOnlyKeys(v, keysOf("prompt_hash", "context_hash", "retry_authorized")) && nonEmptyString(v["prompt_hash"]) && hashRef(v["context_hash"]) && typeof v["retry_authorized"] === "boolean",
@@ -10524,10 +10526,10 @@ function detectClarification(ctx) {
     const timing = !declared || order === "uncorrelated" ? "unknown" : order === "action_first" ? "late" : "timely";
     pairs.push({ task_id: task, order, constraint: declared ? "declared" : "undeclared", timing });
     if (timing === "unknown") continue;
-    const evidence = [...group.refs, ...action?.refs ?? [], ctx.declaration.ref];
-    refs.push(...evidence);
+    const evidence2 = [...group.refs, ...action?.refs ?? [], ctx.declaration.ref];
+    refs.push(...evidence2);
     if (timing === "late") {
-      findings.push({ kind: "prompt_inefficiency", severity: "low", summary: `A required clarification for task ${task} was asked after the first substantive action.`, evidence_refs: sortedUnique(evidence), signature: `late-clarification:${task}` });
+      findings.push({ kind: "prompt_inefficiency", severity: "low", summary: `A required clarification for task ${task} was asked after the first substantive action.`, evidence_refs: sortedUnique(evidence2), signature: `late-clarification:${task}` });
     }
   }
   const count = (timing) => pairs.filter((pair) => pair.timing === timing).length;
@@ -10736,13 +10738,13 @@ function detectToolCoverage(ctx) {
     const key = toolActionKey(group);
     if (key !== null) attempts.set(key, [...attempts.get(key) ?? [], group]);
   }
-  const evidence = ctx.sidecars.filter((item) => item.schema === "guild.capability_evidence.v1");
+  const evidence2 = ctx.sidecars.filter((item) => item.schema === "guild.capability_evidence.v1");
   const candidates = [];
   const supported = [];
   const findings = [];
   const supportedOnly = [];
   const owned = /* @__PURE__ */ new Set();
-  for (const item of evidence) {
+  for (const item of evidence2) {
     const signature = String(item.value["action_signature"]);
     const groups = attempts.get(signature) ?? [];
     if (!groups.some((group) => group.refs.includes(item.carrier.ref))) continue;
@@ -11076,7 +11078,7 @@ function analyzeRun(root, runId) {
     instructionObservableRefs: instructionRefs,
     v1ViolationRefs: violationRefs
   };
-  const usage = tokenUsage(events);
+  const usage2 = tokenUsage(events);
   const availability = usageAvailability(events, groups, eligible);
   const instruction = detectInstructionFollowing(ctx);
   const proofs = instructionProofs(ctx);
@@ -11138,7 +11140,7 @@ function analyzeRun(root, runId) {
       workflow: eligible ? assessment(workflowRefs) : { status: "unobservable", evidence_refs: [] },
       tool_coverage: eligible ? assessment(toolRefs) : { status: "unobservable", evidence_refs: [] }
     },
-    usage: { ...usage, availability },
+    usage: { ...usage2, availability },
     findings: uniqueFindings,
     recommendations: recommendationsFor(analysisId, runId, uniqueFindings, eligible ? supported : []),
     diagnostics: {
@@ -11156,9 +11158,9 @@ function cachedCoreWellFormed(cached) {
   const count = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0;
   const assessments = asRecord(cached["assessments"]);
   const completeness = asRecord(cached["completeness"]);
-  const usage = asRecord(cached["usage"]);
-  const tokens = asRecord(usage["tokens"]);
-  const availability = asRecord(usage["availability"]);
+  const usage2 = asRecord(cached["usage"]);
+  const tokens = asRecord(usage2["tokens"]);
+  const availability = asRecord(usage2["availability"]);
   const identity = asRecord(cached["identity"]);
   const nullableString = (value) => value === null || nonEmptyString(value);
   return typeof cached["eligible"] === "boolean" && hasOnlyKeys(identity, /* @__PURE__ */ new Set(["run_scope", "initiative_id", "independent_group_id", "config_snapshot_ref", "host", "phase"])) && typeof identity["run_scope"] === "string" && ["initiative", "independent", "unknown"].includes(identity["run_scope"]) && nullableString(identity["initiative_id"]) && nullableString(identity["independent_group_id"]) && nullableString(identity["config_snapshot_ref"]) && nonEmptyString(identity["host"]) && nullableString(identity["phase"]) && arrayOf(cached["findings"], (item) => {
@@ -11167,7 +11169,7 @@ function cachedCoreWellFormed(cached) {
   }) && hasOnlyKeys(assessments, /* @__PURE__ */ new Set(["instruction_following", "prompt_efficiency", "workflow", "tool_coverage"])) && ["instruction_following", "prompt_efficiency", "workflow", "tool_coverage"].every((key) => {
     const item = asRecord(assessments[key]);
     return typeof item["status"] === "string" && ["satisfied", "violated", "ambiguous", "unobservable"].includes(item["status"]) && strings2(item["evidence_refs"]);
-  }) && typeof completeness["score"] === "number" && completeness["score"] >= 0 && completeness["score"] <= 100 && strings2(completeness["present"]) && strings2(completeness["missing"]) && count(usage["llm_event_count"]) && strings2(usage["specialists_dispatched"]) && count(usage["duration_ms"]) && ["input", "output", "cached", "total", "cost_usd"].every((key) => count(tokens[key])) && USAGE_METRICS.every((metric) => {
+  }) && typeof completeness["score"] === "number" && completeness["score"] >= 0 && completeness["score"] <= 100 && strings2(completeness["present"]) && strings2(completeness["missing"]) && count(usage2["llm_event_count"]) && strings2(usage2["specialists_dispatched"]) && count(usage2["duration_ms"]) && ["input", "output", "cached", "total", "cost_usd"].every((key) => count(tokens[key])) && USAGE_METRICS.every((metric) => {
     const item = asRecord(availability[metric]);
     return typeof item["state"] === "string" && ["complete", "partial", "unobserved"].includes(item["state"]) && strings2(item["evidence_refs"]);
   });
@@ -11266,10 +11268,10 @@ function detectorResultsWellFormed(value, dimension) {
     seen.add(item["detector"]);
     if (!dimension) return true;
     const byRun = item["by_run"];
-    return plainObject(byRun) && Object.keys(byRun).length === dimension.runIds.length && dimension.runIds.every((id) => {
-      const entry = byRun[id];
+    return plainObject(byRun) && Object.keys(byRun).length === dimension.runIds.length && dimension.runIds.every((id2) => {
+      const entry = byRun[id2];
       return plainObject(entry) && hasOnlyKeys(entry, /* @__PURE__ */ new Set(["state", "eligible", "value"])) && typeof entry["state"] === "string" && (DETECTOR_STATES.has(entry["state"]) || entry["state"] === "legacy_unknown") && typeof entry["eligible"] === "boolean" && plainObject(entry["value"]);
-    }) && arrayOf(item["comparable_runs"], (id) => typeof id === "string" && dimension.runIds.includes(id));
+    }) && arrayOf(item["comparable_runs"], (id2) => typeof id2 === "string" && dimension.runIds.includes(id2));
   });
 }
 function inspectRunArtifact(root, runId, base, raw) {
@@ -11332,27 +11334,27 @@ function inspectComparisonArtifact(root, comparisonId, base, raw) {
   if (schema !== "guild.run_comparison.v1") return { ...base, state: "unsupported", schema_version: typeof schema === "string" ? schema : null, reason: "unknown_core_schema" };
   const runIds = cached["run_ids"];
   const sourceHashes = cached["source_hashes"];
-  if (cached["comparison_id"] !== comparisonId || !arrayOf(runIds, (id) => typeof id === "string" && SAFE_ID.test(id)) || !arrayOf(sourceHashes, (hash) => typeof hash === "string" && SOURCE_HASH_FORMAT.test(hash)) || runIds.length < 2 || runIds.length !== sourceHashes.length || runIds.some((id, index, all) => index > 0 && all[index - 1].localeCompare(id) >= 0) || !Array.isArray(cached["recommendations"])) {
+  if (cached["comparison_id"] !== comparisonId || !arrayOf(runIds, (id2) => typeof id2 === "string" && SAFE_ID.test(id2)) || !arrayOf(sourceHashes, (hash2) => typeof hash2 === "string" && SOURCE_HASH_FORMAT.test(hash2)) || runIds.length < 2 || runIds.length !== sourceHashes.length || runIds.some((id2, index, all) => index > 0 && all[index - 1].localeCompare(id2) >= 0) || !Array.isArray(cached["recommendations"])) {
     inspectionRefusal("malformed_artifact");
   }
   const ids = runIds;
   const hashes = sourceHashes;
-  const material = ids.map((id, index) => `${id}:${hashes[index]}`).join("|");
+  const material = ids.map((id2, index) => `${id2}:${hashes[index]}`).join("|");
   if (stableId("comparison", material) !== comparisonId) inspectionRefusal("malformed_artifact");
   try {
     cached["recommendations"].forEach((item, index) => assertRecommendation(item, `recommendation ${index + 1}`));
   } catch {
     inspectionRefusal("malformed_artifact");
   }
-  const current = ids.map((id) => currentRunHashes(root, id));
-  const currentMaterial = current.every((item) => item !== null) ? ids.map((id, index) => `${id}:${current[index].sourceHash}`).join("|") : null;
+  const current = ids.map((id2) => currentRunHashes(root, id2));
+  const currentMaterial = current.every((item) => item !== null) ? ids.map((id2, index) => `${id2}:${current[index].sourceHash}`).join("|") : null;
   const recorded = {
     ...base,
     schema_version: schema,
     source_analysis_id: comparisonId,
     source_hash: sha2564(material),
     current_source_hash: currentMaterial === null ? null : sha2564(currentMaterial),
-    current_input_hash: currentMaterial === null ? null : comparisonRunsHash(ids.map((id, index) => ({ run_id: id, source_hash: current[index].sourceHash, input_hash: current[index].inputHash })))
+    current_input_hash: currentMaterial === null ? null : comparisonRunsHash(ids.map((id2, index) => ({ run_id: id2, source_hash: current[index].sourceHash, input_hash: current[index].inputHash })))
   };
   const diagnostics = cached["diagnostics"];
   if (diagnostics === void 0) return { ...recorded, state: "unsupported", reason: "legacy_diagnostics_missing" };
@@ -11494,7 +11496,7 @@ Average evidence completeness: **${comparison.completeness.average_score}%**
 
 ## Runs
 
-${comparison.run_ids.map((id) => `- ${id}`).join("\n")}
+${comparison.run_ids.map((id2) => `- ${id2}`).join("\n")}
 
 ## Repeated signatures
 
@@ -11553,7 +11555,7 @@ function writeRunComparison(root, comparison) {
 function discoverRunIds(root) {
   const runsDir = path18.join(durableGuildDir(root), "runs");
   try {
-    return fs15.readdirSync(runsDir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && SAFE_ID.test(entry.name)).map((entry) => entry.name).filter((id) => fs15.existsSync(path18.join(runsDir, id, "run.yaml"))).sort();
+    return fs15.readdirSync(runsDir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && SAFE_ID.test(entry.name)).map((entry) => entry.name).filter((id2) => fs15.existsSync(path18.join(runsDir, id2, "run.yaml"))).sort();
   } catch {
     return [];
   }
@@ -11561,8 +11563,8 @@ function discoverRunIds(root) {
 function resolveComparisonTarget(root, target) {
   if (target.kind !== "runs") assertSafeId(target.id, `${target.kind} id`);
   const discovered = target.kind === "runs" ? [...new Set(target.ids)].sort() : discoverRunIds(root);
-  const ids = target.kind === "runs" ? discovered : discovered.filter((id) => {
-    const dir = runDir(root, id);
+  const ids = target.kind === "runs" ? discovered : discovered.filter((id2) => {
+    const dir = runDir(root, id2);
     const manifest = resolveRunInputFile(dir, "run.yaml");
     const raw = manifest ? readText(manifest) : null;
     if (raw === null) return false;
@@ -11575,8 +11577,8 @@ function resolveComparisonTarget(root, target) {
       return false;
     }
   });
-  ids.forEach((id) => assertSafeId(id, "run id"));
-  const analyses = ids.map((id) => analyzeRun(root, id));
+  ids.forEach((id2) => assertSafeId(id2, "run id"));
+  const analyses = ids.map((id2) => analyzeRun(root, id2));
   if (target.kind === "initiative") {
     return analyses.filter((analysis) => analysis.identity.initiative_id === target.id);
   }
@@ -11862,6 +11864,635 @@ function updateRecommendationStatus(root, sourceId, recommendationId, status) {
   ], () => updateRecommendationStatusUnlocked(root, sourceId, recommendationId, status)));
 }
 
+// src/domains/security/safe-object.ts
+var PROTO_POISON_KEYS = sealSet(["__proto__", "prototype", "constructor"], "PROTO_POISON_KEYS");
+
+// src/domains/security/redact-log.ts
+var TOKEN_REDACTED = "[REDACTED_TOKEN]";
+var PATH_REDACTED = "[REDACTED]";
+var KV_REDACTED = "[REDACTED]";
+var FIELD_SIZE_CAP_BYTES = 4 * 1024;
+var TOKEN_SHAPE_PATTERNS = Object.freeze([
+  Object.freeze(/Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g),
+  Object.freeze(/\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g),
+  Object.freeze(/\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g),
+  Object.freeze(/\bghp_[A-Za-z0-9]{36}\b/g),
+  Object.freeze(/\bgh[suor]_[A-Za-z0-9]{36}\b/g),
+  Object.freeze(/\bgithub_pat_[A-Za-z0-9_]{82}\b/g),
+  Object.freeze(/\bxox[bp]-[A-Za-z0-9-]{10,}/g),
+  Object.freeze(/\bAKIA[0-9A-Z]{16}\b/g),
+  Object.freeze(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g)
+]);
+function redactTokenShapes(input) {
+  let out = input;
+  for (const re of TOKEN_SHAPE_PATTERNS) {
+    out = out.replace(new RegExp(re.source, re.flags), TOKEN_REDACTED);
+  }
+  return out;
+}
+var SENSITIVE_HOME_DIRS = Object.freeze([
+  ".claude",
+  ".codex",
+  ".ssh",
+  ".aws",
+  ".gnupg"
+]);
+var HOME_DIR_PATTERN = /(~|\/Users\/[^/\s]+|\/home\/[^/\s]+)\/(\.claude|\.codex|\.ssh|\.aws|\.gnupg)\/[^\s'"]+/g;
+function redactHomeDirPaths(input) {
+  return input.replace(HOME_DIR_PATTERN, (_match, root, dir) => {
+    return `${root}/${dir}/${PATH_REDACTED}`;
+  });
+}
+var KV_SECRET_PATTERN = /\b(password|token|api[_-]?key|secret|authorization|bearer)(\s*[:=]\s*)(\S+)/gi;
+function redactKeyValueSecrets(input) {
+  return input.replace(
+    KV_SECRET_PATTERN,
+    (_match, key, sep6) => `${key}${sep6}${KV_REDACTED}`
+  );
+}
+var REDACTABLE_FIELD_NAMES = Object.freeze([
+  "command_redacted",
+  "result_excerpt_redacted",
+  "payload_excerpt_redacted",
+  "prompt_excerpt",
+  "assumption_text",
+  "result"
+]);
+var REDACTABLE_FIELDS = sealSet(REDACTABLE_FIELD_NAMES, "REDACTABLE_FIELDS");
+
+// src/domains/security/events.ts
+var SECURITY_EVENT_TYPES = Object.freeze([
+  "capability_scope_violation",
+  "capability_scope_degrade",
+  "bypass_permission_allowed",
+  "mcp_description_mismatch",
+  "mcp_description_unverifiable",
+  "mcp_description_unpinned",
+  "secret_scrub_failure",
+  "injection_attempt_detected",
+  "secret_scrub_blocked",
+  "recall_quarantine",
+  "dispatch_attribution_missing",
+  "backend_degradation",
+  "tier_dispatch_untiered",
+  "harvest_promoted",
+  "harvest_refused",
+  "playbook_auto_replace",
+  "wiki_cas_conflict",
+  "harvest_reverted",
+  "lane_wiki_write_refused",
+  "queue_drain_refused"
+]);
+var KNOWN_GUILD_HOST_KINDS = Object.freeze([
+  "claude-code-cli",
+  "codex-cli",
+  "pi-cli",
+  "antigravity-cli",
+  "agents-file",
+  "claude-code-app",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector"
+]);
+var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
+
+// src/domains/security/secret-patterns.ts
+var SECRET_PATTERNS = Object.freeze([
+  // NOTE: labels deliberately drop the `=` so the redaction replacement
+  // (e.g. `<REDACTED:password-assignment>`) cannot itself re-match the pattern
+  // on a subsequent scrub pass. Idempotency depends on this — every label below
+  // is checked against every pattern above it, and none re-matches.
+  Object.freeze([Object.freeze(/password\s*=\s*["']?[^\s"']{6,}/), "password-assignment"]),
+  Object.freeze([Object.freeze(/api_key\s*=\s*["']?[^\s"']{6,}/i), "api_key-assignment"]),
+  Object.freeze([Object.freeze(/secret\s*=\s*["']?[^\s"']{8,}/i), "secret-assignment"]),
+  Object.freeze([Object.freeze(/AKIA[0-9A-Z]{16}/), "AWS access key"]),
+  Object.freeze([Object.freeze(/AIza[0-9A-Za-z_-]{35}/), "GCP API key"]),
+  Object.freeze([Object.freeze(/ghp_[0-9A-Za-z]{36}/), "GitHub personal access token"]),
+  Object.freeze([Object.freeze(/ghs_[0-9A-Za-z]{36}/), "GitHub server token"]),
+  Object.freeze([Object.freeze(/-----BEGIN (?:RSA |EC )?PRIVATE KEY/), "PEM private key block"]),
+  // ── Provider credential / bearer-token forms (T6B-R1-B1) ─────────────────
+  // Round-1 review proved the list above blind to the shapes an inspection
+  // surface is most likely to echo out of a persisted artifact: an
+  // `Authorization: Bearer …` header, a `sk-…` provider key, and the
+  // `<something>_token = …` assignment family. A display surface that renders
+  // a persisted evidence string verbatim leaked all three past the applier.
+  //
+  // Every pattern is anchored on the CREDENTIAL PREFIX (not on entropy) so it
+  // stays specific, and each replacement label is inert against every pattern
+  // in this list (no whitespace/`:`/`=` follows the trigger word in a label),
+  // which is what keeps `redact` idempotent.
+  Object.freeze([Object.freeze(/\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i), "bearer-token"]),
+  Object.freeze([Object.freeze(/\bauthorization\s*:\s*["']?[A-Za-z0-9._~+/=-]{12,}/i), "authorization-header"]),
+  Object.freeze([Object.freeze(/\b(?:auth|access|refresh|id|api|bearer|session)[-_]?token\s*[:=]\s*["']?[^\s"',]{8,}/i), "token-assignment"]),
+  // OpenAI/Anthropic-style provider keys: sk-…, sk-proj-…, sk-ant-….
+  Object.freeze([Object.freeze(/\bsk-[A-Za-z0-9_-]{12,}/), "provider-api-key"]),
+  Object.freeze([Object.freeze(/\bxox[abprs]-[A-Za-z0-9-]{10,}/), "Slack token"]),
+  Object.freeze([Object.freeze(/\bgh[uor]_[0-9A-Za-z]{36}/), "GitHub token"]),
+  Object.freeze([Object.freeze(/\bglpat-[0-9A-Za-z_-]{20}/), "GitLab personal access token"]),
+  Object.freeze([Object.freeze(/\bnpm_[0-9A-Za-z]{36}/), "npm token"]),
+  Object.freeze([Object.freeze(/\bhf_[0-9A-Za-z]{34}/), "HuggingFace token"]),
+  // ── Personally identifying forms retained by public evidence projections ─
+  // Task objectives and handoff prose are operator-authored and can contain
+  // direct contact details or tenant identifiers. Those artifacts are copied
+  // into migration evidence, so the share scrubber must recognize them before
+  // publication. Keep the patterns prefix-shaped and their labels inert so the
+  // redaction remains deterministic and idempotent.
+  Object.freeze([Object.freeze(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i), "email-address"]),
+  Object.freeze([Object.freeze(/\b(?:acct|cus|cust|usr)_[A-Za-z0-9][A-Za-z0-9_-]{4,}\b/i), "customer-identifier"]),
+  Object.freeze([Object.freeze(/\b(?:customer|account|user)[_-]?id\s*[:=]\s*["']?[A-Za-z0-9][A-Za-z0-9._-]{3,}/i), "customer-identifier"]),
+  // High-entropy string heuristic: 40+ hex chars (SHA-like)
+  Object.freeze([Object.freeze(/\b[0-9a-f]{40,}\b/), "high-entropy hex string (potential secret)"])
+]);
+
+// src/domains/security/share-set.ts
+var path19 = __toESM(require("path"));
+var SHARED_SCRUBBED_NAMES = sealSet([
+  "verify.md",
+  "review.md",
+  "provenance.json",
+  "summary.md",
+  "run.yaml",
+  "run-state.json"
+], "SHARED_SCRUBBED_NAMES");
+var CANONICAL_RUN_LOG = path19.join("logs", "v1.4-events.jsonl");
+
+// src/domains/security/prose-scrub.ts
+var PROSE_SECRET_LABELS = /* @__PURE__ */ new Set([
+  "password-assignment",
+  "api_key-assignment",
+  "secret-assignment",
+  "AWS access key",
+  "GCP API key",
+  "GitHub personal access token",
+  "GitHub server token",
+  "PEM private key block",
+  "bearer-token",
+  "provider-api-key",
+  "Slack token",
+  "GitHub token",
+  "GitLab personal access token",
+  "npm token",
+  "HuggingFace token"
+]);
+var TOKEN_SHAPE_EXTRAS = [
+  ["\\bgithub_pat_", "GitHub fine-grained token"],
+  ["\\beyJ", "JWT"]
+];
+var PROSE_CREDENTIAL_PATTERNS = deepFreeze([
+  // The canonical password form is case-sensitive; prose also catches `PASSWORD=`.
+  ...SECRET_PATTERNS.filter(([, label]) => PROSE_SECRET_LABELS.has(label)).map(
+    ([re, label]) => re.flags.includes("i") ? [re, label] : Object.freeze([new RegExp(re.source, re.flags + "i"), label])
+  ),
+  ...TOKEN_SHAPE_EXTRAS.flatMap(
+    ([prefix, label]) => TOKEN_SHAPE_PATTERNS.filter((re) => re.source.startsWith(prefix)).map(
+      (re) => Object.freeze([re, label])
+    )
+  )
+]);
+var PROSE_WRITE_TOOLS = sealSet(["Write", "Edit", "MultiEdit"]);
+
+// src/domains/security/scrub-redact.ts
+var OPERATOR_PATH_RE = /\/Users\/[^/\s]+\/Projects\/[^/\s]+/g;
+var WORKSPACE_ROOT_MARKER = "<workspace-root>";
+var TILDE_CLAUDE_PROJECT_RE = /~\/\.claude\/projects\/-Users-[^/\s]+-Projects-[^/\s]+/g;
+var OPERATOR_MEMORY_ROOT_MARKER = "<operator-memory-root>";
+var PRIVATE_HOME_PATH_RE = /\/(?:Users|home)\/[A-Za-z0-9._-]+(?=[/\s"',:;)\]}]|$)/g;
+var PRIVATE_HOME_MARKER = "<private-home>";
+function redact(content) {
+  let opPaths = 0;
+  let out = content.replace(OPERATOR_PATH_RE, () => {
+    opPaths++;
+    return WORKSPACE_ROOT_MARKER;
+  });
+  out = out.replace(TILDE_CLAUDE_PROJECT_RE, () => {
+    opPaths++;
+    return OPERATOR_MEMORY_ROOT_MARKER;
+  });
+  out = out.replace(PRIVATE_HOME_PATH_RE, () => {
+    opPaths++;
+    return PRIVATE_HOME_MARKER;
+  });
+  const secrets = [];
+  const lines = out.split("\n");
+  out = lines.map((line, i) => {
+    let l = line;
+    for (const [re, label] of SECRET_PATTERNS) {
+      const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+      if (g.test(l)) {
+        secrets.push({ category: label, line: i + 1 });
+        l = l.replace(
+          new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g"),
+          `<SECRET-REDACTED:${label}>`
+        );
+      }
+    }
+    return l;
+  }).join("\n");
+  return { out, opPaths, secrets };
+}
+
+// src/domains/telemetry/trace-analysis-v3.ts
+var TRACE_ANALYSIS_V3_SCHEMA = "guild.trace.analysis.v3";
+var TRACE_EVENT_CLASSES = Object.freeze([
+  "prompt",
+  "dispatch",
+  "request_started",
+  "request_completed",
+  "handoff",
+  "phase",
+  "obligation",
+  "transfer",
+  "knowledge",
+  "retrieval",
+  "loss"
+]);
+var TRACE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+var HASH_RE = /^sha256:[a-f0-9]{64}$/;
+var TIME_RE = /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:[Zz]|[+-](\d{2}):(\d{2}))$/;
+var REL_PATH_RE = /^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*[\\%\x00-\x1f])[^:]+$/u;
+var own2 = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+var isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+var fail = (errs, at, msg) => {
+  errs.push(`${at}: ${msg}`);
+};
+var cpLength = (s) => [...s].length;
+function isRfc3339(v) {
+  const m = TIME_RE.exec(v);
+  if (!m) return false;
+  const [y, mo, d, h, mi, s] = m.slice(1, 7).map(Number);
+  const daysIn = [31, y % 4 === 0 && y % 100 !== 0 || y % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (mo < 1 || mo > 12 || d < 1 || d > daysIn[mo - 1] || h > 23 || mi > 59 || s > 59) return false;
+  if (m[7] !== void 0 && (Number(m[7]) > 23 || Number(m[8]) > 59)) return false;
+  return true;
+}
+var id = (v, at, e) => {
+  if (typeof v !== "string" || !TRACE_ID_RE.test(v)) fail(e, at, "not an id");
+};
+var hash = (v, at, e) => {
+  if (typeof v !== "string" || !HASH_RE.test(v)) fail(e, at, "not a sha256 hash");
+};
+var time = (v, at, e) => {
+  if (typeof v !== "string" || !isRfc3339(v)) fail(e, at, "not a date-time");
+};
+var str = (v, at, e) => {
+  if (typeof v !== "string" || cpLength(v) < 1 || cpLength(v) > 4096) fail(e, at, "not a bounded string");
+};
+var int0 = (v, at, e) => {
+  if (typeof v !== "number" || !Number.isInteger(v) || v < 0) fail(e, at, "not a non-negative integer");
+};
+var num0 = (v, at, e) => {
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0) fail(e, at, "not a non-negative number");
+};
+var bool = (v, at, e) => {
+  if (typeof v !== "boolean") fail(e, at, "not a boolean");
+};
+var konst = (c) => (v, at, e) => {
+  if (v !== c) fail(e, at, `must equal ${c}`);
+};
+var oneOf = (...vals) => (v, at, e) => {
+  if (typeof v !== "string" || !vals.includes(v)) fail(e, at, `not one of ${vals.join("|")}`);
+};
+var nullable = (c) => (v, at, e) => {
+  if (v !== null) c(v, at, e);
+};
+var relPath = (v, at, e) => {
+  if (typeof v !== "string" || cpLength(v) < 1 || cpLength(v) > 1024 || !REL_PATH_RE.test(v)) fail(e, at, "not a contained relative path");
+};
+var array = (item, max) => (v, at, e) => {
+  if (!Array.isArray(v)) return fail(e, at, "not an array");
+  if (v.length > max) fail(e, at, `more than ${max} items`);
+  for (let i = 0; i < v.length; i++) item(v[i], `${at}[${i}]`, e);
+};
+var object = (shape2) => (v, at, e) => {
+  if (!isObj(v)) return fail(e, at, "not an object");
+  for (const k of Object.keys(v)) if (!own2(shape2, k)) fail(e, `${at}.${k}`, "unknown field");
+  for (const k of Object.keys(shape2)) {
+    if (!own2(v, k)) fail(e, `${at}.${k}`, "required");
+    else shape2[k](v[k], `${at}.${k}`, e);
+  }
+};
+var evidence = object({
+  source_id: id,
+  path: relPath,
+  sha256: hash,
+  schema_version: str,
+  observed_at: time,
+  availability: oneOf("available", "expired", "redacted", "missing", "unsupported"),
+  reason: nullable(str)
+});
+var coverage = object({
+  eligible: nullable(int0),
+  covered: int0,
+  excluded: int0,
+  missing: nullable(int0),
+  state: oneOf("complete", "partial", "unavailable"),
+  reason: nullable(str),
+  exclusion_reasons: array(object({ code: id, count: int0 }), 100)
+});
+var lineage = object({
+  source_id: id,
+  run_id: id,
+  execution_id: id,
+  host_session_id: nullable(id),
+  initiative_id: nullable(id),
+  goal_id: nullable(id),
+  logical_task_id: nullable(id),
+  attempt_id: nullable(id),
+  agent_instance_id: nullable(id),
+  request_id: nullable(id)
+});
+var pins = object({ assignment: hash, definition: hash, configuration: hash, workflow: hash, policy: hash });
+var interval = object({
+  start: time,
+  end: nullable(time),
+  duration_ms: nullable(num0),
+  clock: object({ domain: id, basis: oneOf("controller", "local_monotonic", "provider", "unknown"), comparable: bool, skew_bound_ms: nullable(num0) })
+});
+var usage = object({
+  granularity: oneOf("leaf_request", "native_session"),
+  observation_id: id,
+  revision: int0,
+  final: bool,
+  accounting_identity: id,
+  parent_accounting_identity: nullable(id),
+  inclusion: oneOf("leaf_exclusive", "parent_inclusive", "session_cumulative"),
+  input_inclusive: nullable(int0),
+  output: nullable(int0),
+  cache_read_subset: nullable(int0),
+  cache_write_subset: nullable(int0),
+  total: nullable(int0),
+  cost_usd: nullable(num0),
+  cost_basis: oneOf("measured", "derived_estimate", "native_estimate", "unavailable"),
+  currency: konst("USD"),
+  pricing_version: nullable(str),
+  usage_semantics: oneOf("inclusive_input_cache_subset.v1", "provider_session_only.v1", "unknown"),
+  coverage,
+  native_baseline_usd: nullable(num0),
+  native_cumulative_usd: nullable(num0)
+});
+var shape = object({
+  schema_version: konst(TRACE_ANALYSIS_V3_SCHEMA),
+  event_id: id,
+  sequence: int0,
+  event_class: oneOf(...TRACE_EVENT_CLASSES),
+  at: time,
+  lineage,
+  operation_id: nullable(id),
+  component_invocation_id: nullable(id),
+  actor_id: id,
+  pins,
+  requested_model: nullable(str),
+  observed_identity: object({ provider: nullable(str), model: nullable(str), status: oneOf("observed", "unavailable"), reason: nullable(str) }),
+  usage: nullable(usage),
+  payload_ref: nullable(evidence),
+  prompt_hash: nullable(hash),
+  redaction_version: str,
+  capture: coverage,
+  interval: nullable(interval)
+});
+var TRACE_V3_CHECKS = Object.freeze({ id, hash, time, str, int0, num0, bool, konst, oneOf, nullable, relPath, array, object, evidence, coverage, usage });
+
+// src/domains/telemetry/trace-capture-v3.ts
+var TRACE_CAPTURE_LIMITS = Object.freeze({
+  max_host_event_bytes: 256 * 1024,
+  max_sidecar_bytes: 32 * 1024,
+  max_trace_events: 1e5,
+  max_json_depth: 16,
+  lock_wait_ms: 2e3,
+  stale_lock_ms: 3e4
+});
+var DISPATCH_CAPTURE_PATHS = Object.freeze(["agent", "cmux", "tmux", "remote", "task_cell", "stack_launch", "unknown"]);
+var isObj2 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+var SENSITIVE_KEY_SRC = "(?:[A-Za-z0-9]+[_-])*(?:password|passwd|passphrase|secret|api[_-]?key|apikey|token|authorization|credential|credentials|private[_-]?key|client[_-]?secret|cookie|reasoning|thinking|chain[_-]?of[_-]?thought|redacted[_-]?thinking|encrypted[_-]?reasoning)(?:[_-][A-Za-z0-9]+)*";
+var CREDENTIAL_KEY_RE = new RegExp(`^${SENSITIVE_KEY_SRC}$`, "i");
+var QUOTED_KEY_RE = new RegExp(`(["'])(${SENSITIVE_KEY_SRC})\\1\\s*:\\s*`, "gi");
+var REDACTED_VALUE = '"[REDACTED]"';
+var MAX_CONTENT_DEPTH = 64;
+function valueEnd(s, i) {
+  const c = s[i];
+  if (c === '"' || c === "'") {
+    for (let j2 = i + 1; j2 < s.length; j2++) {
+      if (s[j2] === "\\") j2++;
+      else if (s[j2] === c) return j2 + 1;
+    }
+    return s.length;
+  }
+  if (c === "{" || c === "[") {
+    let depth = 0;
+    let quote = null;
+    for (let j2 = i; j2 < s.length; j2++) {
+      const ch = s[j2];
+      if (quote) {
+        if (ch === "\\") j2++;
+        else if (ch === quote) quote = null;
+      } else if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === "{" || ch === "[") depth++;
+      else if ((ch === "}" || ch === "]") && --depth === 0) return j2 + 1;
+    }
+    return s.length;
+  }
+  let j = i;
+  while (j < s.length && !/[,}\]\s]/.test(s[j])) j++;
+  return j;
+}
+var UNQUOTED_KEY_RE = new RegExp(`\\b(${SENSITIVE_KEY_SRC})\\s*[:=]\\s*(?=[{\\["'])`, "gi");
+function redactQuotedKeys(s) {
+  return redactValuesAfter(redactValuesAfter(s, QUOTED_KEY_RE), UNQUOTED_KEY_RE);
+}
+function redactValuesAfter(s, keyRe) {
+  const re = new RegExp(keyRe.source, keyRe.flags);
+  let out = "";
+  let last = 0;
+  let m;
+  while (m = re.exec(s)) {
+    const start = m.index + m[0].length;
+    if (start >= s.length || s.startsWith(REDACTED_VALUE, start)) continue;
+    const end = valueEnd(s, start);
+    if (end === start) continue;
+    out += s.slice(last, start) + REDACTED_VALUE;
+    last = end;
+    re.lastIndex = end;
+  }
+  return out + s.slice(last);
+}
+function bracketDepth(s) {
+  let depth = 0;
+  let max = 0;
+  let quote = null;
+  for (let j = 0; j < s.length; j++) {
+    const ch = s[j];
+    if (quote) {
+      if (ch === "\\") j++;
+      else if (ch === quote) quote = null;
+    } else if (ch === '"') quote = ch;
+    else if (ch === "{" || ch === "[") max = Math.max(max, ++depth);
+    else if (ch === "}" || ch === "]") depth--;
+  }
+  return max;
+}
+function redactStructured(s, privateLiterals, level) {
+  const t = s.trim();
+  if (!(t.startsWith("{") || t.startsWith("[")) || bracketDepth(t) > MAX_CONTENT_DEPTH) return s;
+  let doc;
+  try {
+    doc = JSON.parse(t);
+  } catch {
+    return s;
+  }
+  let changed = false;
+  const walk = (v) => {
+    if (typeof v === "string") {
+      const x = scrubOnce(v, privateLiterals, level + 1);
+      if (x !== v) changed = true;
+      return x;
+    }
+    if (Array.isArray(v)) return v.map(walk);
+    if (!isObj2(v)) return v;
+    const out = {};
+    for (const [k, x] of Object.entries(v)) {
+      const key = scrubOnce(k, privateLiterals, MAX_SERIALIZED_LEVELS);
+      if (key !== k) changed = true;
+      if (CREDENTIAL_KEY_RE.test(k) && x !== "[REDACTED]" && x !== null) {
+        changed = true;
+        out[key] = "[REDACTED]";
+      } else out[key] = walk(x);
+    }
+    return out;
+  };
+  const red = walk(doc);
+  return changed ? JSON.stringify(red) : s;
+}
+var MAX_SERIALIZED_LEVELS = 3;
+var PEM_PRIVATE_KEY_BLOCK_RE = /-----BEGIN ([A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?)-----[\s\S]*?(?:-----END \1-----|$)/gi;
+var PEM_REDACTED = "<PEM-PRIVATE-KEY-REDACTED>";
+var TooDeepToInspect = class extends Error {
+};
+var parsesAsJsonCompound = (s) => {
+  const t = s.trim();
+  if (!(t.startsWith("{") || t.startsWith("["))) return false;
+  if (bracketDepth(t) > MAX_CONTENT_DEPTH) return true;
+  try {
+    return typeof JSON.parse(t) === "object";
+  } catch {
+    return false;
+  }
+};
+var nextOpen = (s, from) => {
+  const a = s.indexOf("{", from);
+  const b = s.indexOf("[", from);
+  return a === -1 ? b : b === -1 ? a : Math.min(a, b);
+};
+var MAX_EMBEDDED_FRAGMENTS = 1e3;
+function containsJsonCompound(s) {
+  if (parsesAsJsonCompound(s)) return true;
+  let seen = 0;
+  for (let i = nextOpen(s, 0); i !== -1; i = nextOpen(s, i + 1), seen++) {
+    if (seen >= MAX_EMBEDDED_FRAGMENTS) return true;
+    if (parsesAsJsonCompound(s.slice(i, valueEnd(s, i)))) return true;
+  }
+  return false;
+}
+function redactEmbeddedJson(s, privateLiterals, level) {
+  let out = "";
+  let last = 0;
+  let seen = 0;
+  for (let i = nextOpen(s, 0); i !== -1; i = nextOpen(s, i + 1)) {
+    if (i < last) continue;
+    if (seen >= MAX_EMBEDDED_FRAGMENTS) throw new TooDeepToInspect();
+    const end = valueEnd(s, i);
+    const seg = s.slice(i, end);
+    seen++;
+    const red = redactStructured(seg, privateLiterals, level);
+    if (red !== seg) {
+      out += s.slice(last, i) + red;
+      last = end;
+      i = end - 1;
+    }
+  }
+  return out + s.slice(last);
+}
+function scrubOnce(s, privateLiterals, level = 0) {
+  if (level >= MAX_SERIALIZED_LEVELS && containsJsonCompound(s)) throw new TooDeepToInspect();
+  let out = s;
+  if (level < MAX_SERIALIZED_LEVELS) {
+    const t = s.trim();
+    out = t.startsWith("{") || t.startsWith("[") ? redactStructured(s, privateLiterals, level) : s;
+    if (out === s) out = redactEmbeddedJson(s, privateLiterals, level);
+  }
+  out = out.replace(PEM_PRIVATE_KEY_BLOCK_RE, PEM_REDACTED);
+  out = redactQuotedKeys(out);
+  out = redact(out).out;
+  out = redactTokenShapes(out);
+  out = redactKeyValueSecrets(out);
+  out = redactHomeDirPaths(out);
+  for (const lit of privateLiterals) if (lit.length > 0) out = out.split(lit).join("<PRIVATE-REDACTED>");
+  return out;
+}
+function scrub(s, privateLiterals) {
+  let cur = s;
+  try {
+    for (let i = 0; i < 4; i++) {
+      const next = scrubOnce(cur, privateLiterals);
+      if (next === cur) return cur;
+      cur = next;
+    }
+  } catch (error) {
+    if (error instanceof TooDeepToInspect) return null;
+    throw error;
+  }
+  return null;
+}
+function traceStringIsUnsafe(s, privateLiterals) {
+  try {
+    return scrubOnce(s, privateLiterals) !== s;
+  } catch (error) {
+    if (error instanceof TooDeepToInspect) return true;
+    throw error;
+  }
+}
+var encodedBytes = (s) => Buffer.byteLength(JSON.stringify(s), "utf8") - 2;
+function truncateUtf8(s, maxBytes) {
+  if (encodedBytes(s) <= maxBytes) return s;
+  let bytes = 0;
+  let out = "";
+  for (const ch of s) {
+    const n = encodedBytes(ch);
+    if (bytes + n > maxBytes) break;
+    bytes += n;
+    out += ch;
+  }
+  return out;
+}
+function cutLiteralPrefixTail(s, privateLiterals) {
+  for (const lit of privateLiterals) {
+    for (let k = lit.length - 1; k >= 4; k--) if (s.endsWith(lit.slice(0, k))) return s.slice(0, s.length - k);
+  }
+  return s;
+}
+function scrubPayload(raw, maxBytes, privateLiterals) {
+  const original_bytes = Buffer.byteLength(raw, "utf8");
+  if (bracketDepth(raw) > MAX_CONTENT_DEPTH) return null;
+  let cur = scrub(raw, privateLiterals);
+  if (cur === null) return null;
+  const redacted = cur !== raw;
+  let truncated = false;
+  for (let i = 0; i < 3 && encodedBytes(cur) > maxBytes; i++) {
+    truncated = true;
+    const cut = cutLiteralPrefixTail(truncateUtf8(cur, maxBytes), privateLiterals);
+    cur = scrub(cut, privateLiterals);
+    if (cur === null) return null;
+  }
+  if (encodedBytes(cur) > maxBytes) return null;
+  return { content: cur, truncated, redacted, original_bytes };
+}
+function scrubTraceText(raw, maxBytes, privateLiterals = []) {
+  return scrubPayload(raw, maxBytes, privateLiterals);
+}
+var USAGE_FAMILY_BY_HOST = Object.freeze({
+  claude: "anthropic_messages",
+  codex: "openai_responses"
+});
+
 // src/domains/telemetry/index.ts
 var MODULE_PUBLIC_API_VERSION = "guild.module.public-api.v1";
 // Annotate the CommonJS export names for ESM import in node:
@@ -11933,10 +12564,12 @@ var MODULE_PUBLIC_API_VERSION = "guild.module.public-api.v1";
   resolveJournalIdentity,
   routeRecommendation,
   scanReceiptJournal,
+  scrubTraceText,
   sealReceiptRecord,
   summarizeTaskCellTelemetry,
   toolActionSignature,
   toolDenialSignature,
+  traceStringIsUnsafe,
   updateRecommendationStatus,
   validateAnalysisTraceEvent,
   validateConfigResolutionEvent,

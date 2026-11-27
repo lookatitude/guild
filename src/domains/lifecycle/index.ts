@@ -280,6 +280,32 @@ export const stackContractBundle = deepFreezeStack(stackContractBundleJson);
 export { loadInitiativeManifest, buildD8Input, checkInitiativeEvidenceRefs, type InitiativeEvidenceCheck, type LoadedManifest, type BuiltD8Input } from "./initiative-evidence";
 export const stackP05Schemas = deepFreezeStack(stackP05SchemasJson);
 
-export * from "./managed-run";
+// recoverManagedSegmentSeal stays domain-internal (no consumer outside lifecycle).
+export {
+  managedLaunchHash,
+  readManagedAttempt,
+  claimManagedAttempt,
+  reconcileManagedAttempt,
+  assertManagedBudgetAdmission,
+  managedNonceMatches,
+  runManagedWorker,
+  prepareManagedWorker,
+  readManagedWorkerRequest,
+  recordManagedWorkerAcceptance,
+  readManagedWorkerAcceptance,
+  markManagedAttemptUncertain,
+  type ManagedAttemptInput,
+  type ManagedAttemptIdentity,
+  type ManagedAttemptClaim,
+  type ManagedUsageObservation,
+  type ManagedRunOutcome,
+  type ManagedLaunchSpec,
+  type ManagedOwnedProcess,
+  type ManagedProcessPort,
+  type ManagedControlPort,
+  type ManagedWorkerPackage,
+  type ManagedWorkerRequest,
+  type ManagedWorkerAcceptance,
+} from "./managed-run";
 
 export const stackManagedSchemas = deepFreezeStack(stackManagedSchemasJson);

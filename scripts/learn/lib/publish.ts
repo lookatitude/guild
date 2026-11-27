@@ -23,7 +23,9 @@ import {
   type PublicationArtifacts,
   type PublishResult,
 } from "../../../src/domains/knowledge/publication";
+import { decisionPublicationRefs } from "../../../src/domains/knowledge/decision-propagation";
 import { basisDigest, sourceWorktreeId, type SourceBasis } from "../../../src/domains/knowledge/source-basis";
+import { deepFreeze } from "../../../src/domains/kernel/sealed-collections";
 import { computeLearnSourceBasis } from "./paths";
 import { STRUCTURAL_EXTRACTOR, structuralSubset } from "./structural";
 import type { GraphEdge, GraphNode } from "./schema";
@@ -270,6 +272,8 @@ function publishBuilt(
         ? (dest, next) => structuralLoss(parse(dest?.[GRAPH_ARTIFACT]), parse(next[GRAPH_ARTIFACT]))
         : undefined,
     exports: [GRAPH_ARTIFACT, RECALL_ARTIFACT],
+    // K04: the owner's decision refs and replan signals ride on every generation.
+    decisions: () => decisionPublicationRefs(path.dirname(t.indexesDir)),
     lockTimeoutMs: opts.lockTimeoutMs,
   });
 }
@@ -394,7 +398,7 @@ export function runGraphStage<G extends object>(
  * writes something is listed with what it writes. The inventory test fails on a
  * writer missing from both lists.
  */
-export const PUBLICATION_WRITERS: ReadonlyArray<{ file: string; channels: readonly LayerChannel[]; rebase: boolean }> = Object.freeze([
+export const PUBLICATION_WRITERS: ReadonlyArray<{ file: string; channels: readonly LayerChannel[]; rebase: boolean }> = deepFreeze([
   { file: "scripts/learn/extract-structural.ts", channels: ["structural_graph"], rebase: true },
   { file: "scripts/learn/resolve-calls.ts", channels: ["structural_graph"], rebase: true },
   { file: "scripts/learn/assign-layers.ts", channels: ["semantic_graph"], rebase: true },
@@ -406,7 +410,7 @@ export const PUBLICATION_WRITERS: ReadonlyArray<{ file: string; channels: readon
   { file: "scripts/learn/write-knowledge-links.ts", channels: ["recall"], rebase: false },
 ]);
 
-export const NON_LAYER_WRITERS: ReadonlyArray<{ file: string; writes: string }> = Object.freeze([
+export const NON_LAYER_WRITERS: ReadonlyArray<{ file: string; writes: string }> = deepFreeze([
   { file: "scripts/learn/lib/publish.ts", writes: "explicit --in/--out stage targets (not published)" },
   { file: "scripts/learn/lib/paths.ts", writes: "writeJson helper; no artifact path of its own" },
   { file: "src/domains/knowledge/publication.ts", writes: "the generation store and legacy exports" },

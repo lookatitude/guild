@@ -23,6 +23,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { checkContained, isRefused, prepareContainedWrite } from "../kernel";
+import type { DecisionPublicationRefs, EntityRef } from "./decision-propagation";
 import { basisDigest, freshnessFor, type ChannelState, type InventoryEntry, type PublicationBasis, type Sha256 } from "./source-basis";
 
 export type { Sha256 } from "./source-basis";
@@ -70,7 +71,8 @@ interface Evidence {
 }
 
 export interface ChannelRecord {
-  channel: LayerChannel;
+  /** `project_memory` is K04's decision-dependent memory state; it has no artifact (`output: null`). */
+  channel: LayerChannel | "project_memory";
   state: ChannelState;
   basis_hash: Sha256;
   layer_hash: Sha256;
@@ -93,8 +95,8 @@ export interface KnowledgePublicationRecord {
   destination_layer_digest: Sha256;
   manifest: Evidence;
   channels: ChannelRecord[];
-  decision_refs: never[];
-  replan_required: never[];
+  decision_refs: EntityRef[];
+  replan_required: EntityRef[];
 }
 
 export interface GenerationManifest {
@@ -107,6 +109,8 @@ export interface GenerationManifest {
   source_basis: { basis: PublicationBasis; source_basis_hash: Sha256; inventory: InventoryEntry[] };
   /** Artifacts copied to `indexes/<name>` for legacy readers. */
   exports: string[];
+  /** K04: decision refs bound into the generation id, so a reused generation cannot carry stale ones. */
+  decisions?: DecisionPublicationRefs;
 }
 
 export interface PinnedGeneration {
@@ -152,6 +156,11 @@ export interface PublishJob {
   preserve?: (destination: PublicationArtifacts | null, next: PublicationArtifacts) => string | null;
   /** Artifacts to mirror at `indexes/<name>` after the pointer moves. */
   exports?: string[];
+  /**
+   * K04: the owner's decision refs, read under the lock. Throwing refuses the
+   * publication (`invalid`): a record must not claim "no replan" it cannot prove.
+   */
+  decisions?: () => DecisionPublicationRefs | null;
   now?: () => string;
   lockTimeoutMs?: number;
   /** Generations kept behind the current one. */
@@ -609,13 +618,14 @@ export function legacyExportState(indexesDir: string, name: string): { state: "m
 
 // ── Publish ─────────────────────────────────────────────────────────────────
 
-function generationId(m: Pick<GenerationManifest, "previous_generation" | "artifacts" | "layers" | "source_basis" | "exports">): Sha256 {
+function generationId(m: Pick<GenerationManifest, "previous_generation" | "artifacts" | "layers" | "source_basis" | "exports" | "decisions">): Sha256 {
   return basisDigest({
     previous_generation: m.previous_generation,
     artifacts: Object.fromEntries(Object.entries(m.artifacts).map(([k, v]) => [k, v.sha256])),
     layers: m.layers,
     source_basis_hash: m.source_basis.source_basis_hash,
     exports: m.exports,
+    ...(m.decisions ? { decisions: m.decisions } : {}),
   });
 }
 
@@ -870,6 +880,12 @@ export function publishGeneration(job: PublishJob): PublishResult {
     }
     const unresolved = freshnessFor(job.basis, observed) === "unknown";
     const verifiedAt = now();
+    let decisions: DecisionPublicationRefs | null = null;
+    try {
+      decisions = job.decisions ? job.decisions() : null;
+    } catch (err) {
+      return { status: "refused", reason: "invalid", detail: `decision refs unreadable: ${(err as Error).message}` };
+    }
 
     // Assemble: job artifacts over the destination's carried ones.
     const all: PublicationArtifacts = { ...(current?.artifacts ?? {}), ...artifacts };
@@ -933,6 +949,7 @@ export function publishGeneration(job: PublishJob): PublishResult {
       layers,
       source_basis: { basis: job.basis.basis, source_basis_hash: job.basis.source_basis_hash, inventory: [...(job.basis.inventory ?? [])] },
       exports: exportsList,
+      ...(decisions ? { decisions } : {}),
     };
     const generation = generationId(manifestBase);
     const finalDir = path.join(gdir, hex(generation));
@@ -991,9 +1008,21 @@ export function publishGeneration(job: PublishJob): PublishResult {
         previous_generation: manifestBase.previous_generation,
         destination_layer_digest: layerDigest(layers),
         manifest: evidence(path.join(finalDir, "manifest.json"), sha(manBytes), manifest.schema_version),
-        channels,
-        decision_refs: [],
-        replan_required: [],
+        channels: decisions
+          ? [
+              ...channels,
+              {
+                channel: "project_memory",
+                state: decisions.project_memory.state,
+                basis_hash: job.basis.source_basis_hash,
+                layer_hash: decisions.project_memory.digest,
+                output: null,
+                reason: decisions.project_memory.reason,
+              },
+            ]
+          : channels,
+        decision_refs: decisions?.decision_refs ?? [],
+        replan_required: decisions?.replan_required ?? [],
       };
       writeDurable(path.join(staging, "publication.json"), JSON.stringify(record, null, 2) + "\n", 0o444);
       fault("record_written");

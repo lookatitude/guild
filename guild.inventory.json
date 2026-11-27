@@ -2079,8 +2079,18 @@
       "kind": "lib"
     },
     {
+      "id": "lib/stack-contract-reader-validator",
+      "source_path": "scripts/lib/stack-contract-reader-validator.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/stack-contract-validator",
       "source_path": "scripts/lib/stack-contract-validator.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/stack-migration",
+      "source_path": "scripts/lib/stack-migration.ts",
       "kind": "lib"
     },
     {
@@ -2286,6 +2296,11 @@
     {
       "id": "sign-release-attestation",
       "source_path": "scripts/sign-release-attestation.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "stack-migration",
+      "source_path": "scripts/stack-migration.ts",
       "kind": "cli"
     },
     {
