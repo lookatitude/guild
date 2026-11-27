@@ -28163,6 +28163,7 @@ __export(knowledge_orchestrator_exports, {
   emitRound1Candidates: () => emitRound1Candidates,
   emitRound2Candidates: () => emitRound2Candidates,
   findOrphanWikiPages: () => findOrphanWikiPages,
+  fromKnowledgeTier: () => fromKnowledgeTier,
   knowledgeTierRecord: () => knowledgeTierRecord,
   maybeSynthesizeFallbackRootTopic: () => maybeSynthesizeFallbackRootTopic,
   resolveGraphProject: () => resolveGraphProject,
@@ -30568,11 +30569,17 @@ function readKnowledgeTier(x) {
     edgeKeys: new Set(x.edges.map(([source, target, type]) => edgeKey({ source, target, type })))
   };
 }
-function knowledgeTierRecord(graph, input) {
-  const inNodes = new Set((input?.nodes ?? []).map((n) => n.id));
+var KNOWLEDGE_TIER2 = /* @__PURE__ */ Symbol("knowledge-tier");
+function fromKnowledgeTier(x) {
+  return { ...x, [KNOWLEDGE_TIER2]: true };
+}
+var isFromKnowledgeTier = (x) => x[KNOWLEDGE_TIER2] === true;
+function knowledgeTierRecord(validated, input) {
   const inEdges = new Set((input?.edges ?? []).map(edgeKey));
-  const node_ids = [...new Set(graph.nodes.map((n) => n.id).filter((id2) => !inNodes.has(id2)))].sort();
-  const keys = [...new Set(graph.edges.map(edgeKey).filter((k) => !inEdges.has(k)))].sort();
+  const node_ids = [...new Set(validated.nodes.filter(isFromKnowledgeTier).map((n) => n.id))].sort();
+  const keys = [
+    ...new Set(validated.edges.filter(isFromKnowledgeTier).map(edgeKey).filter((k) => !inEdges.has(k)))
+  ].sort();
   return { node_ids, edges: keys.map((k) => JSON.parse(k)) };
 }
 var UNKNOWN_GRAPH_PROJECT = { name: "unknown", description: "" };
@@ -30979,19 +30986,19 @@ async function runKnowledgeStages(repoRoot, filePaths, seams, opts = {}) {
   const basis = opts.basis ?? computeLearnSourceBasis(repoRoot);
   const startBase = opts.base ?? readLearnBase({ indexesDir: path70.join(durableGuildDir2(repoRoot), "indexes"), repoRoot, sourceRoot: repoRoot });
   const partial = await runKnowledgeStagesK1ToK4(repoRoot, filePaths, seams);
-  const allNodes = [...opts.structuralGraph?.nodes ?? [], ...partial.nodes];
-  const allEdges = [...opts.structuralGraph?.edges ?? [], ...partial.edges];
+  const allNodes = [...opts.structuralGraph?.nodes ?? [], ...partial.nodes.map(fromKnowledgeTier)];
+  const allEdges = [...opts.structuralGraph?.edges ?? [], ...partial.edges.map(fromKnowledgeTier)];
   const suppressedEntries = [...partial.k2Suppressed];
   const k5Result = await buildCrossLinks(
     repoRoot,
     { nodes: allNodes, edges: allEdges },
     { confirmCrossLinks: seams.confirmCrossLinks }
   );
-  allEdges.push(...k5Result.edges);
+  allEdges.push(...k5Result.edges.map(fromKnowledgeTier));
   const fallback = maybeSynthesizeFallbackRootTopic(allNodes, repoRoot);
   if (fallback) {
-    allNodes.push(fallback.topicNode);
-    allEdges.push(...fallback.edges);
+    allNodes.push(fromKnowledgeTier(fallback.topicNode));
+    allEdges.push(...fallback.edges.map(fromKnowledgeTier));
   }
   const graphRaw = {
     version: "guild.knowledge_graph.v2",
@@ -31041,7 +31048,7 @@ async function runKnowledgeStages(repoRoot, filePaths, seams, opts = {}) {
     ...validated,
     nodes: canonNodes,
     edges: canonEdges,
-    knowledge_tier: knowledgeTierRecord({ nodes: canonNodes, edges: canonEdges }, opts.structuralGraph)
+    knowledge_tier: knowledgeTierRecord(validated, opts.structuralGraph)
   };
   const sc3OrphanWikiPageIds = findOrphanWikiPages(graph);
   if (sc3OrphanWikiPageIds.length > 0) {
@@ -31247,6 +31254,7 @@ function discoverFilePaths(repoRoot) {
   emitRound1Candidates,
   emitRound2Candidates,
   findOrphanWikiPages,
+  fromKnowledgeTier,
   knowledgeTierRecord,
   maybeSynthesizeFallbackRootTopic,
   resolveGraphProject,

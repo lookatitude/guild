@@ -313,18 +313,32 @@ function readKnowledgeTier(x: unknown): { nodeIds: Set<string>; edgeKeys: Set<st
 }
 
 /**
- * The record a finalize stores: every node id and typed edge in the finished
- * graph that did not come in through `input`. Sorted, so the graph bytes stay a
- * pure function of their inputs (SC-8).
+ * Marks a node or edge the knowledge tier produced in this finalize. A symbol
+ * key: object spreads (sanitize, autoFix, alias) keep it, JSON drops it, so it
+ * never reaches disk.
+ */
+const KNOWLEDGE_TIER = Symbol("knowledge-tier");
+export function fromKnowledgeTier<T extends object>(x: T): T {
+  return { ...x, [KNOWLEDGE_TIER]: true };
+}
+const isFromKnowledgeTier = (x: object) => (x as Record<symbol, unknown>)[KNOWLEDGE_TIER] === true;
+
+/**
+ * The record a finalize stores, computed on the validated graph: every node the
+ * knowledge tier produced (including one that won an id collision because the
+ * input's node was invalid), and every knowledge-tier edge that is not
+ * identical to an input edge. Sorted, so the graph bytes stay a pure function
+ * of their inputs (SC-8).
  */
 export function knowledgeTierRecord(
-  graph: { nodes: { id: string }[]; edges: EdgeLike[] },
-  input: { nodes: { id: string }[]; edges: EdgeLike[] } | undefined,
+  validated: { nodes: { id: string }[]; edges: EdgeLike[] },
+  input: { edges: EdgeLike[] } | undefined,
 ): KnowledgeTierRecord {
-  const inNodes = new Set((input?.nodes ?? []).map((n) => n.id));
   const inEdges = new Set((input?.edges ?? []).map(edgeKey));
-  const node_ids = [...new Set(graph.nodes.map((n) => n.id).filter((id) => !inNodes.has(id)))].sort();
-  const keys = [...new Set(graph.edges.map(edgeKey).filter((k) => !inEdges.has(k)))].sort();
+  const node_ids = [...new Set(validated.nodes.filter(isFromKnowledgeTier).map((n) => n.id))].sort();
+  const keys = [
+    ...new Set(validated.edges.filter(isFromKnowledgeTier).map(edgeKey).filter((k) => !inEdges.has(k))),
+  ].sort();
   return { node_ids, edges: keys.map((k) => JSON.parse(k) as [string, string, string]) };
 }
 
@@ -1153,8 +1167,8 @@ export async function runKnowledgeStages(
   // structural snapshot is an explicit input from the preceding deep-graph run.
   // ── K1→K4: assemble all nodes + edges (deterministic order) ───────────────
   const partial = await runKnowledgeStagesK1ToK4(repoRoot, filePaths, seams);
-  const allNodes = [...(opts.structuralGraph?.nodes ?? []), ...partial.nodes];
-  const allEdges = [...(opts.structuralGraph?.edges ?? []), ...partial.edges];
+  const allNodes = [...(opts.structuralGraph?.nodes ?? []), ...partial.nodes.map(fromKnowledgeTier)];
+  const allEdges = [...(opts.structuralGraph?.edges ?? []), ...partial.edges.map(fromKnowledgeTier)];
   // DROP 1 fix: K2 suppressed entries (unclassified candidates) collected here.
   const suppressedEntries: KnowledgeSuppressedEntry[] = [...partial.k2Suppressed];
 
@@ -1165,7 +1179,7 @@ export async function runKnowledgeStages(
     { nodes: allNodes, edges: allEdges },
     { confirmCrossLinks: seams.confirmCrossLinks }
   );
-  allEdges.push(...k5Result.edges);
+  allEdges.push(...k5Result.edges.map(fromKnowledgeTier));
 
   // ── SC-3 fallback root topic (deterministic) ──────────────────────────────
   // Guarantees EVERY wiki_page has ≥1 topic-membership edge even when K4 emits
@@ -1177,8 +1191,8 @@ export async function runKnowledgeStages(
   // final topic set and the final wiki_page set (per guild-plan.md §L20).
   const fallback = maybeSynthesizeFallbackRootTopic(allNodes, repoRoot);
   if (fallback) {
-    allNodes.push(fallback.topicNode);
-    allEdges.push(...fallback.edges);
+    allNodes.push(fromKnowledgeTier(fallback.topicNode));
+    allEdges.push(...fallback.edges.map(fromKnowledgeTier));
   }
 
   // ── Assemble KnowledgeGraph v2 ─────────────────────────────────────────────
@@ -1258,7 +1272,7 @@ export async function runKnowledgeStages(
     ...validated,
     nodes: canonNodes,
     edges: canonEdges,
-    knowledge_tier: knowledgeTierRecord({ nodes: canonNodes, edges: canonEdges }, opts.structuralGraph),
+    knowledge_tier: knowledgeTierRecord(validated, opts.structuralGraph),
   };
 
   // ── HARD SC-3 enforcement: every wiki_page must have ≥1 topic membership ───

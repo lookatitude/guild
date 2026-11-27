@@ -25,6 +25,7 @@ import {
   resolveGraphProject,
   carriedForwardSubset,
   knowledgeTierRecord,
+  fromKnowledgeTier,
   type KnowledgeFilePaths,
   type KnowledgeLLMSeams,
   type RunKnowledgeOptions,
@@ -1317,7 +1318,7 @@ describe("J — #317: project identity and structure survive finalize", () => {
       nodes,
       edges: [
         { source: "file:a.ts", target: "file:b.ts", type: "related" }, // the input edge, validated (lower-cased)
-        { source: "file:a.ts", target: "file:b.ts", type: "operates_on" }, // K5 output on the same pair
+        fromKnowledgeTier({ source: "file:a.ts", target: "file:b.ts", type: "operates_on" }), // K5 output on the same pair
       ],
     };
     const knowledge_tier = knowledgeTierRecord(graph, input);
@@ -1339,6 +1340,32 @@ describe("J — #317: project identity and structure survive finalize", () => {
     const record = { node_ids: ["topic:x"], edges: [["topic:x", "file:a.ts", "evidenced_by"]] };
     expect(validateGraphV2({ ...g, knowledge_tier: record }, {}).data?.knowledge_tier).toEqual(record);
     expect(validateGraphV2({ ...g, knowledge_tier: { node_ids: [1], edges: [] } }, {}).data?.knowledge_tier).toBeUndefined();
+  });
+
+  test("J13: an id collision won by the knowledge tier is recorded as emitted (codex r4)", () => {
+    const dir = mkTmpRepo();
+    fs.writeFileSync(path.join(dir, "a.ts"), "export const a = 1;\n");
+    const file = { id: "file:a.ts", type: "file", name: "a.ts", source_refs: ["a.ts"], confidence: "high" };
+    const inputConcept = { id: "concept:x", type: "concept", name: "X", source_refs: ["a.ts"], confidence: "high" }; // no category: invalid
+    const kConcept = fromKnowledgeTier({ ...inputConcept, category: "concept" });
+    const inputEdge = { source: "concept:x", target: "file:a.ts", type: "implemented_by", direction: "out", weight: 1 };
+    const out = validateGraphV2(
+      {
+        version: "guild.knowledge_graph.v2",
+        kind: "knowledge",
+        generated_from_commit: "unknown",
+        project: { name: "p", description: "" },
+        nodes: [file, inputConcept, kConcept],
+        edges: [inputEdge, fromKnowledgeTier({ ...inputEdge })],
+        layers: [{ id: "layer:core", name: "Core", description: "", nodeIds: ["file:a.ts"] }],
+        tour: [],
+      },
+      { repoRoot: dir }
+    );
+    expect(out.data?.nodes.map((n) => n.id)).toEqual(["concept:x", "file:a.ts"]);
+    const record = knowledgeTierRecord(out.data!, { edges: [inputEdge] });
+    // The surviving concept is the knowledge tier's; an edge identical to an input edge stays input.
+    expect(record).toEqual({ node_ids: ["concept:x"], edges: [] });
   });
 
   test("J12: normalizeEdgeTypeV2 agrees with the type validateGraphV2 writes (codex r3)", () => {
