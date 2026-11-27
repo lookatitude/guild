@@ -54642,20 +54642,26 @@ function isDriftCurrent(latestTs, env = process.env, nowMs = Date.now()) {
   return age >= 0 && age <= driftRecencyMs(env);
 }
 var AUTOMATED_PROMPT_MARKER = /^(?:<(?:task-notification|teammate-message|cross-session-message)(?![\w-])|\[SYSTEM NOTIFICATION - NOT USER INPUT\]|\[Cross-session idle notice\])/;
-var REMINDER_OPEN = "<system-reminder>";
+var REMINDER_OPEN_PREFIX = "<system-reminder";
+var REMINDER_OPEN_RE = /<system-reminder(?=[\s>/])/g;
 var REMINDER_CLOSE = "</system-reminder>";
 function skipReminderBlock(text, start) {
   let depth = 0;
   let pos = start;
-  let open = text.indexOf(REMINDER_OPEN, pos);
+  const nextOpen2 = (from) => {
+    REMINDER_OPEN_RE.lastIndex = from;
+    const m = REMINDER_OPEN_RE.exec(text);
+    return m === null ? -1 : m.index;
+  };
+  let open = nextOpen2(pos);
   let close = text.indexOf(REMINDER_CLOSE, pos);
   for (; ; ) {
-    if (open !== -1 && open < pos) open = text.indexOf(REMINDER_OPEN, pos);
+    if (open !== -1 && open < pos) open = nextOpen2(pos);
     if (close !== -1 && close < pos) close = text.indexOf(REMINDER_CLOSE, pos);
     if (close === -1) return -1;
     if (open !== -1 && open < close) {
       depth += 1;
-      pos = open + REMINDER_OPEN.length;
+      pos = open + REMINDER_OPEN_PREFIX.length;
     } else {
       depth -= 1;
       pos = close + REMINDER_CLOSE.length;
@@ -54668,7 +54674,9 @@ function isAutomatedPrompt(promptText) {
   let pos = 0;
   for (; ; ) {
     while (pos < promptText.length && /\s/.test(promptText[pos])) pos += 1;
-    if (!promptText.startsWith(REMINDER_OPEN, pos)) break;
+    REMINDER_OPEN_RE.lastIndex = pos;
+    const lead = REMINDER_OPEN_RE.exec(promptText);
+    if (lead === null || lead.index !== pos) break;
     const end = skipReminderBlock(promptText, pos);
     if (end === -1) return false;
     pos = end;

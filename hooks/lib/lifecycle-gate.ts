@@ -1030,7 +1030,9 @@ export interface LifecycleGateResult {
 
 const AUTOMATED_PROMPT_MARKER =
   /^(?:<(?:task-notification|teammate-message|cross-session-message)(?![\w-])|\[SYSTEM NOTIFICATION - NOT USER INPUT\]|\[Cross-session idle notice\])/;
-const REMINDER_OPEN = "<system-reminder>";
+const REMINDER_OPEN_PREFIX = "<system-reminder";
+// An opener is `<system-reminder` followed by whitespace, `>` or `/` (attributes allowed).
+const REMINDER_OPEN_RE = /<system-reminder(?=[\s>/])/g;
 const REMINDER_CLOSE = "</system-reminder>";
 
 /**
@@ -1042,15 +1044,20 @@ function skipReminderBlock(text: string, start: number): number {
   let pos = start;
   // Cached next-tag indices: re-search only once `pos` has passed them, so a
   // missing tag costs one full scan, not one per iteration.
-  let open = text.indexOf(REMINDER_OPEN, pos);
+  const nextOpen = (from: number): number => {
+    REMINDER_OPEN_RE.lastIndex = from;
+    const m = REMINDER_OPEN_RE.exec(text);
+    return m === null ? -1 : m.index;
+  };
+  let open = nextOpen(pos);
   let close = text.indexOf(REMINDER_CLOSE, pos);
   for (;;) {
-    if (open !== -1 && open < pos) open = text.indexOf(REMINDER_OPEN, pos);
+    if (open !== -1 && open < pos) open = nextOpen(pos);
     if (close !== -1 && close < pos) close = text.indexOf(REMINDER_CLOSE, pos);
     if (close === -1) return -1;
     if (open !== -1 && open < close) {
       depth += 1;
-      pos = open + REMINDER_OPEN.length;
+      pos = open + REMINDER_OPEN_PREFIX.length;
     } else {
       depth -= 1;
       pos = close + REMINDER_CLOSE.length;
@@ -1065,14 +1072,18 @@ function skipReminderBlock(text: string, start: number): number {
  * host discards a blocked prompt, so the gate must never block these. Anchored
  * to the START of the prompt (after whitespace and any leading
  * `<system-reminder>` blocks): an operator prompt that merely quotes a marker
- * later in its text is still an operator prompt.
+ * later in its text is still an operator prompt. Known limitation: a reminder
+ * whose content quotes a literal `</system-reminder>` ends early, because raw
+ * prompt text cannot tell a quoted close tag from a real one.
  */
 export function isAutomatedPrompt(promptText: string | null): boolean {
   if (typeof promptText !== "string") return false;
   let pos = 0;
   for (;;) {
     while (pos < promptText.length && /\s/.test(promptText[pos]!)) pos += 1;
-    if (!promptText.startsWith(REMINDER_OPEN, pos)) break;
+    REMINDER_OPEN_RE.lastIndex = pos;
+    const lead = REMINDER_OPEN_RE.exec(promptText);
+    if (lead === null || lead.index !== pos) break;
     const end = skipReminderBlock(promptText, pos);
     if (end === -1) return false; // unclosed leading reminder: operator prompt
     pos = end;

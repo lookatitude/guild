@@ -854,6 +854,9 @@ describe("lifecycle-gate — evaluateLifecycleGate (real fixtures)", () => {
       expect(isAutomatedPrompt(`${R}outer${R}inner${C}outer${C}<task-notification>x</task-notification>`)).toBe(true);
       // Marker only inside reminder content, operator text after: gated.
       expect(isAutomatedPrompt(`${R}${R}inner${C}<task-notification>quoted</task-notification>${C}keep going`)).toBe(false);
+      // Attribute-bearing nested opener counts as an opener: still gated.
+      expect(isAutomatedPrompt(`${R}<system-reminder role="host">inner${C}<task-notification>x</task-notification>${C}keep going`)).toBe(false);
+      expect(isAutomatedPrompt(`<system-reminder role="host">a${C}<task-notification>x</task-notification>`)).toBe(true);
       // Unclosed leading reminder: operator.
       expect(isAutomatedPrompt(`${R}never closed <task-notification>x</task-notification>`)).toBe(false);
       expect(isAutomatedPrompt(`${R}a${R}b${C}<task-notification>x</task-notification>`)).toBe(false);
