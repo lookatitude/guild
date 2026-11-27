@@ -15,7 +15,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { execFileSync } from "child_process";
 import { durableGuildDir } from "../../lib/state/ensure-storage-layout";
-import { adoptLegacyKnowledgeIndexes, knowledgeIndexesDir, knowledgeIndexReadPath } from "../../../src/domains/state";
+import { knowledgeIndexesDir, knowledgeIndexReadPath } from "../../../src/domains/state";
+import { adoptLegacyKnowledgeIndexes } from "../../../src/domains/knowledge/legacy-adoption";
 import {
   computeSourceBasis,
   readContainedFile,

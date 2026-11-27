@@ -25,7 +25,8 @@ import { decisionPublicationRefs, type DecisionPublicationRefs, type EntityRef }
 import { readPublication, publicationSidecarPath, readPublicationRecord, type BasisRef, type ChannelRecord, type Sha256 } from "./publication";
 import { canonicalJson } from "./source-basis";
 import { sourceWorktreeId, type ChannelState } from "./source-basis";
-import { adoptLegacyKnowledgeIndexes, knowledgeIndexesDir } from "../state";
+import { knowledgeIndexesDir } from "../state";
+import { adoptLegacyKnowledgeIndexes } from "./legacy-adoption";
 
 /** The hook never verifies: any hint makes the generation pending. */
 export const AFTER_EDIT_BUDGET: VerificationBudget = Object.freeze({ max_files: 0, max_bytes: 0 });

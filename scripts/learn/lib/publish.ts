@@ -26,7 +26,8 @@ import {
 import { decisionPublicationRefs } from "../../../src/domains/knowledge/decision-propagation";
 import { basisDigest, sourceWorktreeId, type SourceBasis } from "../../../src/domains/knowledge/source-basis";
 import { deepFreeze } from "../../../src/domains/kernel/sealed-collections";
-import { adoptLegacyKnowledgeIndexes, knowledgeIndexesDir } from "../../../src/domains/state";
+import { knowledgeIndexesDir } from "../../../src/domains/state";
+import { adoptLegacyKnowledgeIndexes } from "../../../src/domains/knowledge/legacy-adoption";
 import { durableGuildDir } from "../../lib/state/ensure-storage-layout";
 import { computeLearnSourceBasis } from "./paths";
 import { STRUCTURAL_EXTRACTOR, structuralSubset } from "./structural";
@@ -224,13 +225,33 @@ export function baseFrom(pinned: PinnedGeneration | null, t: LearnPublishTarget)
  * cache first, so the base IS the cache's own pointer (never a pointer from a tree
  * the publication will not write to) and every layer survives.
  */
+/**
+ * The cache's own publication. One that cannot be read (a pointer to a missing
+ * generation, a corrupt record) must not block learn forever: it is moved aside,
+ * unless a publisher holds the lock, and learn rebuilds from the legacy file / nothing.
+ */
+function readOwnPublication(t: LearnPublishTarget): PinnedGeneration | null {
+  try {
+    return readPublication(t.indexesDir);
+  } catch (err) {
+    const pub = path.join(t.indexesDir, "publication");
+    if (t.indexesDir !== knowledgeIndexesDir(t.repoRoot) || fs.existsSync(path.join(pub, "lock"))) throw err;
+    try {
+      fs.renameSync(pub, `${pub}.unreadable-${Date.now()}`);
+    } catch {
+      throw err;
+    }
+    return null;
+  }
+}
+
 function adoptLegacy(t: LearnPublishTarget): void {
   if (t.indexesDir === knowledgeIndexesDir(t.repoRoot)) adoptLegacyKnowledgeIndexes(t.repoRoot);
 }
 
 export function readLearnBase(t: LearnPublishTarget): LearnBase {
   adoptLegacy(t);
-  return baseFrom(readPublication(t.indexesDir), t);
+  return baseFrom(readOwnPublication(t), t);
 }
 
 /** Same bytes `writeJson` produced, so exported files keep their shape. */

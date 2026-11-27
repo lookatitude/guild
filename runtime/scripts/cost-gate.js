@@ -5530,6 +5530,10 @@ if (typeof module !== "undefined" && require.main === module && /^promote-upstre
   runPromoteUpstreamCli();
 }
 
+// src/domains/knowledge/publication.ts
+var crypto4 = __toESM(require("node:crypto"));
+var os2 = __toESM(require("node:os"));
+
 // src/domains/knowledge/source-basis.ts
 var fs13 = __toESM(require("node:fs"));
 var path17 = __toESM(require("node:path"));
@@ -5557,6 +5561,25 @@ function readContainedFile(root, rel2) {
   const e = readWorktreeEntry(root, rel2);
   return e.kind === "file" ? e.bytes : null;
 }
+
+// src/domains/knowledge/publication.ts
+var PUBLICATION_FAULT_STEPS = Object.freeze([
+  "lock_acquired",
+  "artifact:knowledge-graph.json",
+  "artifact:knowledge-recall.json",
+  "layers_written",
+  "manifest_written",
+  "record_written",
+  "generation_renamed",
+  "successor_claimed",
+  "pointer_tmp_written",
+  "pointer_renamed",
+  "export:knowledge-graph.json",
+  "export:knowledge-recall.json",
+  "reclaimed"
+]);
+var HOST = crypto4.createHash("sha256").update(os2.hostname()).digest("hex").slice(0, 12);
+var ORPHAN_GRACE_MS = 10 * 6e4;
 
 // scripts/learn/lib/ignore.ts
 var DEFAULT_IGNORE_PATTERNS = Object.freeze([
@@ -7487,7 +7510,7 @@ var SESSION_BINDING_V1_FIELDS = Object.freeze([
 // src/domains/config/settings-resolver.ts
 var fs17 = __toESM(require("fs"));
 var path22 = __toESM(require("path"));
-var crypto4 = __toESM(require("crypto"));
+var crypto5 = __toESM(require("crypto"));
 
 // src/domains/config/settings-reader.ts
 var fs16 = __toESM(require("fs"));
@@ -8742,7 +8765,7 @@ function resolveSettings2(opts) {
   try {
     const assembled = result.config;
     if (_traceRunDir && _telemetry) {
-      const _fingerprint = crypto4.createHash("sha256").update(JSON.stringify(assembled)).digest("hex").slice(0, 16);
+      const _fingerprint = crypto5.createHash("sha256").update(JSON.stringify(assembled)).digest("hex").slice(0, 16);
       const sources = result.sources;
       _telemetry.emitTraceEvent(
         _telemetry.makeConfigResolutionEvent({
