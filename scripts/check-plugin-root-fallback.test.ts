@@ -19,8 +19,10 @@ const SCRIPT = path.resolve(__dirname, "check-plugin-root-fallback.ts");
 const REPO_ROOT = path.resolve(__dirname, "..");
 
 const BAD = "npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/evolve-loop.ts";
-const GOOD =
+const BAD_DEFAULT =
   "npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/evolve-loop.ts";
+const GOOD =
+  'npx tsx "$(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/scripts/evolve-loop.ts"';
 
 function runScript(args: string[]): { exitCode: number; stdout: string; stderr: string } {
   const result = spawnSync("npx", ["tsx", SCRIPT, ...args], {
@@ -57,6 +59,13 @@ describe("check-plugin-root-fallback.ts", () => {
         path.join("src", "modules", "foo", "resources", "skills", "bar", "SKILL.md")
       );
       expect(violations[0].line).toBe(2);
+    });
+
+    it("flags the defaulted CLAUDE_PLUGIN_ROOT that hides the substitutable token (#289)", () => {
+      const dir = path.join(tmpDir, "commands");
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "foo.md"), BAD_DEFAULT);
+      expect(findViolations(tmpDir)).toHaveLength(1);
     });
 
     it("flags occurrences in commands/, skills/, command-src/, skill-src/", () => {

@@ -42632,9 +42632,9 @@ function createRunLifecycle(env) {
     materializeRunStart(plan) {
       const rootHint = env.__rootHint;
       if (!path79.isAbsolute(plan.root) || rootHint !== void 0 && plan.root !== rootHint) throw new Error("staged start belongs to another source");
-      const safeRelative = (relative24) => {
-        if (typeof relative24 !== "string" || !relative24 || path79.isAbsolute(relative24) || /[\\%\x00-\x1f]/.test(relative24) || relative24.split("/").some((v) => !v || v === "." || v === "..")) throw new Error("staged start path escaped source");
-        const abs = path79.join(plan.root, relative24);
+      const safeRelative = (relative25) => {
+        if (typeof relative25 !== "string" || !relative25 || path79.isAbsolute(relative25) || /[\\%\x00-\x1f]/.test(relative25) || relative25.split("/").some((v) => !v || v === "." || v === "..")) throw new Error("staged start path escaped source");
+        const abs = path79.join(plan.root, relative25);
         if (fsNode.existsSync(plan.root) && isRefused(checkContained(plan.root, abs, { policy: "physical" }))) throw new Error("staged start physical path refused");
         return abs;
       };
@@ -54845,11 +54845,11 @@ function pathIsPhysicallyContained(parent, candidate) {
   }
 }
 function directoryChainIsPhysical(parent, candidate) {
-  const relative24 = path90.relative(parent, candidate);
-  if (relative24.length === 0 || relative24.startsWith("..") || path90.isAbsolute(relative24)) return false;
+  const relative25 = path90.relative(parent, candidate);
+  if (relative25.length === 0 || relative25.startsWith("..") || path90.isAbsolute(relative25)) return false;
   let current = parent;
   try {
-    for (const segment of relative24.split(path90.sep)) {
+    for (const segment of relative25.split(path90.sep)) {
       current = path90.join(current, segment);
       const stats = fs73.lstatSync(current);
       if (!stats.isDirectory() || stats.isSymbolicLink()) return false;

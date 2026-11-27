@@ -42384,9 +42384,9 @@ function createRunLifecycle(env) {
     materializeRunStart(plan) {
       const rootHint = env.__rootHint;
       if (!path78.isAbsolute(plan.root) || rootHint !== void 0 && plan.root !== rootHint) throw new Error("staged start belongs to another source");
-      const safeRelative = (relative23) => {
-        if (typeof relative23 !== "string" || !relative23 || path78.isAbsolute(relative23) || /[\\%\x00-\x1f]/.test(relative23) || relative23.split("/").some((v) => !v || v === "." || v === "..")) throw new Error("staged start path escaped source");
-        const abs = path78.join(plan.root, relative23);
+      const safeRelative = (relative24) => {
+        if (typeof relative24 !== "string" || !relative24 || path78.isAbsolute(relative24) || /[\\%\x00-\x1f]/.test(relative24) || relative24.split("/").some((v) => !v || v === "." || v === "..")) throw new Error("staged start path escaped source");
+        const abs = path78.join(plan.root, relative24);
         if (fsNode.existsSync(plan.root) && isRefused(checkContained(plan.root, abs, { policy: "physical" }))) throw new Error("staged start physical path refused");
         return abs;
       };

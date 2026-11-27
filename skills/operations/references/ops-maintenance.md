@@ -66,7 +66,7 @@ retention sweep — deleting one-off runs never restated in prose. Delegate to
 `scripts/lib/retention.ts`'s CLI main, never a hand-rolled `find`/`rm`:
 
 ```
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/retention.js \
+node $(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/retention.js \
   --guild-dir <cwd>/.guild [--apply]
 ```
 

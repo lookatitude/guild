@@ -20,7 +20,7 @@ Ideation's required upstream is an init wiki. Before the Socratic flow, run the
 **deterministic** resolver — never eyeball whether init ran:
 
 ```bash
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/ideation-min-build-cli.js --cwd "$(pwd)" [--description "<one-line brief>"]
+node $(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/ideation-min-build-cli.js --cwd "$(pwd)" [--description "<one-line brief>"]
 ```
 
 - `{"needsMinBuild": false}` → an init wiki exists; proceed normally.

@@ -57366,10 +57366,10 @@ function readRegularFileNoFollow(filePath, label) {
 function snapshotRuntimeFiles(packageRoot) {
   const root = fs70.realpathSync(packageRoot);
   const entries = [];
-  const visit = (directory, relative24) => {
+  const visit = (directory, relative25) => {
     for (const name of fs70.readdirSync(directory).sort()) {
       const absolute = path89.join(directory, name);
-      const childRelative = relative24 ? `${relative24}/${name}` : name;
+      const childRelative = relative25 ? `${relative25}/${name}` : name;
       const stats = fs70.lstatSync(absolute);
       if (stats.isSymbolicLink()) throw new Error(`runtime package contains a symbolic link: ${childRelative}`);
       if (stats.isDirectory()) {

@@ -553,6 +553,33 @@ function findPluginRoot(fromDir) {
     dir = parent;
   }
 }
+function isPluginRoot(dir) {
+  return fs2.existsSync(path2.join(dir, PLUGIN_ROOT_MARKER)) || fs2.existsSync(path2.join(dir, ".claude-plugin", "plugin.json"));
+}
+function resolveValidatedPluginRoot(fromDir, env = process.env) {
+  for (const key of ["GUILD_PLUGIN_ROOT", "CLAUDE_PLUGIN_ROOT"]) {
+    const value = env[key];
+    if (typeof value === "string" && value.length > 0 && isPluginRoot(value)) return path2.resolve(value);
+  }
+  return findPluginRoot(fromDir);
+}
+function isUnderGuildManagedRoot(absPath, pluginRoot) {
+  const target = path2.resolve(absPath);
+  if (pluginRoot !== null) {
+    const rel2 = path2.relative(path2.resolve(pluginRoot), target);
+    if (rel2 === "" || !rel2.startsWith("..") && !path2.isAbsolute(rel2)) return true;
+  }
+  let dir = path2.dirname(target);
+  for (; ; ) {
+    try {
+      if (fs2.statSync(path2.join(dir, ".guild")).isDirectory()) return true;
+    } catch {
+    }
+    const parent = path2.dirname(dir);
+    if (parent === dir) return false;
+    dir = parent;
+  }
+}
 var fs2, path2, PLUGIN_ROOT_MARKER;
 var init_plugin_root = __esm({
   "src/domains/kernel/plugin-root.ts"() {
@@ -52200,6 +52227,7 @@ var path81 = __toESM(require("path"));
 init_dispatch();
 
 // hooks/comms-format-lint.ts
+init_plugin_root();
 async function readStdin() {
   return new Promise((resolve42) => {
     const chunks = [];
@@ -52261,6 +52289,9 @@ async function main6() {
     process.exit(0);
   }
   const absolutePath = path81.isAbsolute(filePath) ? filePath : path81.resolve(process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd(), filePath);
+  if (!isUnderGuildManagedRoot(absolutePath, resolveValidatedPluginRoot(__dirname))) {
+    process.exit(0);
+  }
   let findings = [];
   try {
     findings = lintCommsFormat({ paths: [absolutePath], enforce: enforceMode });

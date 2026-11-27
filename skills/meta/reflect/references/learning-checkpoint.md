@@ -140,7 +140,7 @@ skills, varying only `phase` + `evidence_ref`:
      GUILD_EVIDENCE_REF=<phase-artifact-path> GUILD_CWD=<guild-root> \
      GUILD_CHECKPOINT_VERDICT=.guild/runs/<run-id>/learning/<phase>-verdict.json \
      GUILD_CHECKPOINT_LINKS=.guild/runs/<run-id>/learning/<phase>-links.json \
-     node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/emit-learning-checkpoint.js
+     node $(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/hooks/dist/emit-learning-checkpoint.js
    ```
 
    `GUILD_PHASE` ∈ the closed 7-enum (`init | ideation | planning | development |
@@ -274,7 +274,7 @@ Bound by pointer to `contracts/learning-checkpoint.v1.md §4` / ADR §CR-C:
   describing wiki page) via one traversal:
 
   ```
-  node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/knowledge-links-traverse.js \
+  node $(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/knowledge-links-traverse.js \
     --cwd <repo-root> --task-id <task-id> --json
   ```
 

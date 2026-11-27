@@ -142,6 +142,8 @@ describe("comms-format-lint.ts hook — U5a WARN ONLY", () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-comms-lint-test-"));
+    // A Guild-managed root: the hook only lints files under one.
+    fs.mkdirSync(path.join(tmpDir, ".guild"));
   });
 
   afterEach(() => {
@@ -298,6 +300,8 @@ describe("comms-format-lint.ts hook — U5b ENFORCE MODE (GUILD_COMMS_FORMAT_ENF
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-comms-lint-enforce-"));
+    // A Guild-managed root: the hook only lints files under one.
+    fs.mkdirSync(path.join(tmpDir, ".guild"));
   });
 
   afterEach(() => {
@@ -677,5 +681,46 @@ describe("comms-format-lint.ts hook — U5b ENFORCE MODE (GUILD_COMMS_FORMAT_ENF
       });
       expect(exitCode).toBe(0);
     });
+  });
+});
+
+// ── #149: wrong CLAUDE_PLUGIN_ROOT / files outside any Guild-managed root ───
+
+describe("comms-format-lint.ts hook — plugin root resolution (#149)", () => {
+  let outside: string;
+  let guildRoot: string;
+  let wrongRoot: string;
+
+  beforeEach(() => {
+    outside = fs.mkdtempSync(path.join(os.tmpdir(), "guild-comms-lint-outside-"));
+    guildRoot = fs.mkdtempSync(path.join(os.tmpdir(), "guild-comms-lint-inside-"));
+    fs.mkdirSync(path.join(guildRoot, ".guild"));
+    // An ancestor that is not a plugin root (the umbrella-workspace parent in #149).
+    wrongRoot = fs.mkdtempSync(path.join(os.tmpdir(), "guild-comms-lint-wrong-"));
+  });
+
+  afterEach(() => {
+    for (const d of [outside, guildRoot, wrongRoot]) fs.rmSync(d, { recursive: true, force: true });
+  });
+
+  it("no-ops silently for a file outside any Guild-managed root", () => {
+    const receiptPath = path.join(outside, "handoff.md");
+    fs.writeFileSync(receiptPath, malformedReceiptContent(), "utf8");
+    const { exitCode, stderr } = runHook(makeWritePayload(receiptPath), {
+      CLAUDE_PLUGIN_ROOT: wrongRoot,
+    });
+    expect(exitCode).toBe(0);
+    expect(stderr).toBe("");
+  });
+
+  it("does not throw ENOENT on a wrong CLAUDE_PLUGIN_ROOT and still lints inside a Guild root", () => {
+    const receiptPath = path.join(guildRoot, "handoff.md");
+    fs.writeFileSync(receiptPath, malformedReceiptContent(), "utf8");
+    const { exitCode, stderr } = runHook(makeWritePayload(receiptPath), {
+      CLAUDE_PLUGIN_ROOT: wrongRoot,
+    });
+    expect(exitCode).toBe(0);
+    expect(stderr).not.toMatch(/ENOENT/);
+    expect(stderr).toMatch(/\[comms-format-lint\] WARN \[check-a\]/);
   });
 });

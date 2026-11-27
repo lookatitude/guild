@@ -37,7 +37,7 @@ separate guild-benchmark repo is process + localhost-HTTP only; zero code import
 ### 2. Run the launcher (default = no network, no install)
 
 ```bash
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/dashboard-launch.js \
+node $(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/dashboard-launch.js \
   --project-root <abs-root> [--port <n>] [--no-import] [--dry-run]
 ```
 
@@ -71,7 +71,7 @@ launch proceeds.
 ### 2b. Stopping the dashboard — `--stop`
 
 ```bash
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/dashboard-launch.js \
+node $(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/dashboard-launch.js \
   --project-root <abs-root> --stop
 ```
 

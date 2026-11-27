@@ -48,3 +48,52 @@ export function ownPluginRoot(fromDir: string): string {
   if (found === null) throw new Error(`Guild plugin root not found above ${fromDir} (no ${PLUGIN_ROOT_MARKER})`);
   return found;
 }
+
+/** True when `dir` is a Guild plugin root: it ships the runtime marker or the Claude manifest. */
+export function isPluginRoot(dir: string): boolean {
+  return (
+    fs.existsSync(path.join(dir, PLUGIN_ROOT_MARKER)) ||
+    fs.existsSync(path.join(dir, ".claude-plugin", "plugin.json"))
+  );
+}
+
+/**
+ * Like `resolvePluginRoot`, but an env value is only accepted when it really is a
+ * plugin root (a host or a stale shell can export the wrong ancestor), and it never
+ * throws: an invalid env value falls through to the marker walk from `fromDir`
+ * (pass `__dirname`), and null means no plugin root is known.
+ */
+export function resolveValidatedPluginRoot(
+  fromDir: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  for (const key of ["GUILD_PLUGIN_ROOT", "CLAUDE_PLUGIN_ROOT"]) {
+    const value = env[key];
+    if (typeof value === "string" && value.length > 0 && isPluginRoot(value)) return path.resolve(value);
+  }
+  return findPluginRoot(fromDir);
+}
+
+/**
+ * True when `absPath` lies inside a Guild-managed root: under `pluginRoot`, or under
+ * a directory that holds a `.guild/` directory. Anything else (scratch dirs, home
+ * config, unrelated repos) is outside Guild's scope.
+ */
+export function isUnderGuildManagedRoot(absPath: string, pluginRoot: string | null): boolean {
+  const target = path.resolve(absPath);
+  if (pluginRoot !== null) {
+    const rel = path.relative(path.resolve(pluginRoot), target);
+    if (rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))) return true;
+  }
+  let dir = path.dirname(target);
+  for (;;) {
+    try {
+      if (fs.statSync(path.join(dir, ".guild")).isDirectory()) return true;
+    } catch {
+      // not present at this level
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return false;
+    dir = parent;
+  }
+}

@@ -11717,7 +11717,7 @@ ${lanes.join("\n")}
               return process.memoryUsage().heapUsed;
             },
             getFileSize(path20) {
-              const stat = statSync5(path20);
+              const stat = statSync6(path20);
               if (stat == null ? void 0 : stat.isFile()) {
                 return stat.size;
               }
@@ -11761,7 +11761,7 @@ ${lanes.join("\n")}
             }
           };
           return nodeSystem;
-          function statSync5(path20) {
+          function statSync6(path20) {
             try {
               return _fs.statSync(path20, statSyncOptions);
             } catch {
@@ -11820,7 +11820,7 @@ ${lanes.join("\n")}
               activeSession.post("Profiler.stop", (err, { profile }) => {
                 var _a;
                 if (!err) {
-                  if ((_a = statSync5(profilePath)) == null ? void 0 : _a.isDirectory()) {
+                  if ((_a = statSync6(profilePath)) == null ? void 0 : _a.isDirectory()) {
                     profilePath = _path.join(profilePath, `${(/* @__PURE__ */ new Date()).toISOString().replace(/:/g, "-")}+P${process.pid}.cpuprofile`);
                   }
                   try {
@@ -11940,7 +11940,7 @@ ${lanes.join("\n")}
                 let stat;
                 if (typeof dirent === "string" || dirent.isSymbolicLink()) {
                   const name = combinePaths(path20, entry);
-                  stat = statSync5(name);
+                  stat = statSync6(name);
                   if (!stat) {
                     continue;
                   }
@@ -11964,7 +11964,7 @@ ${lanes.join("\n")}
             return matchFiles(path20, extensions, excludes, includes, useCaseSensitiveFileNames2, process.cwd(), depth, getAccessibleFileSystemEntries, realpath);
           }
           function fileSystemEntryExists(path20, entryKind) {
-            const stat = statSync5(path20);
+            const stat = statSync6(path20);
             if (!stat) {
               return false;
             }
@@ -12006,7 +12006,7 @@ ${lanes.join("\n")}
           }
           function getModifiedTime3(path20) {
             var _a;
-            return (_a = statSync5(path20)) == null ? void 0 : _a.mtime;
+            return (_a = statSync6(path20)) == null ? void 0 : _a.mtime;
           }
           function setModifiedTime(path20, time) {
             try {
@@ -12470,11 +12470,11 @@ ${lanes.join("\n")}
           return toComponents;
         }
         const components = toComponents.slice(start);
-        const relative9 = [];
+        const relative10 = [];
         for (; start < fromComponents.length; start++) {
-          relative9.push("..");
+          relative10.push("..");
         }
-        return ["", ...relative9, ...components];
+        return ["", ...relative10, ...components];
       }
       function getRelativePathFromDirectory(fromDirectory, to, getCanonicalFileNameOrIgnoreCase) {
         Debug.assert(getRootLength(fromDirectory) > 0 === getRootLength(to) > 0, "Paths must either both be absolute or both be relative");
@@ -56953,9 +56953,9 @@ ${lanes.join("\n")}
               if (!startsWithDirectory(target, realPathDirectory, getCanonicalFileName)) {
                 return;
               }
-              const relative9 = getRelativePathFromDirectory(realPathDirectory, target, getCanonicalFileName);
+              const relative10 = getRelativePathFromDirectory(realPathDirectory, target, getCanonicalFileName);
               for (const symlinkDirectory of symlinkDirectories) {
-                const option = resolvePath(symlinkDirectory, relative9);
+                const option = resolvePath(symlinkDirectory, relative10);
                 const result2 = cb(option, target === referenceRedirect);
                 shouldFilterIgnoredPaths = true;
                 if (result2) return result2;

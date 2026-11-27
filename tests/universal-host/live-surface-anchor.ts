@@ -645,7 +645,13 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified 2026-10-25 (#275): config.md lists `migrate --mode=verify` and `--recheck`;
   // the command registry entry was re-extracted. ANTI-VACUITY: check-surface-pins was RED
   // against the prior pin.
-  commands: "c6e23a196895eadf0fdd8260f7a730782414607c",
+  // Re-ratified 2026-11-27 (#289, plugin-root resolution): DELIBERATE mechanical rewrite of the
+  // documented plugin-root shell expression in every command/skill doc to
+  // `$(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/...}}")` so Claude Code's
+  // exact-token substitution of ${CLAUDE_PLUGIN_ROOT} reaches the line (a default on the token hid
+  // it); plus skills/meta/using-guild/SKILL.md, a byte copy of SKILL.src.md, so `Skill:
+  // guild:using-guild` resolves. command-src/skill-src re-extracted in the same commit.
+  commands: "1e0fa221fb23ada28f47c585c01aa46a64852c61",
   // Re-ratified 2026-09-14 (T01 pattern lock): using-guild absorbed the principles
   // body, the glossary one-liner and "bare /guild is T0" (KTD25); no other skill changed.
   // Re-ratified 2026-09-14 (T03 skills fold): 17 indexed assemblers + references/ chapters,
@@ -742,7 +748,8 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // an existing true is kept). ANTI-VACUITY: check-surface-pins was RED.
   // Re-ratified 2026-10-25 (v3.2 text): create-skill and team-compose drop the explicit --write-registry
   // step (discovery reads the definition files directly). ANTI-VACUITY: check-surface-pins was RED.
-  skills: "e7dd27567b0e113ad554942afa09a137f0d8f04a",
+  // Re-ratified 2026-11-27 (#289, plugin-root resolution): DELIBERATE mechanical rewrite of the (see commands above; skills tree: same change)
+  skills: "7b3fb9e55e15ef0cb62e7d78cd054c401f76fe62",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

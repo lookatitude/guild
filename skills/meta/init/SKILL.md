@@ -41,7 +41,7 @@ first, never auto-skipped.
 On a **workspace** root (detected per the step below): `.guild/workspace.json`
 (`guild.workspace.v1` — bound by pointer to the contract map, never
 schema-copied here; canonical body defined in the workspace-aware-init-and-federation ADR). It is
-written by the Lane-B script, not hand-built: `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/workspace-write-manifest.js --cwd <workspace-root>`. A workspace builds
+written by the Lane-B script, not hand-built: `node $(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/workspace-write-manifest.js --cwd <workspace-root>`. A workspace builds
 its **own** `.guild/wiki/**` **only if** `root_wiki` is true (D-OQ2 — the
 workspace root already has `.guild/wiki/` or scannable top-level code; a
 `root_wiki: true` already in the manifest is kept on re-run); a pure federation
@@ -73,7 +73,7 @@ an explicit refresh; the full `learn-*` pipeline also runs at Init under
 
 1. Resolve `guild.phase_entry.v1` (pointer) and fold the Tier-2 `defaults:`.
 2. Detect mode: brownfield vs new-product (`--new`).
-2a. **Detect repo kind (workspace vs regular).** Run `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/workspace-detect.js --cwd <root>` — it classifies the target
+2a. **Detect repo kind (workspace vs regular).** Run `node $(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/workspace-detect.js --cwd <root>` — it classifies the target
    `regular` or `workspace` by stat-ing **immediate children only** (depth
    fixed at 1, no nesting, no knob) for a nested `.git/` **or** `.guild/`, and
    honors `settings.json` `workspace.mode: auto | on | off`. Plain dirs (e.g.
@@ -85,7 +85,7 @@ an explicit refresh; the full `learn-*` pipeline also runs at Init under
    only under `--learn` or `defaults.auto_learn: true` (D3) — no
    ask-before-deep-scan gate.
 4. **Workspace path (federation, not duplication):** write the federation
-   manifest with `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/workspace-write-manifest.js --cwd
+   manifest with `node $(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/workspace-write-manifest.js --cwd
    <workspace-root>` → `.guild/workspace.json` (`guild.workspace.v1`, by
    pointer). The writer sets `root_wiki` per D-OQ2 (true when the root has
    `.guild/wiki/` or scannable top-level code; an existing `true` is kept on
@@ -99,9 +99,9 @@ an explicit refresh; the full `learn-*` pipeline also runs at Init under
    when** `root_wiki` is true; a pure federation root stops at the manifest.
 4a. **Write the layout-2 config and stamp the layout** (every root, after the step-4
    manifest, before the step-5 scan):
-   `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/config-cmd.js reconcile sync --cwd <root>`,
+   `node $(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/config-cmd.js reconcile sync --cwd <root>`,
    then the layout writer
-   `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/migrate-guild.js --root=<root> --mode=migrate --recheck`.
+   `node $(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/migrate-guild.js --root=<root> --mode=migrate --recheck`.
    `--recheck` runs the chain even when run start already stamped the marker,
    so the policy reconcile just wrote is split into the scoped `config/*.json`
    files. Surface its report; a non-zero exit means it did not apply.

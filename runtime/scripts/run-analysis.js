@@ -8100,10 +8100,10 @@ function resolveRunInputFile(base, relativeRef) {
   if (resolved !== resolvedBase && !resolved.startsWith(`${resolvedBase}${path16.sep}`)) {
     throw new Error(`run input escapes its run directory: ${relativeRef}`);
   }
-  const relative9 = path16.relative(resolvedBase, resolved);
+  const relative10 = path16.relative(resolvedBase, resolved);
   let cursor = resolvedBase;
   try {
-    for (const component of relative9.split(path16.sep).filter(Boolean)) {
+    for (const component of relative10.split(path16.sep).filter(Boolean)) {
       cursor = path16.join(cursor, component);
       if (fs12.lstatSync(cursor).isSymbolicLink()) {
         throw new Error(`run input path contains a symlink: ${cursor}`);
@@ -8134,9 +8134,9 @@ function assertOutputContained(root, file) {
   if (resolvedFile !== resolvedRoot && !resolvedFile.startsWith(`${resolvedRoot}${path16.sep}`)) {
     throw new Error(`analysis output escapes project root: ${resolvedFile}`);
   }
-  const relative9 = path16.relative(resolvedRoot, resolvedFile);
+  const relative10 = path16.relative(resolvedRoot, resolvedFile);
   let cursor = resolvedRoot;
-  for (const component of relative9.split(path16.sep).filter(Boolean)) {
+  for (const component of relative10.split(path16.sep).filter(Boolean)) {
     cursor = path16.join(cursor, component);
     try {
       if (fs12.lstatSync(cursor).isSymbolicLink()) {
@@ -8398,8 +8398,8 @@ function assertRecommendation(value, label) {
 }
 function readExistingContainedText(root, file) {
   if (!fs12.existsSync(file)) return null;
-  const relative9 = path16.relative(path16.resolve(root), path16.resolve(file));
-  const contained = resolveContainedFile(root, relative9);
+  const relative10 = path16.relative(path16.resolve(root), path16.resolve(file));
+  const contained = resolveContainedFile(root, relative10);
   if (contained === null) throw new Error(`recommendation input is not a contained regular file: ${file}`);
   return fs12.readFileSync(contained, "utf8");
 }
@@ -8707,9 +8707,9 @@ function restoreRecommendationFile(root, file, previous) {
 var TRANSACTION_JOURNAL_KEYS = /* @__PURE__ */ new Set(["schema_version", "transaction_id", "files"]);
 var TRANSACTION_FILE_KEYS = /* @__PURE__ */ new Set(["path", "previous"]);
 function isAnalyzerOwnedTransactionTarget(root, file) {
-  const relative9 = path16.relative(path16.resolve(root), path16.resolve(file)).split(path16.sep).join("/");
-  const parts = relative9.split("/");
-  if (relative9 === ".guild/recommendations/queue.jsonl" || relative9 === ".guild/recommendations/activity.jsonl" || relative9 === ".guild/analysis/comparisons/index.json") return true;
+  const relative10 = path16.relative(path16.resolve(root), path16.resolve(file)).split(path16.sep).join("/");
+  const parts = relative10.split("/");
+  if (relative10 === ".guild/recommendations/queue.jsonl" || relative10 === ".guild/recommendations/activity.jsonl" || relative10 === ".guild/analysis/comparisons/index.json") return true;
   if (parts.length === 3 && parts[0] === ".guild" && parts[1] === "recommendations" && parts[2].endsWith(".jsonl") && SAFE_ID.test(parts[2].slice(0, -".jsonl".length))) return true;
   if (parts.length === 4 && parts[0] === ".guild" && parts[1] === "recommendations" && parts[2] === "drafts" && parts[3].endsWith(".md") && SAFE_ID.test(parts[3].slice(0, -3))) return true;
   if (parts.length === 5 && parts[0] === ".guild" && parts[1] === "analysis" && parts[2] === "runs" && SAFE_ID.test(parts[3]) && ["analysis.json", "analysis.md"].includes(parts[4])) return true;
@@ -9198,10 +9198,10 @@ function canonicalJson2(value) {
 function sortedUnique(values) {
   return [...new Set(values)].sort();
 }
-function readAdditiveInput(store, dir, runId, relative9) {
-  const text = typeof relative9 === "string" ? relative9 : "";
+function readAdditiveInput(store, dir, runId, relative10) {
+  const text = typeof relative10 === "string" ? relative10 : "";
   const candidate = text && !path16.isAbsolute(text) && !text.includes("#") ? `.guild/runs/${runId}/${text}` : "";
-  const ref = candidate && validEvidenceRef(candidate) && evidenceRunId(candidate) === runId ? candidate : `invalid-ref:${sha2563(String(relative9)).slice(0, 16)}`;
+  const ref = candidate && validEvidenceRef(candidate) && evidenceRunId(candidate) === runId ? candidate : `invalid-ref:${sha2563(String(relative10)).slice(0, 16)}`;
   const existing = store.get(ref);
   if (existing) return existing;
   let input = { entry: { ref, sha256: null, status: "rejected" }, bytes: null };
@@ -10161,10 +10161,10 @@ function currentRunHashes(root, runId) {
   }
   return { sourceHash: inputs.sourceHash, inputHash: inputManifestHash(manifestEntries(inputs.store)) };
 }
-function readArtifactNoFollow(root, relative9) {
+function readArtifactNoFollow(root, relative10) {
   let file;
   try {
-    file = resolveRunInputFile(path16.resolve(root), relative9);
+    file = resolveRunInputFile(path16.resolve(root), relative10);
   } catch {
     inspectionRefusal("unsafe_artifact_path");
   }

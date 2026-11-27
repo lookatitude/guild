@@ -8,7 +8,8 @@
  * invocation using this two-level fallback with no terminal `$HOME` default expands to a
  * nonexistent path (`/scripts/...`) whenever both env vars are unset. The fix (PR #61,
  * porting PR #35) replaced every occurrence with the triple fallback
- * `${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}`.
+ * `${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}`, which #289
+ * then superseded: see BAD_PATTERN.
  * This rail forbids the two-level pattern from being reintroduced anywhere a command/skill
  * doc could document a CLI invocation.
  *
@@ -57,7 +58,12 @@ export interface Violation {
 // The forbidden two-level fallback: CLAUDE_PLUGIN_ROOT with no terminal $HOME default.
 // The fixed form always continues past this point with `:-$HOME`, so this exact
 // literal substring only ever matches the unfixed pattern.
-const BAD_PATTERN = /\$\{GUILD_PLUGIN_ROOT:-\$\{CLAUDE_PLUGIN_ROOT\}\}/g;
+// Also forbidden (#289): `${CLAUDE_PLUGIN_ROOT:-...}`. Claude Code substitutes only the exact
+// token `${CLAUDE_PLUGIN_ROOT}` in command/skill text, so a default on it hides the token, the
+// variable is unset in the Bash tool, and the line falls to a path a marketplace install never
+// creates. The accepted form is
+// `$(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")`.
+const BAD_PATTERN = /\$\{GUILD_PLUGIN_ROOT:-\$\{CLAUDE_PLUGIN_ROOT\}\}|\$\{CLAUDE_PLUGIN_ROOT:-/g;
 
 // Directories that are never source — runtime state, deps, build output.
 const EXCLUDE_SEGMENTS = new Set(["node_modules", ".git", "dist", "build"]);
@@ -163,8 +169,8 @@ function main(): void {
 
   process.stderr.write(
     `[check-plugin-root-fallback] FAIL — ${violations.length} occurrence(s) of the forbidden two-level fallback ` +
-      `(no terminal $HOME default). Use the triple fallback instead:\n` +
-      `  \${GUILD_PLUGIN_ROOT:-\${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}\n\n`
+      `(no $HOME default, or a default hiding the substitutable token). Use instead:\n` +
+      `  $(r="\${CLAUDE_PLUGIN_ROOT}"; echo "\${GUILD_PLUGIN_ROOT:-\${r:-$HOME/.local/share/guild/dist/claude-code}}")\n\n`
   );
   for (const v of violations) {
     process.stderr.write(`  ${v.file}:${v.line}: ${v.text}\n`);
