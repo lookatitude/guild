@@ -124,10 +124,9 @@ export * from "./write-task-run";
 // load / merge / validate, and the layout lint executes this export.
 export * from "./workflow-graph-overlay";
 // W01/W02: component compiler and post-expansion protected-path verifier (C8 v2).
-export * from "./workflow-component-compiler";
-export * from "./workflow-protected-paths";
-export * from "./phase-composition";
-export * from "./workflow-invocation-state";
+// W01-W03: the compiler and phase-composition names consumed outside the domain.
+export { COMPONENT_DEFINITION_SEGMENT, createComponentRegistry, loadComponentRegistry } from "./workflow-component-compiler";
+export { PHASE_BINDING_PREFIX, composePhase, loadPhaseCompositionInputs, phaseBinding } from "./phase-composition";
 // U-TIER (T08 rework-r2): the per-run stable lock. Exported so the dispatch
 // instance cap can make "count the run's slots" and "claim one" a single atomic
 // step rather than an observation followed by a hopeful write.
@@ -285,6 +284,32 @@ export const stackContractBundle = deepFreezeStack(stackContractBundleJson);
 export { loadInitiativeManifest, buildD8Input, checkInitiativeEvidenceRefs, type InitiativeEvidenceCheck, type LoadedManifest, type BuiltD8Input } from "./initiative-evidence";
 export const stackP05Schemas = deepFreezeStack(stackP05SchemasJson);
 
-export * from "./managed-run";
+// recoverManagedSegmentSeal stays domain-internal (no consumer outside lifecycle).
+export {
+  managedLaunchHash,
+  readManagedAttempt,
+  claimManagedAttempt,
+  reconcileManagedAttempt,
+  assertManagedBudgetAdmission,
+  managedNonceMatches,
+  runManagedWorker,
+  prepareManagedWorker,
+  readManagedWorkerRequest,
+  recordManagedWorkerAcceptance,
+  readManagedWorkerAcceptance,
+  markManagedAttemptUncertain,
+  type ManagedAttemptInput,
+  type ManagedAttemptIdentity,
+  type ManagedAttemptClaim,
+  type ManagedUsageObservation,
+  type ManagedRunOutcome,
+  type ManagedLaunchSpec,
+  type ManagedOwnedProcess,
+  type ManagedProcessPort,
+  type ManagedControlPort,
+  type ManagedWorkerPackage,
+  type ManagedWorkerRequest,
+  type ManagedWorkerAcceptance,
+} from "./managed-run";
 
 export const stackManagedSchemas = deepFreezeStack(stackManagedSchemasJson);

@@ -1289,6 +1289,47 @@ export function validateGraphV2(
     layers: validLayers,
     tour: validTour,
   };
+  // #317: finalize's provenance record survives a whole-graph re-validation
+  // (validate-graph); without it the next finalize falls back to type.
+  if (isKnowledgeTierRecord(raw.knowledge_tier)) graph.knowledge_tier = raw.knowledge_tier;
 
   return { success: true, data: graph, issues };
+}
+
+// ---------------------------------------------------------------------------
+// v2 — finalize provenance record (#317)
+// ---------------------------------------------------------------------------
+
+/** What one knowledge finalize emitted beyond its input: node ids and [source, target, type] edges. */
+export interface KnowledgeTierRecord {
+  node_ids: string[];
+  edges: [string, string, string][];
+}
+
+export function isKnowledgeTierRecord(x: unknown): x is KnowledgeTierRecord {
+  const r = x as Partial<KnowledgeTierRecord> | null | undefined;
+  return (
+    !!r &&
+    typeof r === "object" &&
+    Array.isArray(r.node_ids) &&
+    r.node_ids.every((id) => typeof id === "string") &&
+    Array.isArray(r.edges) &&
+    r.edges.every((e) => Array.isArray(e) && e.length === 3 && e.every((s) => typeof s === "string"))
+  );
+}
+
+/**
+ * The edge type validateGraphV2 writes for an input edge type: lower-cased, a v1
+ * alias resolved unless the type is already v2-native, then any non-string or
+ * empty result -> depends_on. Mirrors sanitize -> alias (`in`, so inherited keys
+ * such as "constructor" resolve too) -> autoFix, so an input edge's provenance
+ * key equals its validated form; J12 checks it against validateGraphV2.
+ */
+export function normalizeEdgeTypeV2(type: unknown): string {
+  const t: unknown = typeof type === "string" ? type.toLowerCase() : type;
+  const mapped: unknown =
+    typeof t === "string" && !EDGE_TYPES_V2.has(t) && t in EDGE_TYPE_ALIASES
+      ? (EDGE_TYPE_ALIASES as Record<string, unknown>)[t]
+      : t;
+  return typeof mapped === "string" && mapped !== "" ? mapped : "depends_on";
 }

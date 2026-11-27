@@ -29,6 +29,7 @@ import bundle from "./stack-contracts.generated.json";
 
 import { StackP05, P05_READS, P05_WRITES } from "./stack-p05";
 import { createRunLifecycle, createRealEnv, type StagedRunStart } from "./run-lifecycle";
+import { bindManagedLaunchProof, resolveManagedRunTarget } from "./managed-segment";
 import { claimManagedAttempt, managedLaunchHash, reconcileManagedAttempt, markManagedAttemptUncertain, readManagedAttempt, prepareManagedWorker, type ManagedAttemptIdentity, type ManagedLaunchSpec, type ManagedWorkerPackage } from "./managed-run";
 export interface ManagedFacadeRuntime {
   availability: string[];
@@ -1693,6 +1694,7 @@ export class StackFacade {
       try{const prior=this.loadRuntime(key,source);if(prior.fingerprint!==fingerprint)throw new StackError("idempotency_conflict","Key already used",409);return this.loadRuntime("operations/"+prior.operation_id+".json",source).preview;}catch(error){if(!(error instanceof StackError&&error.code==="not_found"))throw error;}
       const args=request.arguments,config=this.config(source),workflow=this.workflows(source).find(row=>stackCanonical(row.ref)===stackCanonical(args.workflow));
       if(!workflow||args.workflow.source_id!==source.source_id||args.config_hash!==config.data.effective_hash)throw new StackError("stale_preview","Exact current workflow and effective configuration required",409);
+      if(request.operation==="run.rerun"&&request.targets.length===1)resolveManagedRunTarget({root:source.realpath,run_id:request.targets[0].id,source_id:source.source_id,host_id:args.host_id});
       const parent=request.operation==="run.rerun"?(request.targets.length===1?this.domain(source).run(request.targets[0].id):null):null;
       if(request.operation==="run.start"&&request.targets.length||request.operation==="run.rerun"&&(!parent||stackCanonical(parent.ref)!==stackCanonical(request.targets[0])))throw new StackError("stale_target","Exact source-qualified parent required",409);
       const initiative=args.initiative===null?null:this.domain(source).initiative(args.initiative.id);
@@ -1734,6 +1736,9 @@ export class StackFacade {
       const claim=readManagedAttempt(this.managedRuntime(source),record.identity.attempt_id);
       if(stackCanonical(claim.identity)!==stackCanonical(record.identity))throw new StackError("invalid_state","Managed claim changed",409);
       if(claim.host){
+        const launchBytes=stackRead(source.realpath,".guild/runs/"+record.stage.run_id+"/launch.json",true);
+        let launchProof:unknown=null;try{launchProof=launchBytes===null?null:JSON.parse(launchBytes);}catch{launchProof=null;}
+        bindManagedLaunchProof(launchProof,{source_id:source.source_id,run_id:record.stage.run_id,operation_id:p.operation_id,operation:p.operation,attempt_id:record.attempt_id,launch_hash:record.identity.launch_hash,parent_run:record.parent});
         receipt={schema_version:"guild.stack.operation-receipt.v1",operation_id:p.operation_id,operation:p.operation,source_id:source.source_id,idempotency_key:record.apply_key,preview_hash:p.preview_hash,producer:{id:"guild",version:this.packageIdentity().version},state:"applied",before:p.targets,after:[this.domain(source).run(record.stage.run_id).ref],touched:[this.evidence(source,".guild/runs/"+record.stage.run_id+"/attempts/"+record.attempt_id+"/intent.json")],validation:[],error:null,inverse_ref:null,closed_at:this.now().toISOString()};
         this.validate("operation-receipt",receipt);this.screenedWrite(source,this.artifactPath(p.operation_id,"receipt"),JSON.stringify(receipt,null,2)+"\n",p.operation_id,true,true);record.state="succeeded";this.saveRuntime("operations/"+p.operation_id+".json",record,source);state="succeeded";
       }else{

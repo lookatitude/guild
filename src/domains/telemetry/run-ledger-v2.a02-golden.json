@@ -1,0 +1,361 @@
+{
+ "source": {
+  "golden": "contracts/guild-stack/v2/fixtures/golden.json",
+  "golden_sha256": "sha256:ae61c5e89e8a2ae104a99871edc13f64229152f020ff4bc4ed7bc9f29ba6020d",
+  "bundle_sha256": "sha256:05833d374acb729cad021bb7a54141d67f1429fcaaca112b6fa29a10d3ec7d94"
+ },
+ "fixtures": [
+  {
+   "id": "GF1",
+   "tests": [
+    "AT23",
+    "AT24"
+   ],
+   "expected_text": "known input150/cache40/output30,total180; exact=null,coverage2/3;derived estimate0.00048USD,not measured",
+   "inputs": {
+    "price_usd_per_1m": {
+     "uncached_input": 2,
+     "cache_read": 0.5,
+     "output": 8
+    },
+    "observations": [
+     {
+      "identity": "request-a",
+      "revision": 1,
+      "final": false,
+      "inclusion": "leaf_exclusive",
+      "input": 100,
+      "cache": 40,
+      "output": 20
+     },
+     {
+      "identity": "request-a",
+      "revision": 2,
+      "final": true,
+      "inclusion": "leaf_exclusive",
+      "input": 100,
+      "cache": 40,
+      "output": 20
+     },
+     {
+      "identity": "request-a",
+      "revision": 2,
+      "final": true,
+      "inclusion": "mirror",
+      "input": 100,
+      "cache": 40,
+      "output": 20
+     },
+     {
+      "identity": "parent-1",
+      "revision": 1,
+      "final": true,
+      "inclusion": "parent_inclusive",
+      "input": null,
+      "cache": null,
+      "output": null,
+      "total": 120
+     },
+     {
+      "identity": "request-b",
+      "revision": 1,
+      "final": true,
+      "inclusion": "leaf_exclusive",
+      "input": 50,
+      "cache": 0,
+      "output": 10,
+      "retry_of": "request-b-attempt-1"
+     },
+     {
+      "identity": "request-c",
+      "revision": 1,
+      "final": true,
+      "inclusion": "leaf_exclusive",
+      "input": null,
+      "cache": null,
+      "output": null
+     }
+    ]
+   },
+   "bindings": [
+    {
+     "id": "GF1.input_tokens",
+     "document": "analysis",
+     "pointer": "/metrics/0/points/0/value",
+     "expected": 150
+    },
+    {
+     "id": "GF1.cache_read_tokens",
+     "document": "analysis",
+     "pointer": "/metrics/2/points/0/value",
+     "expected": 40
+    },
+    {
+     "id": "GF1.output_tokens",
+     "document": "analysis",
+     "pointer": "/metrics/1/points/0/value",
+     "expected": 30
+    },
+    {
+     "id": "GF1.total_tokens",
+     "document": "analysis",
+     "pointer": "/metrics/3/points/0/value",
+     "expected": 180
+    },
+    {
+     "id": "GF1.total_known_subtotal",
+     "document": "analysis",
+     "pointer": "/metrics/3/points/0/known_subtotal",
+     "expected": 180
+    },
+    {
+     "id": "GF1.total_exact",
+     "document": "analysis",
+     "pointer": "/metrics/3/points/0/exact_total",
+     "expected": null
+    },
+    {
+     "id": "GF1.total_covered",
+     "document": "analysis",
+     "pointer": "/metrics/3/points/0/coverage/covered",
+     "expected": 2
+    },
+    {
+     "id": "GF1.total_eligible",
+     "document": "analysis",
+     "pointer": "/metrics/3/points/0/coverage/eligible",
+     "expected": 3
+    },
+    {
+     "id": "GF1.coverage_ratio",
+     "document": "analysis",
+     "pointer": "/metrics/6/points/0/value",
+     "expected": 0.6666666666666666
+    },
+    {
+     "id": "GF1.derived_estimate_usd",
+     "document": "analysis",
+     "pointer": "/metrics/4/points/0/value",
+     "expected": 0.00048
+    },
+    {
+     "id": "GF1.derived_basis",
+     "document": "analysis",
+     "pointer": "/metrics/4/points/0/cost_basis",
+     "expected": "derived_estimate"
+    },
+    {
+     "id": "GF1.measured_spend",
+     "document": "analysis",
+     "pointer": "/metrics/5/points/0/value",
+     "expected": null
+    },
+    {
+     "id": "GF1.mirror_suppressed",
+     "document": "analysis",
+     "pointer": "/metrics/7/points/0/value",
+     "expected": 1
+    },
+    {
+     "id": "GF1.observed_model",
+     "document": "trace-request-a",
+     "pointer": "/observed_identity/model",
+     "expected": "observed-model"
+    },
+    {
+     "id": "GF1.requested_model",
+     "document": "trace-request-a",
+     "pointer": "/requested_model",
+     "expected": "requested-model"
+    }
+   ],
+   "refusals": [
+    {
+     "id": "GF1-cache-counted-again",
+     "level": "semantic",
+     "expected_error": "total must be input plus output; cache is not additive"
+    },
+    {
+     "id": "GF1-stale-provisional-stream-summed",
+     "level": "semantic",
+     "expected_error": "duplicate accounting identity"
+    },
+    {
+     "id": "GF1-parent-inclusive-billed",
+     "level": "semantic",
+     "expected_error": "normalized usage cannot bill parent-inclusive counters"
+    },
+    {
+     "id": "GF1-partial-claims-exact-total",
+     "level": "semantic",
+     "expected_error": "incomplete metric cannot claim exact total"
+    },
+    {
+     "id": "GF1-missing-measured-cost-as-zero",
+     "level": "semantic",
+     "expected_error": "unavailable metric must be null with reason"
+    },
+    {
+     "id": "GF1-estimate-labelled-measured",
+     "level": "semantic",
+     "expected_error": "derived estimate must retain basis"
+    },
+    {
+     "id": "GF1-derived-without-pinned-pricing",
+     "level": "semantic",
+     "expected_error": "derived estimate needs pinned pricing"
+    },
+    {
+     "id": "GF1-requested-model-priced-as-observed",
+     "level": "semantic",
+     "expected_error": "derived model pricing needs observed model"
+    },
+    {
+     "id": "GF1-cache-added-to-total-220",
+     "level": "oracle",
+     "expected_error": "oracle: M09 value must equal final leaf input+output (180)"
+    },
+    {
+     "id": "GF1-unknown-request-counted-as-zero",
+     "level": "semantic",
+     "expected_error": "unavailable usage must report null counters, not zero"
+    },
+    {
+     "id": "GF1-negative-token-total",
+     "level": "semantic",
+     "expected_error": "unsigned metric cannot be negative"
+    }
+   ]
+  },
+  {
+   "id": "GF2",
+   "tests": [
+    "AT25"
+   ],
+   "expected_text": "elapsed20,activeUnion15,agentWork20,rawWait6,exclusiveWait3",
+   "inputs": {
+    "run": {
+     "start": "2026-10-26T00:00:00.000Z",
+     "end": "2026-10-26T00:00:00.020Z",
+     "duration_ms": 20,
+     "clock": {
+      "domain": "controller-a",
+      "basis": "controller",
+      "comparable": true,
+      "skew_bound_ms": 0
+     }
+    },
+    "active": [
+     {
+      "start": "2026-10-26T00:00:00.000Z",
+      "end": "2026-10-26T00:00:00.010Z",
+      "duration_ms": 10,
+      "clock": {
+       "domain": "controller-a",
+       "basis": "controller",
+       "comparable": true,
+       "skew_bound_ms": 0
+      },
+      "agent": "agent-1"
+     },
+     {
+      "start": "2026-10-26T00:00:00.005Z",
+      "end": "2026-10-26T00:00:00.015Z",
+      "duration_ms": 10,
+      "clock": {
+       "domain": "controller-a",
+       "basis": "controller",
+       "comparable": true,
+       "skew_bound_ms": 0
+      },
+      "agent": "agent-2"
+     }
+    ],
+    "wait": [
+     {
+      "start": "2026-10-26T00:00:00.012Z",
+      "end": "2026-10-26T00:00:00.018Z",
+      "duration_ms": 6,
+      "clock": {
+       "domain": "controller-a",
+       "basis": "controller",
+       "comparable": true,
+       "skew_bound_ms": 0
+      },
+      "reason": "operator"
+     }
+    ]
+   },
+   "bindings": [
+    {
+     "id": "GF2.elapsed_ms",
+     "document": "analysis",
+     "pointer": "/metrics/0/points/0/value",
+     "expected": 20
+    },
+    {
+     "id": "GF2.active_union_ms",
+     "document": "analysis",
+     "pointer": "/metrics/1/points/0/value",
+     "expected": 15
+    },
+    {
+     "id": "GF2.agent_work_ms",
+     "document": "analysis",
+     "pointer": "/metrics/2/points/0/value",
+     "expected": 20
+    },
+    {
+     "id": "GF2.raw_wait_ms",
+     "document": "analysis",
+     "pointer": "/metrics/3/points/0/value",
+     "expected": 6
+    },
+    {
+     "id": "GF2.exclusive_wait_ms",
+     "document": "analysis",
+     "pointer": "/metrics/4/points/0/value",
+     "expected": 3
+    },
+    {
+     "id": "GF2.event_duration_ms",
+     "document": "run-interval-event",
+     "pointer": "/interval/duration_ms",
+     "expected": 20
+    }
+   ],
+   "refusals": [
+    {
+     "id": "GF2-unknown-clock-claims-duration",
+     "level": "semantic",
+     "expected_error": "unknown clock cannot claim duration"
+    },
+    {
+     "id": "GF2-interval-ends-before-start",
+     "level": "semantic",
+     "expected_error": "interval cannot end before start"
+    },
+    {
+     "id": "GF2-negative-exclusive-wait",
+     "level": "semantic",
+     "expected_error": "unsigned metric cannot be negative"
+    },
+    {
+     "id": "GF2-elapsed-wrong-unit",
+     "level": "semantic",
+     "expected_error": "scalar unit or unexpected alias mismatch"
+    },
+    {
+     "id": "GF2-elapsed-as-summed-latencies",
+     "level": "oracle",
+     "expected_error": "oracle: elapsed is run interval (20), not summed spans (26)"
+    },
+    {
+     "id": "GF2-active-overlap-added",
+     "level": "oracle",
+     "expected_error": "oracle: active union (15) does not add overlaps (20)"
+    }
+   ]
+  }
+ ]
+}

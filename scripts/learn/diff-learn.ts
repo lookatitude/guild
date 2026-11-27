@@ -54,7 +54,7 @@ function main(): void {
     process.exit(1);
   }
 
-  const changed = changedFiles(gp.repoRoot, base, head);
+  const changed = changedFiles(gp.sourceRoot, base, head);
   const changedSet = new Set(changed);
 
   const affectedNodes: string[] = [];
@@ -81,8 +81,8 @@ function main(): void {
 
   const artifact = {
     version: SCHEMA.diffUnderstanding,
-    base: base === "HEAD" ? headSha(gp.repoRoot) : base,
-    head: head === "HEAD" ? headSha(gp.repoRoot) : head,
+    base: base === "HEAD" ? headSha(gp.sourceRoot) : base,
+    head: head === "HEAD" ? headSha(gp.sourceRoot) : head,
     changed_files: changed,
     affected_nodes: affectedNodes,
     affected_layers: affectedLayers,

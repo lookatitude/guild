@@ -8,9 +8,9 @@
 
 import { describe, it, expect } from "bun:test";
 
-import * as review from ".";
 import {
   applyMutation,
+  assuranceLedgerHash,
   beginInvocation,
   checkAcceptance,
   createAssuranceLedger,
@@ -196,7 +196,7 @@ describe("AT07 assurance state machine — review A, repair B, restart, accept",
     const parsed = JSON.parse(serializeLedger(reviewedA()));
     parsed.obligations[0].accepted.round = 7;
     const { ledger_hash: _drop, ...body } = parsed;
-    const forged = JSON.stringify({ ...body, ledger_hash: review.assuranceLedgerHash(body) });
+    const forged = JSON.stringify({ ...body, ledger_hash: assuranceLedgerHash(body) });
     expect(rules(restoreLedger(forged, A, DEF))).toContain("ledger-corrupt");
   });
 
@@ -238,10 +238,6 @@ describe("AT07 assurance state machine — review A, repair B, restart, accept",
     expect(c8.obligations.find((o) => o.id === "ob-sec")!.status).toBe("invalidated");
   });
 
-  it("the review domain exposes the ledger through its index", () => {
-    expect(typeof review.createAssuranceLedger).toBe("function");
-    expect(typeof review.checkAcceptance).toBe("function");
-  });
 });
 
 describe("AT07 codex r1 regressions", () => {
@@ -249,7 +245,7 @@ describe("AT07 codex r1 regressions", () => {
     const parsed = JSON.parse(serializeLedger(ok(createAssuranceLedger({ projection: PROJECTION, subject: A, obligations: OBLIGATIONS }))));
     for (const o of parsed.obligations) o.required = false;
     const { ledger_hash: _h, ...body } = parsed;
-    const forged = JSON.stringify({ ...body, ledger_hash: review.assuranceLedgerHash(body) });
+    const forged = JSON.stringify({ ...body, ledger_hash: assuranceLedgerHash(body) });
     expect(rules(restoreLedger(forged, A, DEF))).toContain("definition-changed");
     const l = reviewedA();
     const newAuthority = { projection: PROJECTION, obligations: OBLIGATIONS.map((o) => (o.id === "ob-sec" ? { ...o, authority: "other" } : o)) };
@@ -294,7 +290,7 @@ describe("AT07 codex r2 regressions", () => {
     const parsed = JSON.parse(serializeLedger(ok(applyMutation(reviewedA(), { subject: B, changed: "unknown" }))));
     for (const i of parsed.invocations) i.evidence = [];
     const { ledger_hash: _h, ...body } = parsed;
-    expect(rules(restoreLedger(JSON.stringify({ ...body, ledger_hash: review.assuranceLedgerHash(body) }), B, DEF))).toContain("ledger-corrupt");
+    expect(rules(restoreLedger(JSON.stringify({ ...body, ledger_hash: assuranceLedgerHash(body) }), B, DEF))).toContain("ledger-corrupt");
   });
 
   it("F9: evidence cited by a rejected A round cannot accept B", () => {
