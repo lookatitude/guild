@@ -3609,9 +3609,9 @@ function isWithin(child, parent) {
 }
 function checkContained(root, target, options = {}) {
   const policy = options.policy ?? "resolve";
-  let realRoot;
+  let realRoot2;
   try {
-    realRoot = fs6.realpathSync(path8.resolve(root));
+    realRoot2 = fs6.realpathSync(path8.resolve(root));
   } catch {
     return refuse("root-unresolvable", `project root ${root} does not resolve`);
   }
@@ -3621,7 +3621,7 @@ function checkContained(root, target, options = {}) {
       `refusing a path spelled with a ".." segment (${target}) \u2014 parent traversal cannot be resolved before symlinks`
     );
   }
-  const abs = path8.isAbsolute(target) ? path8.resolve(target) : path8.resolve(realRoot, target);
+  const abs = path8.isAbsolute(target) ? path8.resolve(target) : path8.resolve(realRoot2, target);
   let probe = abs;
   let probeStat = null;
   for (; ; ) {
@@ -3649,7 +3649,7 @@ function checkContained(root, target, options = {}) {
       `${probe} is a symlink that does not resolve; refusing to write through it`
     );
   }
-  const rel2 = path8.relative(realRoot, realProbe);
+  const rel2 = path8.relative(realRoot2, realProbe);
   if (rel2 !== "" && escapes(rel2)) {
     return refuse("outside-root", `${abs} resolves outside the project root (${realProbe})`);
   }
@@ -3667,7 +3667,7 @@ function checkContained(root, target, options = {}) {
       } catch {
         return refuse("dangling-symlink", `${walk} is a symlink that does not resolve`);
       }
-      const segRel = path8.relative(realRoot, segReal);
+      const segRel = path8.relative(realRoot2, segReal);
       const strictlyInside = segRel !== "" && !escapes(segRel);
       if (strictlyInside) {
         return refuse("physical-symlink", `refusing \u2014 symlinked path segment: ${walk}`);
@@ -3676,7 +3676,7 @@ function checkContained(root, target, options = {}) {
   }
   const tail = path8.relative(probe, abs);
   const realPath = tail === "" ? realProbe : path8.join(realProbe, tail);
-  return Object.freeze({ contained: true, realRoot, realPath });
+  return Object.freeze({ contained: true, realRoot: realRoot2, realPath });
 }
 function prepareContainedWrite(root, target, options = {}) {
   if (hasParentSegment(target)) {
@@ -3867,10 +3867,44 @@ function parseFrontmatter(content, opts = {}) {
   return value;
 }
 
+// src/domains/state/storage-policy.ts
+var path11 = __toESM(require("node:path"));
+var NON_DURABLE_CLASSES = sealSet(
+  ["runtime", "cache", "managed-resource", "temporary"],
+  "NON_DURABLE_CLASSES"
+);
+var DURABLE_CLASSES = sealSet(
+  ["canonical", "durable-record"],
+  "DURABLE_CLASSES"
+);
+var KTD16_FROZEN_PREFIXES = deepFreeze([
+  "runs",
+  "analysis",
+  "recommendations"
+]);
+var DURABLE_SUBTREES = deepFreeze({
+  /** Canonical knowledge (KTD35/KTD70). */
+  knowledge: "wiki",
+  /**
+   * The definition tree root is `.guild/` itself: `agents/`, `skills/` and `teams/`
+   * already sit there (KTD20).
+   */
+  definitionsRoot: "",
+  /**
+   * `definition("sources", id)` — the one logical name that maps elsewhere, onto
+   * the durable sources tree that already exists, so R59 does not invent a third home.
+   */
+  sources: path11.join("knowledge", "sources"),
+  initiatives: "initiatives",
+  /** KTD16 freeze. */
+  runs: "runs",
+  artifacts: "artifacts"
+});
+
 // src/domains/state/index-migrate.ts
 var import_node_child_process = require("node:child_process");
 var fs7 = __toESM(require("node:fs"));
-var path11 = __toESM(require("node:path"));
+var path12 = __toESM(require("node:path"));
 function openDatabase(dbPath) {
   const { DatabaseSync } = require("node:sqlite");
   const db = new DatabaseSync(dbPath);
@@ -3885,12 +3919,12 @@ function resolveGuildRoot2(cwd) {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"]
     }).trim();
-    const abs = path11.isAbsolute(raw) ? raw : path11.resolve(cwd, raw);
-    const root = path11.dirname(abs);
+    const abs = path12.isAbsolute(raw) ? raw : path12.resolve(cwd, raw);
+    const root = path12.dirname(abs);
     if (fs7.existsSync(root)) return root;
   } catch {
   }
-  return path11.resolve(cwd);
+  return path12.resolve(cwd);
 }
 var MIGRATIONS = [
   // ── v1: core tables ───────────────────────────────────────────────────────
@@ -4058,7 +4092,7 @@ function runMigrations(dbPath) {
   let db;
   let fromVersion = 0;
   try {
-    fs7.mkdirSync(path11.dirname(dbPath), { recursive: true });
+    fs7.mkdirSync(path12.dirname(dbPath), { recursive: true });
     db = openDatabase(dbPath);
     db.exec("PRAGMA journal_mode = WAL");
     db.exec("PRAGMA synchronous = NORMAL");
@@ -4123,7 +4157,7 @@ function runIndexMigrateCli() {
   }
   if (!dbPath) {
     const guildRoot = resolveGuildRoot2(cwd);
-    dbPath = path11.join(guildRoot, ".guild", "index.sqlite");
+    dbPath = path12.join(guildRoot, ".guild", "index.sqlite");
   }
   const result = runMigrations(dbPath);
   if (result.ok) {
@@ -4140,40 +4174,6 @@ function runIndexMigrateCli() {
 if (typeof module !== "undefined" && require.main === module && /^index-migrate\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
   runIndexMigrateCli();
 }
-
-// src/domains/state/storage-policy.ts
-var path12 = __toESM(require("node:path"));
-var NON_DURABLE_CLASSES = sealSet(
-  ["runtime", "cache", "managed-resource", "temporary"],
-  "NON_DURABLE_CLASSES"
-);
-var DURABLE_CLASSES = sealSet(
-  ["canonical", "durable-record"],
-  "DURABLE_CLASSES"
-);
-var KTD16_FROZEN_PREFIXES = deepFreeze([
-  "runs",
-  "analysis",
-  "recommendations"
-]);
-var DURABLE_SUBTREES = deepFreeze({
-  /** Canonical knowledge (KTD35/KTD70). */
-  knowledge: "wiki",
-  /**
-   * The definition tree root is `.guild/` itself: `agents/`, `skills/` and `teams/`
-   * already sit there (KTD20).
-   */
-  definitionsRoot: "",
-  /**
-   * `definition("sources", id)` — the one logical name that maps elsewhere, onto
-   * the durable sources tree that already exists, so R59 does not invent a third home.
-   */
-  sources: path12.join("knowledge", "sources"),
-  initiatives: "initiatives",
-  /** KTD16 freeze. */
-  runs: "runs",
-  artifacts: "artifacts"
-});
 
 // src/domains/state/storage-artifact-registry.ts
 var STORAGE_ARTIFACT_REGISTRY = deepFreeze([
@@ -4396,14 +4396,14 @@ function resolveContainedRealDir(abs, root) {
   const st = lstatSafe(abs);
   if (!st || !st.isDirectory() || st.isSymbolicLink()) return null;
   let real;
-  let realRoot;
+  let realRoot2;
   try {
     real = fs8.realpathSync(abs);
-    realRoot = fs8.realpathSync(root);
+    realRoot2 = fs8.realpathSync(root);
   } catch {
     return null;
   }
-  const rel2 = path13.relative(realRoot, real);
+  const rel2 = path13.relative(realRoot2, real);
   if (rel2 === "" || rel2.startsWith("..") || path13.isAbsolute(rel2)) return null;
   return real;
 }

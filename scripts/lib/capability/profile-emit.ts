@@ -62,6 +62,7 @@
  * C5 DUAL-HOME: mirrored under src/modules/capability/resources/. Edit here only.
  */
 
+import { knowledgeIndexReadPath } from "../../../src/domains/state";
 import { createHash } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -401,7 +402,12 @@ export function snapshotFeedstock(projectRoot: string): FeedstockSnapshot {
   const absent: string[] = [];
   const hashes: Record<string, string | null> = {};
   for (const input of FEEDSTOCK_INPUTS) {
-    const h = sha256File(path.join(projectRoot, input.rel));
+    // Index feedstock lives on the layout's index dir (cache root on layout 2).
+    const IDX = ".guild/indexes/";
+    const file = input.rel.startsWith(IDX)
+      ? knowledgeIndexReadPath(projectRoot, input.rel.slice(IDX.length))
+      : path.join(projectRoot, input.rel);
+    const h = sha256File(file);
     if (h === null) absent.push(input.name);
     hashes[input.name] = h;
   }

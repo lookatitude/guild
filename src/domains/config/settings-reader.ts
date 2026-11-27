@@ -667,7 +667,7 @@ export function rigorProfile(rigor: ResolvedConfig["rigor"]): RigorProfile {
 // classifier (§E3/§E8). Imported (NOT re-exported) to keep the settings-resolver
 // shim surface unchanged (parity guard).
 import { discoverWorkspace } from "./workspace-manifest";
-import { durableGuildDir } from "../state";
+import { durableGuildDir, independentIndexReadPath } from "../state";
 
 // ---------------------------------------------------------------------------
 // Settings file loading
@@ -1042,11 +1042,7 @@ export function initiativeIsWorkspaceScoped(
 
     // --- 1. Try registry -------------------------------------------------
     // id is compared by value against registry entries — NOT used as a path.
-    const registryPath = path.join(
-      durableGuildDir(workspaceRoot),
-      "indexes",
-      "initiatives-registry.yaml"
-    );
+    const registryPath = independentIndexReadPath(workspaceRoot, "initiatives-registry.yaml");
     if (fs.existsSync(registryPath)) {
       try {
         const raw = fs.readFileSync(registryPath, "utf8");

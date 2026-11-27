@@ -26,7 +26,9 @@ import {
 import { decisionPublicationRefs } from "../../../src/domains/knowledge/decision-propagation";
 import { basisDigest, sourceWorktreeId, type SourceBasis } from "../../../src/domains/knowledge/source-basis";
 import { deepFreeze } from "../../../src/domains/kernel/sealed-collections";
-import { computeLearnSourceBasis } from "./paths";
+import { indexesAreOffTree } from "../../../src/domains/state";
+import { durableGuildDir } from "../../lib/state/ensure-storage-layout";
+import { assertNotLegacyIndexTarget, computeLearnSourceBasis } from "./paths";
 import { STRUCTURAL_EXTRACTOR, structuralSubset } from "./structural";
 import type { GraphEdge, GraphNode } from "./schema";
 
@@ -181,7 +183,7 @@ export const LEARN_LAYERS: Partial<Record<LayerChannel, LayerSpec>> = Object.fre
 });
 
 export interface LearnPublishTarget {
-  /** Owner `.guild/indexes`. */
+  /** Owner indexes dir (`knowledgeIndexesDir`): the platform cache root on layout 2, `.guild/indexes` on layout 1. */
   indexesDir: string;
   /** Owner (durable) worktree root. */
   repoRoot: string;
@@ -218,6 +220,7 @@ export function baseFrom(pinned: PinnedGeneration | null, t: LearnPublishTarget)
 }
 
 export function readLearnBase(t: LearnPublishTarget): LearnBase {
+  // Layout 2: the base is the cache's own pointer; an empty cache is a fresh base.
   return baseFrom(readPublication(t.indexesDir), t);
 }
 
@@ -273,7 +276,7 @@ function publishBuilt(
         : undefined,
     exports: [GRAPH_ARTIFACT, RECALL_ARTIFACT],
     // K04: the owner's decision refs and replan signals ride on every generation.
-    decisions: () => decisionPublicationRefs(path.dirname(t.indexesDir)),
+    decisions: () => decisionPublicationRefs(durableGuildDir(t.repoRoot)),
     lockTimeoutMs: opts.lockTimeoutMs,
   });
 }
@@ -353,6 +356,7 @@ export function runGraphStage<G extends object>(
   gp: { indexesDir: string; repoRoot: string; sourceRoot: string },
   opts: { target: string | null; who: string; channels: LayerChannel[]; transform: (g: G) => G },
 ): G | null {
+  if (opts.target) assertNotLegacyIndexTarget(gp.repoRoot, opts.target, opts.who);
   if (opts.target && ownerArtifactTarget(gp, opts.target) === "store") throw new Error(`[${opts.who}] refusing to write inside the generation store`);
   if (opts.target && ownerArtifactTarget(gp, opts.target) === "export") opts = { ...opts, target: null };
   if (opts.target) {
@@ -370,7 +374,13 @@ export function runGraphStage<G extends object>(
   const t = learnTarget(gp);
   const basis = computeLearnSourceBasis(t.sourceRoot);
   const base = readLearnBase(t);
-  if (!base.graph) return null;
+  if (!base.graph) {
+    // Layout 2: derived indexes are rebuilt, never migrated or published partially.
+    if (indexesAreOffTree(t.repoRoot)) {
+      throw new Error(`[${opts.who}] no knowledge graph in the cache for this layout 2 root; run the full learn pipeline (extract-structural) first`);
+    }
+    return null;
+  }
   const clone = (g: unknown): G => JSON.parse(JSON.stringify(g)) as G;
   let final = opts.transform(clone(base.graph));
   const first = final;

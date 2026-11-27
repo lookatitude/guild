@@ -44,7 +44,7 @@
  */
 
 import * as path from "path";
-import { guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson, SCHEMA, computeLearnSourceBasis } from "./lib/paths";
+import { assertNotLegacyIndexTarget, guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson, SCHEMA, computeLearnSourceBasis } from "./lib/paths";
 import { assertPublished, GRAPH_ARTIFACT, publishLearnArtifacts, readLearnBase } from "./lib/publish";
 import { carryLabels, ownerArtifactTarget } from "./lib/publish";
 import { headSha, isTracked } from "./lib/git";
@@ -115,8 +115,20 @@ function main(): void {
   let outPath: string;
   let cachePath: string;
   try {
-    outPath = assertContained(repoRoot, parseFlag(argv, "out") ?? gp.knowledgeGraph, "--out path");
-    cachePath = assertContained(repoRoot, `${outPath}.structural-cache.json`, "cache path");
+    // A user-supplied --out, and the layout 1 default under `.guild/indexes`, stay
+    // inside the repo. The layout 2 default is the platform cache dir, off-tree by
+    // design and derived from the storage helper (never user input).
+    const outFlag = parseFlag(argv, "out");
+    if (outFlag) assertNotLegacyIndexTarget(repoRoot, path.resolve(repoRoot, outFlag), "extract-structural");
+    const relIdx = path.relative(repoRoot, gp.indexesDir);
+    const offTree = !outFlag && (relIdx === ".." || relIdx.startsWith(`..${path.sep}`) || path.isAbsolute(relIdx));
+    if (offTree) {
+      outPath = path.resolve(gp.knowledgeGraph);
+      cachePath = `${outPath}.structural-cache.json`;
+    } else {
+      outPath = assertContained(repoRoot, outFlag ?? gp.knowledgeGraph, "--out path");
+      cachePath = assertContained(repoRoot, `${outPath}.structural-cache.json`, "cache path");
+    }
   } catch (err) {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     process.exit(1);

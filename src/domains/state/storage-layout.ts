@@ -24,6 +24,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { discoverGuild } from "./guild-discovery";
+import { realRoot } from "./storage-indexes";
 import {
   isContainedRealDir,
   readdirSafe,
@@ -37,6 +38,7 @@ import {
   type GuildScope,
   type StorageClass,
 } from "./storage-policy";
+import { guildRootCacheBase } from "./storage-root-cache";
 import {
   guildRootId,
   resolveStorageRoots,
@@ -209,7 +211,7 @@ export function createGuildStorage(cwd: string = process.cwd(), opts: CreateStor
   const activeScope = project ?? workspace!;
 
   const runtimeBase = path.join(roots.state, "roots", rootId);
-  const cacheBase = path.join(roots.cache, "roots", rootId);
+  const cacheBase = guildRootCacheBase(roots, rootId);
   const tempBase = path.join(roots.temp, rootId);
 
   const storage: GuildStorage = {
@@ -305,24 +307,6 @@ export function createGuildStorage(cwd: string = process.cwd(), opts: CreateStor
 export function hostCapabilityCacheDir(cwd: string, hostId?: string): string {
   const storage = createGuildStorage(realRoot(cwd));
   return hostId === undefined ? storage.cache("hosts") : storage.cache("hosts", hostId);
-}
-
-/**
- * Resolve symlinks before the root id is derived.
- *
- * A DURABLE path is inside the repo, so a writer and a reader always agree on it
- * however they spelled the root. A CACHE path is keyed by a hash of the root, so
- * a symlinked temp root and its resolved spelling — one directory on macOS — key two different
- * caches, and one process writes a manifest the next cannot find. Resolving first
- * makes the key the directory, not the spelling. A path that does not exist yet
- * is returned unchanged; the caller is about to create it.
- */
-function realRoot(cwd: string): string {
-  try {
-    return fs.realpathSync(cwd);
-  } catch {
-    return cwd;
-  }
 }
 
 /** The capability manifest for one host id, on the platform cache root. */

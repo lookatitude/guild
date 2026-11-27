@@ -41,6 +41,7 @@
  * Zero runtime deps beyond Node builtins.
  */
 
+import { knowledgeIndexesDir } from "../src/domains/state";
 import * as fs from "fs";
 import { sealSet } from '../src/domains/kernel';
 import * as path from "path";
@@ -857,7 +858,7 @@ export function buildKnowledgeLinks(opts: BuildOptions): BuildResult {
   //    state is held there that is not also in the canonical stores. If it is
   //    absent (NN#8 delete case), only the canonical-store edges appear.
   // ─────────────────────────────────────────────────────────────────────────
-  const klPath = path.join(durableGuildDir(root), "indexes", "knowledge-links.json");
+  const klPath = path.join(knowledgeIndexesDir(root), "knowledge-links.json");
   let existingLinks: KnowledgeLink[] = [];
   if (!dry_run && fs.existsSync(klPath)) {
     // G2b-4 fix: read via the shared knowledge-links-io helper (tolerant of

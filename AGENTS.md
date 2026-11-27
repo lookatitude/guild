@@ -187,7 +187,9 @@ history (inverse span + `before_hash`) on platform state, so there is no
 The storage contract classifies rebuildable caches as external and scratch as
 temporary. Retained source exceptions include `.guild/index.sqlite` in
 `src/domains/state/index-cache.ts` compatibility helpers and Init's cheap
-CodebaseMap under `.guild/indexes/`; do not commit derived indexes or describe
+CodebaseMap under `.guild/indexes/` (layout 1 or unmarked roots only: on layout 2 every
+learn index resolves through `knowledgeIndexesDir` on the platform cache root,
+with `.guild/indexes/` read as a fallback until `caches-out` removes it); do not commit derived indexes or describe
 these source paths as freshly observed writes. Opening Guild on an older layout upgrades it lazily on the first
 write-capable entry, and SessionStart on a Guild root always loads the Guild
 bootstrap.

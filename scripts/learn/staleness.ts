@@ -19,6 +19,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { guildPaths, parseCwd, hasFlag, writeJson, readJson, computeLearnSourceBasis } from "./lib/paths";
+import { knowledgeIndexesReadDir } from "../../src/domains/state";
 import { type ChannelState, type SourceBasis } from "../../src/domains/knowledge/source-basis";
 import { reconcileBoundary, type FreshnessMarker } from "../../src/domains/knowledge/freshness-boundary";
 import { publicationStatus, type PublicationStatus } from "../../src/domains/knowledge/publication-boundary";
@@ -65,16 +66,34 @@ function main(): void {
     return;
   }
 
+  // Layout 2 with only a legacy `.guild/indexes` tree: it is read-only and was never
+  // verified against this basis, so nothing in it is reported current. Run the full
+  // learn pipeline to build the cache.
+  if (knowledgeIndexesReadDir(gp.repoRoot) !== gp.indexesDir) {
+    const out = {
+      state: "FULL",
+      reason: "legacy .guild/indexes tree on a layout 2 root: freshness unverified; run the full learn pipeline",
+      freshness: "unknown",
+      filesToReanalyze: Object.keys(tree),
+      rerunArchitecture: true,
+      publication: { error: "legacy .guild/indexes publication is not verified for this basis" },
+    };
+    process.stderr.write("[staleness] FULL — legacy .guild/indexes tree, freshness unverified\n");
+    if (hasFlag(argv, "print")) process.stdout.write(JSON.stringify(out, null, 2) + "\n");
+    else process.stdout.write("FULL\n");
+    return;
+  }
+
   // K03: verify the owner's published generation against the observed basis
   // (consumes after-edit hints; a dropped hook still shows as drift).
   let publication: PublicationStatus | { error: string } | null = null;
   try {
-    publication = publicationStatus({ indexesDir: gp.indexesDir, observe: () => source });
+    publication = publicationStatus({ indexesDir: gp.indexesDir, guildDir: gp.guildDir, observe: () => source });
   } catch (err) {
     publication = { error: String((err as Error).message ?? err) };
   }
 
-  const store = readJson<FingerprintStore & FreshnessMarker>(gp.fingerprint);
+  const store = readJson<FingerprintStore & FreshnessMarker>(gp.readPath(gp.fingerprint));
   if (!store) {
     process.stderr.write("[staleness] no baseline — treat as FULL (run --baseline after a build)\n");
     const out = { state: "FULL", reason: "no fingerprint baseline", filesToReanalyze: Object.keys(tree), rerunArchitecture: true, publication };

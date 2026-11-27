@@ -12,6 +12,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { resolveGuildRoot } from "./guild-root";
+import { knowledgeIndexesDir, knowledgeIndexesReadDir } from "./storage-indexes";
 
 export type GuildLevel = "workspace" | "project";
 type WorkspaceMode = "auto" | "on" | "off";
@@ -122,7 +123,7 @@ function immediateMarkedChildren(root: string): WorkspaceSubGuild[] {
       path: ent.name,
       kind: hasGuild ? "sub-guild" : "sub-project",
       has_wiki: fs.existsSync(path.join(childRoot, ".guild", "wiki")),
-      has_indexes: fs.existsSync(path.join(childRoot, ".guild", "indexes")),
+      has_indexes: fs.existsSync(knowledgeIndexesReadDir(childRoot, "")),
     });
   }
   return children;
@@ -188,7 +189,7 @@ function findParentWorkspace(activeRoot: string): { root: string; entry: Workspa
       path: name,
       kind: hasGuild ? "sub-guild" : "sub-project",
       has_wiki: fs.existsSync(path.join(activeRoot, ".guild", "wiki")),
-      has_indexes: fs.existsSync(path.join(activeRoot, ".guild", "indexes")),
+      has_indexes: fs.existsSync(knowledgeIndexesReadDir(activeRoot, "")),
     },
   };
 }
@@ -197,7 +198,7 @@ function canonicalMemory(activeRoot: string): GuildDiscovery["canonicalMemory"] 
   return {
     wiki: path.join(activeRoot, ".guild", "wiki"),
     raw: path.join(activeRoot, ".guild", "raw"),
-    indexes: path.join(activeRoot, ".guild", "indexes"),
+    indexes: knowledgeIndexesDir(activeRoot),
     indexSqlite: path.join(activeRoot, ".guild", "index.sqlite"),
   };
 }
@@ -230,7 +231,7 @@ export function workspaceReadThroughSources(workspaceRoot: string): ReadThroughS
     const agentsPath = path.join(childRoot, "AGENTS.md");
     const guildDir = path.join(childRoot, ".guild");
     const wikiDir = path.join(guildDir, "wiki");
-    const indexesDir = path.join(guildDir, "indexes");
+    const indexesDir = knowledgeIndexesReadDir(childRoot, "");
     return {
       name: entry.name,
       childRoot,

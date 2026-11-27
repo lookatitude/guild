@@ -37,6 +37,7 @@ import { runMigrations } from "./index-migrate";
 // knowledge module) — keeps this lower `state` module's dependency direction inward.
 import { tokenizeIdentifierAware } from "../kernel";
 import { durableGuildDir } from "./storage-roots";
+import { knowledgeIndexReadPath } from "./storage-indexes";
 
 // ── Minimal node:sqlite type stubs ────────────────────────────────────────
 
@@ -215,7 +216,7 @@ export function ensureKgIndex(cwd: string, config: IndexBlock): CacheResult | nu
 
   try {
     const repoRoot = resolveMainRepoRoot(cwd);
-    const kgPath = path.join(durableGuildDir(repoRoot), "indexes", "knowledge-graph.json");
+    const kgPath = knowledgeIndexReadPath(repoRoot, "knowledge-graph.json");
     const dbPath = path.join(durableGuildDir(repoRoot), "index.sqlite");
 
     if (!fs.existsSync(kgPath)) return null;
@@ -358,7 +359,7 @@ export function ensureKgProjectionIndex(cwd: string, config: IndexBlock): CacheR
 
   try {
     const repoRoot = resolveMainRepoRoot(cwd);
-    const kgPath = path.join(durableGuildDir(repoRoot), "indexes", "knowledge-graph.json");
+    const kgPath = knowledgeIndexReadPath(repoRoot, "knowledge-graph.json");
     const dbPath = path.join(durableGuildDir(repoRoot), "index.sqlite");
 
     if (!fs.existsSync(kgPath)) return null;

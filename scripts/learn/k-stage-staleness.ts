@@ -41,10 +41,11 @@
  * Usage:
  *   npx tsx learn/k-stage-staleness.ts [--cwd <path>] [--baseline] [--json]
  *
- * Baseline: <repoRoot>/.guild/indexes/kstage-fingerprint.json
+ * Baseline: `knowledgeIndexesDir(repoRoot)`/kstage-fingerprint.json
  * SC-9 determinism: all computation is deterministic-script; no LLM calls.
  */
 
+import { knowledgeIndexesDir, knowledgeIndexReadPath } from "../../src/domains/state";
 import * as fs from "fs";
 import { sealSet } from "../../src/domains/kernel/index";
 import * as path from "path";
@@ -490,7 +491,7 @@ function hasWikiPages(repoRoot: string): boolean {
 export function knowledgeTierClobbered(repoRoot: string): boolean {
   if (!hasWikiPages(repoRoot)) return false;
 
-  const graphPath = path.join(durableGuildDir(repoRoot), "indexes", "knowledge-graph.json");
+  const graphPath = knowledgeIndexReadPath(repoRoot, "knowledge-graph.json");
   let graph: { nodes?: Array<{ type?: unknown }> } | null;
   try {
     graph = JSON.parse(fs.readFileSync(graphPath, "utf8"));
@@ -525,7 +526,7 @@ function withKnowledgeTierClobber(result: KStageStaleness, repoRoot: string): KS
 // ---------------------------------------------------------------------------
 
 function kStoreFile(repoRoot: string): string {
-  return path.join(durableGuildDir(repoRoot), "indexes", "kstage-fingerprint.json");
+  return path.join(knowledgeIndexesDir(repoRoot), "kstage-fingerprint.json");
 }
 
 export function readKStageTree(repoRoot: string): Record<string, string> {
@@ -564,7 +565,7 @@ export function runKStageStaleness(cwd: string): KStageStaleness {
     sourceRoot = cwd;
   }
 
-  const storePath = kStoreFile(repoRoot);
+  const storePath = knowledgeIndexReadPath(repoRoot, "kstage-fingerprint.json");
   if (!fs.existsSync(storePath)) {
     return {
       k1: true, k2: true, k3: true, k4: true, k5: true, k6: true,
@@ -625,7 +626,7 @@ function main(): void {
     }
     writeKStageBaseline(repoRoot, sourceRoot);
     process.stderr.write(
-      `[k-stage-staleness] baseline written → ${path.join(durableGuildDir(repoRoot), "indexes", "kstage-fingerprint.json")}\n`,
+      `[k-stage-staleness] baseline written → ${path.join(knowledgeIndexesDir(repoRoot), "kstage-fingerprint.json")}\n`,
     );
     process.stdout.write("BASELINE\n");
     return;

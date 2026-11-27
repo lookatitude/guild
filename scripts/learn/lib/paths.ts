@@ -15,6 +15,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { execFileSync } from "child_process";
 import { durableGuildDir } from "../../lib/state/ensure-storage-layout";
+import { indexesAreOffTree, knowledgeIndexesDir, legacyIndexesDir, knowledgeIndexReadPath } from "../../../src/domains/state";
 import {
   computeSourceBasis,
   readContainedFile,
@@ -95,6 +96,12 @@ export interface GuildPaths {
   knowledgeRecall: string;
   fingerprint: string;
   partialGraph: string;
+  /**
+   * Existing bytes for one of the index paths above: the path itself, or the legacy
+   * `.guild/indexes` copy of the same file until the next upgrade removes it.
+   * Read-only; never a write target.
+   */
+  readPath(p: string): string;
 }
 
 function isLink(p: string): boolean {
@@ -113,11 +120,44 @@ function sameDir(a: string, b: string): boolean {
   }
 }
 
+function nearestRealPath(p: string): string {
+  let head = path.resolve(p);
+  const tail: string[] = [];
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync(head), ...tail.reverse());
+    } catch {
+      const up = path.dirname(head);
+      if (up === head) return path.resolve(p);
+      tail.push(path.basename(head));
+      head = up;
+    }
+  }
+}
+
+/**
+ * On a layout 2 root the legacy `.guild/indexes` is read-only. An explicit `--in` /
+ * `--out` inside it would bypass the cache (and the empty-cache refusal), so it is
+ * refused with the cache dir named. Other explicit paths are unaffected.
+ */
+export function assertNotLegacyIndexTarget(repoRoot: string, target: string, who: string): void {
+  if (!indexesAreOffTree(repoRoot)) return;
+  const legacy = nearestRealPath(legacyIndexesDir(repoRoot));
+  const rel = path.relative(legacy, nearestRealPath(target));
+  const outside = rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel);
+  if (!outside) {
+    throw new Error(
+      `[${who}] ${target} is inside the legacy .guild/indexes, which is read-only on a layout 2 root; ` +
+        `use the cache index dir ${knowledgeIndexesDir(repoRoot)} (omit the flag) after a full learn`,
+    );
+  }
+}
+
 export function guildPaths(cwd: string): GuildPaths {
   const repoRoot = resolveMainRepoRoot(cwd);
   const sourceRoot = resolveSourceWorktreeRoot(cwd);
   const guildDir = durableGuildDir(repoRoot);
-  const indexesDir = path.join(guildDir, "indexes");
+  const indexesDir = knowledgeIndexesDir(repoRoot);
   const runsDir = path.join(guildDir, "runs");
   return {
     repoRoot,
@@ -131,6 +171,7 @@ export function guildPaths(cwd: string): GuildPaths {
     knowledgeRecall: path.join(indexesDir, "knowledge-recall.json"),
     fingerprint: path.join(indexesDir, "understand-fingerprint.json"),
     partialGraph: path.join(indexesDir, "understand-partial-graph.json"),
+    readPath: (p) => knowledgeIndexReadPath(repoRoot, path.relative(indexesDir, p)),
   };
 }
 

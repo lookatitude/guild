@@ -27,7 +27,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson, SCHEMA, scannedFileList, computeLearnSourceBasis } from "./lib/paths";
+import { assertNotLegacyIndexTarget, guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson, SCHEMA, scannedFileList, computeLearnSourceBasis } from "./lib/paths";
 import { assertPublished, GRAPH_ARTIFACT, learnTarget, publishLearnArtifacts, readLearnBase } from "./lib/publish";
 import { carryLabels, ownerArtifactTarget } from "./lib/publish";
 import { headSha } from "./lib/git";
@@ -158,6 +158,7 @@ function main(): void {
   const gp = guildPaths(cwd);
   const repoRoot = gp.sourceRoot; // K01: resolve against the scanned worktree
   const outPath = parseFlag(argv, "out") ?? gp.knowledgeGraph;
+  assertNotLegacyIndexTarget(gp.repoRoot, path.resolve(outPath), "resolve-calls");
   const started = Date.now();
 
   // K03: basis before any source byte is read; re-observed under the lock.

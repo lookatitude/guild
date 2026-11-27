@@ -48,7 +48,7 @@ function main(): void {
   }
   const runId = resolveRunId(cwd, argv);
 
-  const graph = readJson<KnowledgeGraph>(gp.knowledgeGraph);
+  const graph = readJson<KnowledgeGraph>(gp.readPath(gp.knowledgeGraph));
   if (!graph) {
     process.stderr.write(`[diff] ERROR: knowledge-graph.json not found (build it first)\n`);
     process.exit(1);

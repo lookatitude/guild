@@ -38,6 +38,7 @@
  * - No permission / sandbox / runtime policy changes
  */
 
+import { knowledgeIndexesDir } from "../src/domains/state";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -346,7 +347,7 @@ function appendKnowledgeLinksIndex(
 ): void {
   if (links.length === 0) return;
 
-  const indexDir = path.join(durableGuildDir(guildRoot), "indexes");
+  const indexDir = knowledgeIndexesDir(guildRoot);
   const indexPath = path.join(indexDir, "knowledge-links.json");
 
   // Read existing links (safe — missing file = empty list).

@@ -41,6 +41,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
 import { durableGuildDir } from "./storage-roots";
+import { knowledgeIndexesReadDir } from "./storage-indexes";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -132,7 +133,7 @@ function classifyChild(root: string, name: string): SubGuild | null {
 
   const kind: SubGuildKind = hasGuild ? "sub-guild" : "sub-project";
   const has_wiki = fs.existsSync(path.join(durableGuildDir(childPath), "wiki"));
-  const has_indexes = fs.existsSync(path.join(durableGuildDir(childPath), "indexes"));
+  const has_indexes = fs.existsSync(knowledgeIndexesReadDir(childPath, ""));
   const remote = hasGit ? readRemote(childPath) : null;
   const last_seen_commit = hasGit ? readHead(childPath) : null;
 
