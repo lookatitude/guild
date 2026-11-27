@@ -120,7 +120,8 @@ function main(): void {
     // design and derived from the storage helper (never user input).
     const outFlag = parseFlag(argv, "out");
     if (outFlag) assertNotLegacyIndexTarget(repoRoot, path.resolve(repoRoot, outFlag), "extract-structural");
-    const offTree = !outFlag && path.relative(repoRoot, gp.indexesDir).startsWith("..");
+    const relIdx = path.relative(repoRoot, gp.indexesDir);
+    const offTree = !outFlag && (relIdx === ".." || relIdx.startsWith(`..${path.sep}`) || path.isAbsolute(relIdx));
     if (offTree) {
       outPath = path.resolve(gp.knowledgeGraph);
       cachePath = `${outPath}.structural-cache.json`;

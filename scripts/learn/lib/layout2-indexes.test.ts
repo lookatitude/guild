@@ -12,7 +12,7 @@ import { execFileSync } from "child_process";
 
 import { guildRootId, knowledgeIndexReadPath, knowledgeIndexesDir } from "../../../src/domains/state";
 import { ensureStorageLayout } from "../../lib/state/ensure-storage-layout";
-import { guildPaths } from "./paths";
+import { assertNotLegacyIndexTarget, guildPaths } from "./paths";
 import { readLearnBase, runGraphStage } from "./publish";
 import { writeKnowledgeLinks } from "../write-knowledge-links";
 import { detect } from "../../dot-guild/convert/detect";
@@ -296,4 +296,16 @@ describe("convert detect on layout 2 (#283)", () => {
     expect(res.hasUnparseable).toBe(false);
     expect(res.unparseable.some((u: { path?: string } | string) => JSON.stringify(u).includes("initiatives-registry"))).toBe(false);
   });
+});
+
+test("the legacy-target guard treats '..' as a whole path segment (codex r5)", () => {
+  const root = mkRoot(2);
+  const legacy = path.join(root, ".guild", "indexes");
+  fs.mkdirSync(path.join(legacy, "..backup"), { recursive: true });
+  // A descendant whose name merely starts with ".." is still inside the legacy tree.
+  expect(() =>
+    assertNotLegacyIndexTarget(root, path.join(legacy, "..backup", "graph.json"), "t"),
+  ).toThrow(/read-only on a layout 2 root/);
+  // A real sibling outside it is allowed.
+  expect(() => assertNotLegacyIndexTarget(root, path.join(root, "out", "graph.json"), "t")).not.toThrow();
 });

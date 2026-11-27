@@ -6153,7 +6153,8 @@ function assertNotLegacyIndexTarget(repoRoot, target, who) {
   if (!indexesAreOffTree(repoRoot)) return;
   const legacy = nearestRealPath(legacyIndexesDir(repoRoot));
   const rel2 = path20.relative(legacy, nearestRealPath(target));
-  if (rel2 === "" || !rel2.startsWith("..") && !path20.isAbsolute(rel2)) {
+  const outside = rel2 === ".." || rel2.startsWith(`..${path20.sep}`) || path20.isAbsolute(rel2);
+  if (!outside) {
     throw new Error(
       `[${who}] ${target} is inside the legacy .guild/indexes, which is read-only on a layout 2 root; use the cache index dir ${knowledgeIndexesDir(repoRoot)} (omit the flag) after a full learn`
     );

@@ -51043,11 +51043,11 @@ ${lanes.join("\n")}
             if (i < rootLength) {
               return void 0;
             }
-            const sep5 = directory.lastIndexOf(directorySeparator, i - 1);
-            if (sep5 === -1) {
+            const sep6 = directory.lastIndexOf(directorySeparator, i - 1);
+            if (sep6 === -1) {
               return void 0;
             }
-            return directory.substr(0, Math.max(sep5, rootLength));
+            return directory.substr(0, Math.max(sep6, rootLength));
           }
         }
       }
