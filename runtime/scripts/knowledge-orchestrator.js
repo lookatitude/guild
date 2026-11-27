@@ -4510,7 +4510,17 @@ function validateGraphV2(input, opts) {
     layers: validLayers,
     tour: validTour
   };
+  if (isKnowledgeTierRecord(raw.knowledge_tier)) graph.knowledge_tier = raw.knowledge_tier;
   return { success: true, data: graph, issues };
+}
+function isKnowledgeTierRecord(x) {
+  const r = x;
+  return !!r && typeof r === "object" && Array.isArray(r.node_ids) && r.node_ids.every((id2) => typeof id2 === "string") && Array.isArray(r.edges) && r.edges.every((e) => Array.isArray(e) && e.length === 3 && e.every((s) => typeof s === "string"));
+}
+function normalizeEdgeTypeV2(type) {
+  const t = typeof type === "string" ? type.toLowerCase() : type;
+  const mapped = typeof t === "string" && !EDGE_TYPES_V2.has(t) && t in EDGE_TYPE_ALIASES ? EDGE_TYPE_ALIASES[t] : t;
+  return typeof mapped === "string" && mapped !== "" ? mapped : "depends_on";
 }
 var fs4, path5, crypto3, NODE_TYPES, NODE_TYPES_V2, EDGE_TYPES, EDGE_TYPES_V2, NODE_CATEGORIES, KNOWLEDGE_CONFIG_DEFAULTS, DIRECTIONS, CONFIDENCE, NODE_TYPE_ALIASES, EDGE_TYPE_ALIASES, DIRECTION_ALIASES, KNOWLEDGE_NODE_TYPES_V2;
 var init_schema = __esm({
@@ -5355,10 +5365,10 @@ async function buildCrossLinks(repoRoot, input, opts) {
   const nodeById = new Map(input.nodes.map((n) => [n.id, n]));
   const result2 = [];
   for (const edge of rawEdges) {
-    const edgeKey = `${edge.source}\u2192${edge.target}:${edge.type}`;
-    if (!candidateKeys.has(edgeKey)) continue;
+    const edgeKey2 = `${edge.source}\u2192${edge.target}:${edge.type}`;
+    if (!candidateKeys.has(edgeKey2)) continue;
     if (edge.weight < relMinConf) continue;
-    if (existingKeys.has(edgeKey)) continue;
+    if (existingKeys.has(edgeKey2)) continue;
     if (edge.type === "evidenced_by") {
       const targetNode = nodeById.get(edge.target);
       if (!targetNode) continue;
@@ -5367,7 +5377,7 @@ async function buildCrossLinks(repoRoot, input, opts) {
       if (!anyResolves) continue;
     }
     result2.push(edge);
-    existingKeys.add(edgeKey);
+    existingKeys.add(edgeKey2);
   }
   return { edges: result2 };
 }
@@ -28145,13 +28155,18 @@ __export(knowledge_orchestrator_exports, {
   FALLBACK_ROOT_TOPIC_NAME: () => FALLBACK_ROOT_TOPIC_NAME,
   FALLBACK_ROOT_TOPIC_SEED: () => FALLBACK_ROOT_TOPIC_SEED,
   KnowledgePublicationRefused: () => KnowledgePublicationRefused,
+  UNKNOWN_GRAPH_PROJECT: () => UNKNOWN_GRAPH_PROJECT,
   buildFileBackedSeams: () => buildFileBackedSeams,
+  carriedForwardSubset: () => carriedForwardSubset,
   deriveFallbackRootTopicName: () => deriveFallbackRootTopicName,
   discoverFilePaths: () => discoverFilePaths,
   emitRound1Candidates: () => emitRound1Candidates,
   emitRound2Candidates: () => emitRound2Candidates,
   findOrphanWikiPages: () => findOrphanWikiPages,
+  fromKnowledgeTier: () => fromKnowledgeTier,
+  knowledgeTierRecord: () => knowledgeTierRecord,
   maybeSynthesizeFallbackRootTopic: () => maybeSynthesizeFallbackRootTopic,
+  resolveGraphProject: () => resolveGraphProject,
   runKnowledgeStages: () => runKnowledgeStages
 });
 module.exports = __toCommonJS(knowledge_orchestrator_exports);
@@ -30513,6 +30528,68 @@ var KnowledgePublicationRefused = class extends Error {
   reason;
 };
 var FALLBACK_ROOT_TOPIC_SEED = "project-knowledge";
+var LEGACY_PLACEHOLDER_PROJECT = { name: "guild", description: "Guild plugin self-build" };
+var KNOWLEDGE_TIER_NODE_TYPES = /* @__PURE__ */ new Set(["topic", "concept", "claim", "entity", "wiki_page", "diagram"]);
+var KNOWLEDGE_TIER_EDGE_TYPES = /* @__PURE__ */ new Set([
+  "subtopic_of",
+  "relates_to",
+  "evidenced_by",
+  "belongs_to_domain",
+  "mentions",
+  "defines"
+]);
+function carriedForwardSubset(g) {
+  const marked = (x) => {
+    const r = x;
+    return r.extractor === STRUCTURAL_EXTRACTOR || r.structural === true;
+  };
+  const record = readKnowledgeTier(g.knowledge_tier);
+  const flowDomains = new Set(g.edges.filter((e) => e.type === "contains_flow").map((e) => e.source));
+  const emitted = (n) => record ? record.nodeIds.has(n.id) : KNOWLEDGE_TIER_NODE_TYPES.has(n.type) || n.type === "domain" && !flowDomains.has(n.id);
+  const dropped = /* @__PURE__ */ new Set();
+  const nodes = g.nodes.filter((n) => {
+    if (emitted(n) && !marked(n)) {
+      dropped.add(n.id);
+      return false;
+    }
+    return true;
+  });
+  const edges = g.edges.filter((e) => {
+    if (marked(e)) return true;
+    if (dropped.has(e.source) || dropped.has(e.target)) return false;
+    return record ? !record.edgeKeys.has(edgeKey(e)) : !KNOWLEDGE_TIER_EDGE_TYPES.has(e.type);
+  });
+  return { nodes, edges };
+}
+var edgeKey = (e) => JSON.stringify([e.source, e.target, normalizeEdgeTypeV2(e.type)]);
+function readKnowledgeTier(x) {
+  if (!isKnowledgeTierRecord(x)) return null;
+  return {
+    nodeIds: new Set(x.node_ids),
+    edgeKeys: new Set(x.edges.map(([source, target, type]) => edgeKey({ source, target, type })))
+  };
+}
+var KNOWLEDGE_TIER2 = /* @__PURE__ */ Symbol("knowledge-tier");
+function fromKnowledgeTier(x) {
+  return { ...x, [KNOWLEDGE_TIER2]: true };
+}
+var isFromKnowledgeTier = (x) => x[KNOWLEDGE_TIER2] === true;
+function knowledgeTierRecord(validated, input) {
+  const inEdges = new Set((input?.edges ?? []).map(edgeKey));
+  const node_ids = [...new Set(validated.nodes.filter(isFromKnowledgeTier).map((n) => n.id))].sort();
+  const keys = [
+    ...new Set(validated.edges.filter(isFromKnowledgeTier).map(edgeKey).filter((k) => !inEdges.has(k)))
+  ].sort();
+  return { node_ids, edges: keys.map((k) => JSON.parse(k)) };
+}
+var UNKNOWN_GRAPH_PROJECT = { name: "unknown", description: "" };
+function resolveGraphProject(prior) {
+  const p = prior;
+  if (p && typeof p.name === "string" && p.name.trim().length > 0 && typeof p.description === "string" && !(p.name === LEGACY_PLACEHOLDER_PROJECT.name && p.description === LEGACY_PLACEHOLDER_PROJECT.description)) {
+    return { name: p.name, description: p.description };
+  }
+  return { ...UNKNOWN_GRAPH_PROJECT };
+}
 var FALLBACK_ROOT_TOPIC_NAME = "Project Knowledge";
 function deriveFallbackRootTopicName(repoRoot) {
   const base = path70.basename((repoRoot ?? "").replace(/[/\\]+$/, "")).trim();
@@ -30909,25 +30986,25 @@ async function runKnowledgeStages(repoRoot, filePaths, seams, opts = {}) {
   const basis = opts.basis ?? computeLearnSourceBasis(repoRoot);
   const startBase = opts.base ?? readLearnBase({ indexesDir: path70.join(durableGuildDir2(repoRoot), "indexes"), repoRoot, sourceRoot: repoRoot });
   const partial = await runKnowledgeStagesK1ToK4(repoRoot, filePaths, seams);
-  const allNodes = [...opts.structuralGraph?.nodes ?? [], ...partial.nodes];
-  const allEdges = [...opts.structuralGraph?.edges ?? [], ...partial.edges];
+  const allNodes = [...opts.structuralGraph?.nodes ?? [], ...partial.nodes.map(fromKnowledgeTier)];
+  const allEdges = [...opts.structuralGraph?.edges ?? [], ...partial.edges.map(fromKnowledgeTier)];
   const suppressedEntries = [...partial.k2Suppressed];
   const k5Result = await buildCrossLinks(
     repoRoot,
     { nodes: allNodes, edges: allEdges },
     { confirmCrossLinks: seams.confirmCrossLinks }
   );
-  allEdges.push(...k5Result.edges);
+  allEdges.push(...k5Result.edges.map(fromKnowledgeTier));
   const fallback = maybeSynthesizeFallbackRootTopic(allNodes, repoRoot);
   if (fallback) {
-    allNodes.push(fallback.topicNode);
-    allEdges.push(...fallback.edges);
+    allNodes.push(fromKnowledgeTier(fallback.topicNode));
+    allEdges.push(...fallback.edges.map(fromKnowledgeTier));
   }
   const graphRaw = {
     version: "guild.knowledge_graph.v2",
     kind: "knowledge",
     generated_from_commit: opts.generatedFromCommit ?? "unknown",
-    project: opts.project ?? { name: "guild", description: "Guild plugin self-build" },
+    project: opts.project ?? UNKNOWN_GRAPH_PROJECT,
     nodes: allNodes,
     edges: allEdges,
     layers: opts.structuralGraph?.layers ?? [],
@@ -30967,7 +31044,12 @@ async function runKnowledgeStages(repoRoot, filePaths, seams, opts = {}) {
   const canonEdges = validated.edges.map(
     (e) => isStructuralItem(e) ? e : canonicalizeEdge(e)
   );
-  const graph = { ...validated, nodes: canonNodes, edges: canonEdges };
+  const graph = {
+    ...validated,
+    nodes: canonNodes,
+    edges: canonEdges,
+    knowledge_tier: knowledgeTierRecord(validated, opts.structuralGraph)
+  };
   const sc3OrphanWikiPageIds = findOrphanWikiPages(graph);
   if (sc3OrphanWikiPageIds.length > 0) {
     throw new Error(
@@ -31073,7 +31155,7 @@ if (require.main === module) {
           if (prior.version === "guild.knowledge_graph.v1") {
             structuralGraph = { nodes: prior.nodes, edges: prior.edges, layers: prior.layers, tour: prior.tour };
           } else if (prior.version === "guild.knowledge_graph.v2") {
-            const sub = structuralSubset({ nodes: prior.nodes, edges: prior.edges });
+            const sub = carriedForwardSubset({ nodes: prior.nodes, edges: prior.edges, knowledge_tier: prior.knowledge_tier });
             structuralGraph = { nodes: sub.nodes, edges: sub.edges, layers: prior.layers, tour: prior.tour };
           }
         }
@@ -31082,6 +31164,9 @@ if (require.main === module) {
             runId,
             generatedAt,
             generatedFromCommit: headSha(repoRoot),
+            // #317: keep the project identity the structural stages (or a prior
+            // finalize) recorded; never stamp Guild's own name on a consumer repo.
+            project: resolveGraphProject(prior?.project),
             structuralGraph,
             base,
             basis
@@ -31161,12 +31246,17 @@ function discoverFilePaths(repoRoot) {
   FALLBACK_ROOT_TOPIC_NAME,
   FALLBACK_ROOT_TOPIC_SEED,
   KnowledgePublicationRefused,
+  UNKNOWN_GRAPH_PROJECT,
   buildFileBackedSeams,
+  carriedForwardSubset,
   deriveFallbackRootTopicName,
   discoverFilePaths,
   emitRound1Candidates,
   emitRound2Candidates,
   findOrphanWikiPages,
+  fromKnowledgeTier,
+  knowledgeTierRecord,
   maybeSynthesizeFallbackRootTopic,
+  resolveGraphProject,
   runKnowledgeStages
 });
