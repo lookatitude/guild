@@ -27,7 +27,7 @@ import { decisionPublicationRefs } from "../../../src/domains/knowledge/decision
 import { basisDigest, sourceWorktreeId, type SourceBasis } from "../../../src/domains/knowledge/source-basis";
 import { deepFreeze } from "../../../src/domains/kernel/sealed-collections";
 import { knowledgeIndexesDir } from "../../../src/domains/state";
-import { adoptLegacyKnowledgeIndexes } from "../../../src/domains/knowledge/legacy-adoption";
+import { adoptLegacyKnowledgeIndexes } from "../../../src/domains/knowledge";
 import { durableGuildDir } from "../../lib/state/ensure-storage-layout";
 import { computeLearnSourceBasis } from "./paths";
 import { STRUCTURAL_EXTRACTOR, structuralSubset } from "./structural";

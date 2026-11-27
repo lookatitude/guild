@@ -15,7 +15,7 @@ import { ensureStorageLayout } from "../../lib/state/ensure-storage-layout";
 import { guildPaths } from "./paths";
 import { publishLearnArtifacts, readLearnBase } from "./publish";
 import { writeKnowledgeLinks } from "../write-knowledge-links";
-import { adoptLegacyKnowledgeIndexes } from "../../../src/domains/knowledge/legacy-adoption";
+import { adoptLegacyKnowledgeIndexes } from "../../../src/domains/knowledge";
 import { detect } from "../../dot-guild/convert/detect";
 import { realFs } from "../../dot-guild/convert/seams";
 import { writeInitiativesRegistry } from "../../registry-rollup";
