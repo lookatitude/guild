@@ -3824,7 +3824,19 @@ function knowledgeIndexesDir(root) {
   assertClassPlacement("cache", abs, roots.durable);
   return abs;
 }
-var TREE_PROBES = ["publication", "knowledge-graph.json", "knowledge-recall.json"];
+var TREE_PROBES = [
+  "publication",
+  "knowledge-graph.json",
+  "knowledge-recall.json",
+  "knowledge-links.json",
+  "knowledge-recall-provenance.json",
+  "knowledge-suppressed.json",
+  "codebase-map.json",
+  "understand-fingerprint.json",
+  "understand-partial-graph.json",
+  "kstage-fingerprint.json",
+  "entry_points.json"
+];
 function knowledgeIndexesReadDir(root, probe = TREE_PROBES) {
   const primary = knowledgeIndexesDir(root);
   const legacy = legacyIndexesDir(root);
@@ -6753,7 +6765,7 @@ function main() {
   };
   let unchanged = false;
   try {
-    const prior = JSON.parse(fs19.readFileSync(gp.readPath(gp.codebaseMap), "utf8"));
+    const prior = JSON.parse(fs19.readFileSync(gp.codebaseMap, "utf8"));
     unchanged = JSON.stringify({ ...prior, generated_from_commit: codebaseMap.generated_from_commit }) === JSON.stringify(codebaseMap);
   } catch {
   }

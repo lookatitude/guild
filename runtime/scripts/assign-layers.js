@@ -3826,7 +3826,19 @@ function knowledgeIndexesDir(root) {
 function indexesAreOffTree(root) {
   return knowledgeIndexesDir(root) !== legacyIndexesDir(root);
 }
-var TREE_PROBES = ["publication", "knowledge-graph.json", "knowledge-recall.json"];
+var TREE_PROBES = [
+  "publication",
+  "knowledge-graph.json",
+  "knowledge-recall.json",
+  "knowledge-links.json",
+  "knowledge-recall-provenance.json",
+  "knowledge-suppressed.json",
+  "codebase-map.json",
+  "understand-fingerprint.json",
+  "understand-partial-graph.json",
+  "kstage-fingerprint.json",
+  "entry_points.json"
+];
 function knowledgeIndexesReadDir(root, probe = TREE_PROBES) {
   const primary = knowledgeIndexesDir(root);
   const legacy = legacyIndexesDir(root);
@@ -6108,6 +6120,30 @@ function sameDir(a, b) {
     return path20.resolve(a) === path20.resolve(b);
   }
 }
+function nearestRealPath(p) {
+  let head = path20.resolve(p);
+  const tail = [];
+  for (; ; ) {
+    try {
+      return path20.join(fs16.realpathSync(head), ...tail.reverse());
+    } catch {
+      const up = path20.dirname(head);
+      if (up === head) return path20.resolve(p);
+      tail.push(path20.basename(head));
+      head = up;
+    }
+  }
+}
+function assertNotLegacyIndexTarget(repoRoot, target, who) {
+  if (!indexesAreOffTree(repoRoot)) return;
+  const legacy = nearestRealPath(legacyIndexesDir(repoRoot));
+  const rel2 = path20.relative(legacy, nearestRealPath(target));
+  if (rel2 === "" || !rel2.startsWith("..") && !path20.isAbsolute(rel2)) {
+    throw new Error(
+      `[${who}] ${target} is inside the legacy .guild/indexes, which is read-only on a layout 2 root; use the cache index dir ${knowledgeIndexesDir(repoRoot)} (omit the flag) after a full learn`
+    );
+  }
+}
 function guildPaths(cwd) {
   const repoRoot = resolveMainRepoRoot(cwd);
   const sourceRoot = resolveSourceWorktreeRoot(cwd);
@@ -7582,6 +7618,7 @@ function learnTarget(gp) {
   return { indexesDir: gp.indexesDir, repoRoot: gp.repoRoot, sourceRoot: gp.sourceRoot };
 }
 function runGraphStage(gp, opts) {
+  if (opts.target) assertNotLegacyIndexTarget(gp.repoRoot, opts.target, opts.who);
   if (opts.target && ownerArtifactTarget(gp, opts.target) === "store") throw new Error(`[${opts.who}] refusing to write inside the generation store`);
   if (opts.target && ownerArtifactTarget(gp, opts.target) === "export") opts = { ...opts, target: null };
   if (opts.target) {

@@ -70,12 +70,24 @@ export function indexesAreOffTree(root: string): boolean {
   return knowledgeIndexesDir(root) !== legacyIndexesDir(root);
 }
 
-/** Entries whose presence makes a tree THE knowledge-index tree: a K03 publication, a graph or a recall projection. */
-const TREE_PROBES: readonly string[] = ["publication", "knowledge-graph.json", "knowledge-recall.json"];
+/** Recognised knowledge-index entries: a tree holding any of them is THE knowledge-index tree. */
+const TREE_PROBES: readonly string[] = [
+  "publication",
+  "knowledge-graph.json",
+  "knowledge-recall.json",
+  "knowledge-links.json",
+  "knowledge-recall-provenance.json",
+  "knowledge-suppressed.json",
+  "codebase-map.json",
+  "understand-fingerprint.json",
+  "understand-partial-graph.json",
+  "kstage-fingerprint.json",
+  "entry_points.json",
+];
 
 /**
  * Where knowledge indexes are READ from: one WHOLE tree, never a mix of files. A
- * layout 2 root reads the cache tree once it has a publication, graph or recall projection; until
+ * layout 2 root reads the cache tree once it has any recognised index file; until
  * then an existing legacy `.guild/indexes` is read, READ-ONLY (it is never copied,
  * moved, locked or written; `caches-out` removes it). Layout 1: `.guild/indexes`.
  * `probe` overrides which entries decide the tree.

@@ -3838,7 +3838,22 @@ function knowledgeIndexesDir(root) {
   assertClassPlacement("cache", abs, roots.durable);
   return abs;
 }
-var TREE_PROBES = ["publication", "knowledge-graph.json", "knowledge-recall.json"];
+function indexesAreOffTree(root) {
+  return knowledgeIndexesDir(root) !== legacyIndexesDir(root);
+}
+var TREE_PROBES = [
+  "publication",
+  "knowledge-graph.json",
+  "knowledge-recall.json",
+  "knowledge-links.json",
+  "knowledge-recall-provenance.json",
+  "knowledge-suppressed.json",
+  "codebase-map.json",
+  "understand-fingerprint.json",
+  "understand-partial-graph.json",
+  "kstage-fingerprint.json",
+  "entry_points.json"
+];
 function knowledgeIndexesReadDir(root, probe = TREE_PROBES) {
   const primary = knowledgeIndexesDir(root);
   const legacy = legacyIndexesDir(root);
@@ -6120,6 +6135,30 @@ function sameDir(a, b) {
     return path20.resolve(a) === path20.resolve(b);
   }
 }
+function nearestRealPath(p) {
+  let head = path20.resolve(p);
+  const tail = [];
+  for (; ; ) {
+    try {
+      return path20.join(fs16.realpathSync(head), ...tail.reverse());
+    } catch {
+      const up = path20.dirname(head);
+      if (up === head) return path20.resolve(p);
+      tail.push(path20.basename(head));
+      head = up;
+    }
+  }
+}
+function assertNotLegacyIndexTarget(repoRoot, target, who) {
+  if (!indexesAreOffTree(repoRoot)) return;
+  const legacy = nearestRealPath(legacyIndexesDir(repoRoot));
+  const rel2 = path20.relative(legacy, nearestRealPath(target));
+  if (rel2 === "" || !rel2.startsWith("..") && !path20.isAbsolute(rel2)) {
+    throw new Error(
+      `[${who}] ${target} is inside the legacy .guild/indexes, which is read-only on a layout 2 root; use the cache index dir ${knowledgeIndexesDir(repoRoot)} (omit the flag) after a full learn`
+    );
+  }
+}
 function guildPaths(cwd) {
   const repoRoot = resolveMainRepoRoot(cwd);
   const sourceRoot = resolveSourceWorktreeRoot(cwd);
@@ -8371,6 +8410,7 @@ function main() {
   } else {
     const inPath = parseFlag(argv, "in");
     const resolved = inPath ? path25.resolve(cwd, inPath) : gp.partialGraph;
+    if (inPath) assertNotLegacyIndexTarget(gp.repoRoot, resolved, "validate-graph");
     input = readJson2(resolved);
     if (input === null) {
       process.stderr.write(`[validate] ERROR: cannot read input graph ${resolved}
@@ -8397,7 +8437,7 @@ function main() {
   );
   const force = hasFlag(argv, "force");
   if (!dry) {
-    const guard = checkDowngradeGuard(gp.readPath(gp.knowledgeGraph), result.data, force);
+    const guard = checkDowngradeGuard(gp.knowledgeGraph, result.data, force);
     if (guard.refused) {
       const msg = `[validate] REFUSED: on-disk knowledge-graph.json is ${guard.onDiskVersion} (carries the knowledge tier \u2014 wiki_page/topic/diagram nodes + knowledge edges) but this run resolved a non-v2 result, which would silently strip that tier. Re-run the knowledge finalize (learn-knowledge) instead of this CLI, or pass --force to downgrade deliberately.
 `;

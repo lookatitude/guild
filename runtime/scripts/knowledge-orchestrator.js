@@ -4226,7 +4226,19 @@ var init_storage_indexes = __esm({
     path10 = __toESM(require("node:path"));
     init_storage_policy();
     init_storage_roots();
-    TREE_PROBES = ["publication", "knowledge-graph.json", "knowledge-recall.json"];
+    TREE_PROBES = [
+      "publication",
+      "knowledge-graph.json",
+      "knowledge-recall.json",
+      "knowledge-links.json",
+      "knowledge-recall-provenance.json",
+      "knowledge-suppressed.json",
+      "codebase-map.json",
+      "understand-fingerprint.json",
+      "understand-partial-graph.json",
+      "kstage-fingerprint.json",
+      "entry_points.json"
+    ];
   }
 });
 
@@ -29254,9 +29266,9 @@ function toPosixRel(p) {
 function buildBasenameMapFromList(relpaths) {
   const map = /* @__PURE__ */ new Map();
   for (const relpath of relpaths) {
-    const basename25 = path24.basename(relpath, path24.extname(relpath));
-    if (!map.has(basename25)) {
-      map.set(basename25, relpath);
+    const basename26 = path24.basename(relpath, path24.extname(relpath));
+    if (!map.has(basename26)) {
+      map.set(basename26, relpath);
     }
   }
   return map;
@@ -29321,8 +29333,8 @@ async function indexWiki(wikiDir2, opts) {
     };
     nodes.push(node);
     const emittedTargets = /* @__PURE__ */ new Set();
-    for (const basename25 of desc.wikilinks) {
-      const targetRelpath = basenameMap.get(basename25);
+    for (const basename26 of desc.wikilinks) {
+      const targetRelpath = basenameMap.get(basename26);
       if (!targetRelpath) continue;
       const targetId = makeWikiPageId(targetRelpath);
       if (emittedTargets.has(targetId)) continue;

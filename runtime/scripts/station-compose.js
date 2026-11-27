@@ -6754,7 +6754,19 @@ var init_storage_indexes = __esm({
     path11 = __toESM(require("node:path"));
     init_storage_policy();
     init_storage_roots();
-    TREE_PROBES = ["publication", "knowledge-graph.json", "knowledge-recall.json"];
+    TREE_PROBES = [
+      "publication",
+      "knowledge-graph.json",
+      "knowledge-recall.json",
+      "knowledge-links.json",
+      "knowledge-recall-provenance.json",
+      "knowledge-suppressed.json",
+      "codebase-map.json",
+      "understand-fingerprint.json",
+      "understand-partial-graph.json",
+      "kstage-fingerprint.json",
+      "entry_points.json"
+    ];
   }
 });
 

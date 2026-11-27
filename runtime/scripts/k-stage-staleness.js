@@ -139628,9 +139628,9 @@ ${lanes.join("\n")}
             /*ignoreCase*/
             false
           )) {
-            const basename5 = getBaseFileName(a.fileName);
-            if (basename5 === "lib.d.ts" || basename5 === "lib.es6.d.ts") return 0;
-            const name = removeSuffix(removePrefix(basename5, "lib."), ".d.ts");
+            const basename6 = getBaseFileName(a.fileName);
+            if (basename6 === "lib.d.ts" || basename6 === "lib.es6.d.ts") return 0;
+            const name = removeSuffix(removePrefix(basename6, "lib."), ".d.ts");
             const index = libs.indexOf(name);
             if (index !== -1) return index + 1;
           }
@@ -203376,8 +203376,8 @@ ${options.prefix}` : "\n" : options.prefix
             }
           };
           for (const file of files) {
-            const basename5 = getBaseFileName(file);
-            if (basename5 === "package.json" || basename5 === "bower.json") {
+            const basename6 = getBaseFileName(file);
+            if (basename6 === "package.json" || basename6 === "bower.json") {
               createProjectWatcher(
                 file,
                 "FileWatcher"
@@ -207049,8 +207049,8 @@ All files are: ${JSON.stringify(names)}`,
               var _a;
               const fileOrDirectoryPath = removeIgnoredPath(this.toPath(fileOrDirectory));
               if (!fileOrDirectoryPath) return;
-              const basename5 = getBaseFileName(fileOrDirectoryPath);
-              if (((_a = result.affectedModuleSpecifierCacheProjects) == null ? void 0 : _a.size) && (basename5 === "package.json" || basename5 === "node_modules")) {
+              const basename6 = getBaseFileName(fileOrDirectoryPath);
+              if (((_a = result.affectedModuleSpecifierCacheProjects) == null ? void 0 : _a.size) && (basename6 === "package.json" || basename6 === "node_modules")) {
                 result.affectedModuleSpecifierCacheProjects.forEach((project) => {
                   var _a2;
                   (_a2 = project.getModuleSpecifierCache()) == null ? void 0 : _a2.clear();
@@ -214498,7 +214498,19 @@ function knowledgeIndexesDir(root) {
   assertClassPlacement("cache", abs, roots.durable);
   return abs;
 }
-var TREE_PROBES = ["publication", "knowledge-graph.json", "knowledge-recall.json"];
+var TREE_PROBES = [
+  "publication",
+  "knowledge-graph.json",
+  "knowledge-recall.json",
+  "knowledge-links.json",
+  "knowledge-recall-provenance.json",
+  "knowledge-suppressed.json",
+  "codebase-map.json",
+  "understand-fingerprint.json",
+  "understand-partial-graph.json",
+  "kstage-fingerprint.json",
+  "entry_points.json"
+];
 function knowledgeIndexesReadDir(root, probe = TREE_PROBES) {
   const primary = knowledgeIndexesDir(root);
   const legacy = legacyIndexesDir(root);

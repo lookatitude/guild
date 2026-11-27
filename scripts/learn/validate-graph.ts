@@ -31,7 +31,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { guildPaths, parseCwd, parseFlag, hasFlag, readJson, computeLearnSourceBasis } from "./lib/paths";
+import { assertNotLegacyIndexTarget, guildPaths, parseCwd, parseFlag, hasFlag, readJson, computeLearnSourceBasis } from "./lib/paths";
 import { assertPublished, GRAPH_ARTIFACT, learnTarget, publishLearnArtifacts, readLearnBase } from "./lib/publish";
 import { validateGraph, validateGraphV2, type ValidationResult } from "./lib/schema";
 import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
@@ -110,6 +110,7 @@ function main(): void {
   } else {
     const inPath = parseFlag(argv, "in");
     const resolved = inPath ? path.resolve(cwd, inPath) : gp.partialGraph;
+    if (inPath) assertNotLegacyIndexTarget(gp.repoRoot, resolved, "validate-graph");
     input = readJson(resolved);
     if (input === null) {
       process.stderr.write(`[validate] ERROR: cannot read input graph ${resolved}\n`);
@@ -143,7 +144,7 @@ function main(): void {
   // K03: a whole-graph replacement. It is built from no destination layer, so a
   // destination that moved since this read is refused, never rebased over.
   if (!dry) {
-    const guard = checkDowngradeGuard(gp.readPath(gp.knowledgeGraph), result.data, force);
+    const guard = checkDowngradeGuard(gp.knowledgeGraph, result.data, force);
     if (guard.refused) {
       const msg =
         `[validate] REFUSED: on-disk knowledge-graph.json is ${guard.onDiskVersion} (carries the knowledge ` +

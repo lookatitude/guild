@@ -44,7 +44,7 @@
  */
 
 import * as path from "path";
-import { guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson, SCHEMA, computeLearnSourceBasis } from "./lib/paths";
+import { assertNotLegacyIndexTarget, guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson, SCHEMA, computeLearnSourceBasis } from "./lib/paths";
 import { assertPublished, GRAPH_ARTIFACT, publishLearnArtifacts, readLearnBase } from "./lib/publish";
 import { carryLabels, ownerArtifactTarget } from "./lib/publish";
 import { headSha, isTracked } from "./lib/git";
@@ -119,6 +119,7 @@ function main(): void {
     // inside the repo. The layout 2 default is the platform cache dir, off-tree by
     // design and derived from the storage helper (never user input).
     const outFlag = parseFlag(argv, "out");
+    if (outFlag) assertNotLegacyIndexTarget(repoRoot, path.resolve(repoRoot, outFlag), "extract-structural");
     const offTree = !outFlag && path.relative(repoRoot, gp.indexesDir).startsWith("..");
     if (offTree) {
       outPath = path.resolve(gp.knowledgeGraph);

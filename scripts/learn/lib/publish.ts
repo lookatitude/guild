@@ -28,7 +28,7 @@ import { basisDigest, sourceWorktreeId, type SourceBasis } from "../../../src/do
 import { deepFreeze } from "../../../src/domains/kernel/sealed-collections";
 import { indexesAreOffTree } from "../../../src/domains/state";
 import { durableGuildDir } from "../../lib/state/ensure-storage-layout";
-import { computeLearnSourceBasis } from "./paths";
+import { assertNotLegacyIndexTarget, computeLearnSourceBasis } from "./paths";
 import { STRUCTURAL_EXTRACTOR, structuralSubset } from "./structural";
 import type { GraphEdge, GraphNode } from "./schema";
 
@@ -356,6 +356,7 @@ export function runGraphStage<G extends object>(
   gp: { indexesDir: string; repoRoot: string; sourceRoot: string },
   opts: { target: string | null; who: string; channels: LayerChannel[]; transform: (g: G) => G },
 ): G | null {
+  if (opts.target) assertNotLegacyIndexTarget(gp.repoRoot, opts.target, opts.who);
   if (opts.target && ownerArtifactTarget(gp, opts.target) === "store") throw new Error(`[${opts.who}] refusing to write inside the generation store`);
   if (opts.target && ownerArtifactTarget(gp, opts.target) === "export") opts = { ...opts, target: null };
   if (opts.target) {

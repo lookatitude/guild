@@ -160,6 +160,83 @@ describe("layout 2 index home (#283)", () => {
     expect(JSON.stringify(out)).not.toContain("current_for_basis");
   });
 
+  /** A committed one-file TS repo; `cli` runs a learn script against it. */
+  function gitRepo(layout: 1 | 2): { r: string; cli: (script: string, ...a: string[]) => string } {
+    const r = mkRoot(layout);
+    const git = (...a: string[]) => execFileSync("git", ["-C", r, ...a], { stdio: "ignore" });
+    git("init", "-q");
+    fs.mkdirSync(path.join(r, "src"), { recursive: true });
+    fs.writeFileSync(path.join(r, "src", "a.ts"), "export function f() {\n  return 1;\n}\n");
+    git("add", "-A");
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "seed");
+    const cli = (script: string, ...a: string[]) =>
+      execFileSync("npx", ["tsx", path.resolve(__dirname, "..", script), "--cwd", r, ...a], { encoding: "utf8", timeout: 90000, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+    return { r, cli };
+  }
+  const stampLayout2 = (r: string) =>
+    fs.writeFileSync(path.join(r, ".guild", "storage-layout.json"), JSON.stringify({ storage_layout_version: 2 }) + "\n");
+
+  test("round 4 F1: validate on layout 2 guards against the cache destination only, so a legacy v2 graph does not block it", () => {
+    const { r, cli } = gitRepo(1);
+    cli("extract-structural.ts");
+    const v1 = fs.readFileSync(path.join(r, ".guild", "indexes", "knowledge-graph.json"), "utf8");
+    fs.rmSync(path.join(r, ".guild", "indexes"), { recursive: true });
+    fs.mkdirSync(path.join(r, ".guild", "indexes"), { recursive: true });
+    const legacyGraph = JSON.stringify({ version: "guild.knowledge_graph.v2", nodes: [], edges: [], layers: [], tour: [] });
+    fs.writeFileSync(path.join(r, ".guild", "indexes", "knowledge-graph.json"), legacyGraph);
+    stampLayout2(r);
+    fs.mkdirSync(knowledgeIndexesDir(r), { recursive: true });
+    fs.writeFileSync(path.join(knowledgeIndexesDir(r), "understand-partial-graph.json"), v1);
+    cli("validate-graph.ts");
+    expect(fs.existsSync(path.join(knowledgeIndexesDir(r), "publication", "CURRENT"))).toBe(true);
+    expect(fs.readFileSync(path.join(r, ".guild", "indexes", "knowledge-graph.json"), "utf8")).toBe(legacyGraph);
+  });
+
+  test("round 4 F2: an explicit --in/--out inside the legacy .guild/indexes is refused on layout 2; other paths still work", () => {
+    const { r, cli } = gitRepo(1);
+    cli("extract-structural.ts");
+    const legacyGraph = path.join(r, ".guild", "indexes", "knowledge-graph.json");
+    const before = fs.readFileSync(legacyGraph, "utf8");
+    stampLayout2(r);
+    const fail = (script: string, ...a: string[]): string => {
+      try {
+        cli(script, ...a);
+      } catch (e) {
+        return String((e as { stderr?: string }).stderr ?? e);
+      }
+      return "";
+    };
+    expect(fail("assign-layers.ts", "--in", legacyGraph)).toContain(knowledgeIndexesDir(r));
+    expect(fail("extract-structural.ts", "--out", legacyGraph)).toContain(knowledgeIndexesDir(r));
+    expect(fail("validate-graph.ts", "--in", legacyGraph)).toContain(knowledgeIndexesDir(r));
+    expect(fs.readFileSync(legacyGraph, "utf8")).toBe(before);
+    // an explicit path elsewhere in the repo keeps working
+    cli("extract-structural.ts", "--out", path.join(r, "out", "graph.json"));
+    expect(fs.existsSync(path.join(r, "out", "graph.json"))).toBe(true);
+  });
+
+  test("round 4 F3: scan on layout 2 writes the cache map even when the legacy map equals the fresh scan", () => {
+    const { r, cli } = gitRepo(1);
+    cli("scan.ts");
+    expect(fs.existsSync(path.join(r, ".guild", "indexes", "codebase-map.json"))).toBe(true);
+    stampLayout2(r);
+    cli("scan.ts");
+    expect(fs.existsSync(path.join(knowledgeIndexesDir(r), "codebase-map.json"))).toBe(true);
+  });
+
+  test("round 4 F4: a legacy tree holding only links/map/fingerprint is still the read tree while the cache is empty", () => {
+    for (const name of ["knowledge-links.json", "codebase-map.json", "understand-fingerprint.json", "kstage-fingerprint.json"]) {
+      const r = mkRoot(2);
+      const legacy = path.join(r, ".guild", "indexes");
+      fs.mkdirSync(legacy, { recursive: true });
+      fs.writeFileSync(path.join(legacy, name), "{}\n");
+      expect(knowledgeIndexReadPath(r, name)).toBe(path.join(legacy, name));
+      fs.mkdirSync(knowledgeIndexesDir(r), { recursive: true });
+      fs.writeFileSync(path.join(knowledgeIndexesDir(r), "codebase-map.json"), "{}\n");
+      expect(knowledgeIndexReadPath(r, name)).toBe(path.join(knowledgeIndexesDir(r), name));
+    }
+  });
+
   test("layout 1 root still writes .guild/indexes exactly as before", () => {
     const l1 = mkRoot(1);
     const r = writeKnowledgeLinks({ graph, repoRoot: l1 });
