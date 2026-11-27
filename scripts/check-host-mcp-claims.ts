@@ -9,7 +9,8 @@
  *                             (in the `mcp:` block or the "(7) MCP" table row)
  *   unmapped_host             page host_id has no registry row, alias, or exemption
  *
- * Prose is deliberately NOT parsed: only the structured `mcp:` block, the label and the mapping gate.
+ * Prose is ADVISORY only: `advisoryProseWarnings` flags (7) MCP / FDC-13 rows that mention a
+ * transport the row denies. It prints `warn:` lines and never changes the exit code.
  *
  * Usage: npx tsx check-host-mcp-claims.ts --entities <entities-dir>   (exit 1 on any violation)
  */
@@ -106,6 +107,30 @@ export function checkHostMcpClaims(opts: CheckOpts): Violation[] {
   return out;
 }
 
+export function advisoryProseWarnings(opts: CheckOpts): Violation[] {
+  const rows = opts.rows ?? registryRows();
+  const aliases = opts.aliases ?? DEFAULT_ALIASES;
+  const exempt = opts.exempt ?? DEFAULT_EXEMPT;
+  const out: Violation[] = [];
+  for (const file of fs.readdirSync(opts.entitiesDir).filter((f) => f.endsWith(".md")).sort()) {
+    const text = fs.readFileSync(path.join(opts.entitiesDir, file), "utf8");
+    const hid = /^host_id:\s*"?([^"\s]+)"?/m.exec(text)?.[1];
+    if (!hid || exempt.includes(hid)) continue;
+    const row = rows[aliases[hid] ?? hid];
+    if (!row) continue;
+    for (const l of [...tableRows(text, /\(7\)\s*MCP/), ...tableRows(text, /FDC-13/)]) {
+      // Only the first two cells (surface + what Guild implements); later cells are requirement/notes.
+      const claim = l.split("|").slice(1, 3).join(" ");
+      for (const t of ["stdio", "http"] as const) {
+        if (!row.mcp[t] && new RegExp(`\\b${t}\\b`, "i").test(claim)) {
+          out.push({ file, kind: "transport_mismatch", detail: `${t}: row says ${row.mcp[t]} but prose says: ${l.slice(0, 100)}` });
+        }
+      }
+    }
+  }
+  return out;
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const i = process.argv.indexOf("--entities");
   const dir = i >= 0 ? process.argv[i + 1] : undefined;
@@ -115,6 +140,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   }
   const v = checkHostMcpClaims({ entitiesDir: dir });
   for (const x of v) console.error(`${x.file}: ${x.kind}: ${x.detail}`);
+  for (const w of advisoryProseWarnings({ entitiesDir: dir })) console.error(`warn: ${w.file}: ${w.detail}`);
   console.log(`check-host-mcp-claims: ${v.length} violation(s)`);
   process.exit(v.length === 0 ? 0 : 1);
 }

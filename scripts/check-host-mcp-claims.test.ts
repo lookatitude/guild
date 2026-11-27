@@ -13,7 +13,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import { checkHostMcpClaims, type McpRows } from "./check-host-mcp-claims";
+import { spawnSync } from "node:child_process";
+import { checkHostMcpClaims, advisoryProseWarnings, type McpRows } from "./check-host-mcp-claims";
 import { HOST_REGISTRY_ROWS } from "./lib/host-registry-schema";
 
 const ENTITIES = path.resolve(__dirname, "..", ".guild", "wiki", "entities");
@@ -78,7 +79,7 @@ describe("checkHostMcpClaims", () => {
     expect(checkHostMcpClaims({ entitiesDir: d, rows, aliases: {}, exempt: [] })).toEqual([]);
   });
 
-  it("does not parse prose: a hedged-or-not (7) row never fails by itself", () => {
+  it("prose never fails the gate", () => {
     const d = tmpDir({ "a.md": page("host-a", true, false, "stdio + HTTP via config") });
     expect(checkHostMcpClaims({ entitiesDir: d, rows, aliases: {}, exempt: [] })).toEqual([]);
   });
@@ -99,6 +100,30 @@ describe("checkHostMcpClaims", () => {
   it("ignores pages without a host_id", () => {
     const d = tmpDir({ "n.md": "# not a host page\n" });
     expect(checkHostMcpClaims({ entitiesDir: d, rows, aliases: {}, exempt: [] })).toEqual([]);
+  });
+});
+
+describe("advisory prose scan", () => {
+  it("warns on a (7) MCP row mentioning a transport the row denies (the original #116 defect)", () => {
+    const d = tmpDir({ "a.md": page("host-a", true, false, "stdio + HTTP via config") });
+    const w = advisoryProseWarnings({ entitiesDir: d, rows, aliases: {}, exempt: [] });
+    expect(w.length).toBe(1);
+    expect(w[0].detail).toContain("http");
+  });
+
+  it("stays quiet when prose mentions only supported transports", () => {
+    const d = tmpDir({ "a.md": page("host-a", true, false, "stdio") });
+    expect(advisoryProseWarnings({ entitiesDir: d, rows, aliases: {}, exempt: [] })).toEqual([]);
+  });
+
+  it("the CLI prints the warning but exits 0 for prose-only findings", () => {
+    const d = tmpDir({ "a.md": page("pi", false, false, "stdio via bridge", "") });
+    const r = spawnSync("npx", ["tsx", path.join(__dirname, "check-host-mcp-claims.ts"), "--entities", d], {
+      encoding: "utf8",
+      cwd: __dirname,
+    });
+    expect(r.stdout + r.stderr).toContain("warn:");
+    expect(r.status).toBe(0);
   });
 });
 
