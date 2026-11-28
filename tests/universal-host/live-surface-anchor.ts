@@ -755,8 +755,8 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // `team-decide.js bind`; plan says a plan byte change breaks that binding. skill-src plan
   // entry re-extracted (byte-identical round-trip). ANTI-VACUITY: check-surface-pins was RED.
   // Re-ratified 2026-11-27 (#289, plugin-root resolution): DELIBERATE mechanical rewrite of the (see commands above; skills tree: same change)
-  // Re-ratified 2026-11-28 (merge of next into #322): W04 plan text + #289 rewrite combined.
-  skills: "a639e8ed2a193e164b118089676a88903d0d7e0d",
+  // Re-ratified 2026-11-28 (merge of next into #322): W04 plan text + #289 rewrite combined; team-compose bind line moved to the canonical root form.
+  skills: "0d0c80b83005ce0669210a3b01b15c895b16d769",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
