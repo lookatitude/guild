@@ -17031,6 +17031,17 @@ var init_ingest_pause = __esm({
   }
 });
 
+// src/domains/security/privileged-actions.ts
+var RELEASE_LIKE_ROOTS, RELEASE_LIKE_TOKENS, PRIVILEGED_ROOTS, PRIVILEGED_TOKENS;
+var init_privileged_actions = __esm({
+  "src/domains/security/privileged-actions.ts"() {
+    RELEASE_LIKE_ROOTS = Object.freeze(["release", "publish", "deploy", "rollout"]);
+    RELEASE_LIKE_TOKENS = Object.freeze(["ship", "merge", "promote"]);
+    PRIVILEGED_ROOTS = Object.freeze(["permission", "credential", "secret", "privilege", "sudo"]);
+    PRIVILEGED_TOKENS = Object.freeze(["grant", "grants", "admin"]);
+  }
+});
+
 // src/domains/security/index.ts
 var init_security = __esm({
   "src/domains/security/index.ts"() {
@@ -17045,6 +17056,7 @@ var init_security = __esm({
     init_events();
     init_d5_permission_content();
     init_ingest_pause();
+    init_privileged_actions();
     init_config();
     init_secrets();
   }
@@ -43630,6 +43642,99 @@ var init_workflow_graph_overlay = __esm({
   }
 });
 
+// src/domains/lifecycle/workflow-protected-paths.ts
+var PROTECTED_PATHS_VERSION, GATE_ORDER, CLASS_REQUIRED_GATE_ROLES, RELEASE_CLASS_GATE_ROLES, QA_ASSURANCE_KINDS;
+var init_workflow_protected_paths = __esm({
+  "src/domains/lifecycle/workflow-protected-paths.ts"() {
+    init_security();
+    init_workflow_graph_overlay();
+    PROTECTED_PATHS_VERSION = "guild.protected_paths.v1";
+    GATE_ORDER = Object.freeze(["d5", "qa", "ops", "d8"]);
+    CLASS_REQUIRED_GATE_ROLES = Object.freeze({ product: ["d5", "qa", "d8"] });
+    RELEASE_CLASS_GATE_ROLES = Object.freeze({ ops: ["ops"] });
+    QA_ASSURANCE_KINDS = Object.freeze(["security", "adversarial_security", "ui", "ux"]);
+  }
+});
+
+// src/domains/lifecycle/workflow-component-compiler.ts
+function canonicalJson3(value) {
+  if (value === null || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error("non-finite number in canonical JSON");
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) return `[${value.map(canonicalJson3).join(",")}]`;
+  if (isPlain(value)) {
+    const keys = Object.keys(value).filter((k) => value[k] !== void 0).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson3(value[k])}`).join(",")}}`;
+  }
+  throw new Error(`value of type ${typeof value} is not canonical JSON`);
+}
+function sha256Of2(value) {
+  return `sha256:${crypto25.createHash("sha256").update(canonicalJson3(value), "utf8").digest("hex")}`;
+}
+function isPlain(v) {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
+}
+var crypto25, WORKFLOW_COMPILER_ID, WORKFLOW_COMPILER_VERSION, COMPILER_LIMITS, COMPONENT_EFFECTS, COMPONENT_GATE_ROLES, COMPONENT_CONDITION_KINDS, COMPONENT_STEP_KINDS, CLASS_REQUIRED_GATE_ROLES2, RELEASE_CLASS_GATE_ROLES2, COMPILER_HASH;
+var init_workflow_component_compiler = __esm({
+  "src/domains/lifecycle/workflow-component-compiler.ts"() {
+    crypto25 = __toESM(require("node:crypto"));
+    init_kernel();
+    init_state();
+    init_workflow_graph_overlay();
+    init_workflow_protected_paths();
+    WORKFLOW_COMPILER_ID = "guild.workflow_compiler";
+    WORKFLOW_COMPILER_VERSION = "1";
+    COMPILER_LIMITS = Object.freeze({
+      maxNodes: 1e3,
+      maxEdges: 5e3,
+      maxComponents: 100,
+      maxProtectedGates: 10,
+      maxCallDepth: 8,
+      maxStepNesting: 16,
+      maxSteps: 100,
+      maxRepeatRounds: 10,
+      maxTotalRounds: 100,
+      maxPorts: 50,
+      maxCapabilities: 50,
+      maxConditionTerms: 8,
+      maxPathStates: 1e4
+    });
+    COMPONENT_EFFECTS = Object.freeze(["read", "write", "review", "gate", "privileged_operation", "release"]);
+    COMPONENT_GATE_ROLES = Object.freeze(["d5", "qa", "ops", "d8"]);
+    COMPONENT_CONDITION_KINDS = Object.freeze(["outcome", "no_unresolved_questions", "obligations_accepted", "artifact_present", "all_of", "any_of"]);
+    COMPONENT_STEP_KINDS = Object.freeze(["task", "sequence", "repeat", "call"]);
+    CLASS_REQUIRED_GATE_ROLES2 = Object.freeze({ product: ["d5", "qa", "d8"] });
+    RELEASE_CLASS_GATE_ROLES2 = Object.freeze({ ops: ["ops"] });
+    COMPILER_HASH = sha256Of2({
+      id: WORKFLOW_COMPILER_ID,
+      version: WORKFLOW_COMPILER_VERSION,
+      limits: COMPILER_LIMITS,
+      step_kinds: COMPONENT_STEP_KINDS,
+      condition_kinds: COMPONENT_CONDITION_KINDS,
+      edge_outcomes: ["next", "repeat"],
+      protected_paths: PROTECTED_PATHS_VERSION
+    });
+  }
+});
+
+// src/domains/lifecycle/phase-composition.ts
+var QA_POLICY_KINDS, MAX_INPUT_FILE_BYTES;
+var init_phase_composition = __esm({
+  "src/domains/lifecycle/phase-composition.ts"() {
+    init_kernel();
+    init_security();
+    init_teams();
+    init_workflow_component_compiler();
+    QA_POLICY_KINDS = Object.freeze(["security", "adversarial_security", "ui", "ux", "quality", "project_specific"]);
+    MAX_INPUT_FILE_BYTES = 1024 * 1024;
+  }
+});
+
 // src/domains/lifecycle/learning-checkpoint-5.ts
 var CHECKPOINT_VERDICTS, VERDICT_ROUTE;
 var init_learning_checkpoint_5 = __esm({
@@ -52055,7 +52160,7 @@ function publishOnce(root, abs, value) {
   const final = prepared.realPath;
   const dir = path83.dirname(final);
   const dirIdentity = realDirIdentity(dir);
-  const tmp = path83.join(dir, `.${path83.basename(final)}.${process.pid}.${crypto25.randomBytes(6).toString("hex")}.tmp`);
+  const tmp = path83.join(dir, `.${path83.basename(final)}.${process.pid}.${crypto26.randomBytes(6).toString("hex")}.tmp`);
   let created = false;
   try {
     const fd = fs68.openSync(tmp, fs68.constants.O_WRONLY | fs68.constants.O_CREAT | fs68.constants.O_EXCL | fs68.constants.O_NOFOLLOW, 420);
@@ -52278,10 +52383,10 @@ function readExecutionSegmentSeal(root, runId, executionId) {
   if (seal.run_id !== runId || seal.execution_id !== executionId) throw new ExecutionIdentityRefusal("record_location_mismatch", `seal file ${runId}/${executionId} holds ${seal.run_id}/${seal.execution_id}`);
   return seal;
 }
-var crypto25, fs68, path83, LOGICAL_RUN_SCHEMA, EXECUTION_SEGMENT_SCHEMA, STACK_TASK_ASSIGNMENT_SCHEMA, STACK_TASK_ATTEMPT_SCHEMA, RUN_BINDING_V2_SCHEMA, EXECUTION_LINEAGE_SCHEMA, ExecutionIdentityRefusal, ID_RE2, HASH_RE2, TIME_RE2, REL_PATH_RE2, KINDS, own2, isObj4, fail2, cpLength2, id2, hash2, time2, str3, int02, int1, num02, bool2, konst2, oneOf2, nullable2, relPath2, array2, object3, entity, evidence2, lineage2, pins2, stateAxes, interval2, authority, admission, SHAPES, hasKeys, RUN_ID_RE2, LINEAGE_DIR, ATTEMPT_INDEX, logicalRunPath, executionPath, assignmentPath, attemptOwnerPath, serialize, recordRevision, EXECUTION_SEGMENT_SEAL_SCHEMA, sealPath, EXECUTION_SEGMENT_RESERVATION_SCHEMA, reservationPath, EXECUTION_IDENTITY_CAPABILITY;
+var crypto26, fs68, path83, LOGICAL_RUN_SCHEMA, EXECUTION_SEGMENT_SCHEMA, STACK_TASK_ASSIGNMENT_SCHEMA, STACK_TASK_ATTEMPT_SCHEMA, RUN_BINDING_V2_SCHEMA, EXECUTION_LINEAGE_SCHEMA, ExecutionIdentityRefusal, ID_RE2, HASH_RE2, TIME_RE2, REL_PATH_RE2, KINDS, own2, isObj4, fail2, cpLength2, id2, hash2, time2, str3, int02, int1, num02, bool2, konst2, oneOf2, nullable2, relPath2, array2, object3, entity, evidence2, lineage2, pins2, stateAxes, interval2, authority, admission, SHAPES, hasKeys, RUN_ID_RE2, LINEAGE_DIR, ATTEMPT_INDEX, logicalRunPath, executionPath, assignmentPath, attemptOwnerPath, serialize, recordRevision, EXECUTION_SEGMENT_SEAL_SCHEMA, sealPath, EXECUTION_SEGMENT_RESERVATION_SCHEMA, reservationPath, EXECUTION_IDENTITY_CAPABILITY;
 var init_execution_identity = __esm({
   "src/domains/lifecycle/execution-identity.ts"() {
-    crypto25 = __toESM(require("node:crypto"));
+    crypto26 = __toESM(require("node:crypto"));
     fs68 = __toESM(require("node:fs"));
     path83 = __toESM(require("node:path"));
     init_kernel();
@@ -52507,7 +52612,7 @@ var init_execution_identity = __esm({
     attemptOwnerPath = (root, attemptId) => path83.join(durableGuildDir(root), ATTEMPT_INDEX, `${attemptId}.json`);
     serialize = (value) => `${JSON.stringify(value, null, 2)}
 `;
-    recordRevision = (bytes) => `sha256:${crypto25.createHash("sha256").update(bytes).digest("hex")}`;
+    recordRevision = (bytes) => `sha256:${crypto26.createHash("sha256").update(bytes).digest("hex")}`;
     EXECUTION_SEGMENT_SEAL_SCHEMA = "guild.stack.execution_segment_seal.v1";
     sealPath = (root, runId, executionId) => {
       if (!ID_RE2.test(executionId)) throw new ExecutionIdentityRefusal("record_invalid", "execution id is not an id");
@@ -54242,6 +54347,8 @@ var init_lifecycle = __esm({
     init_write_run_manifest();
     init_write_task_run();
     init_workflow_graph_overlay();
+    init_workflow_component_compiler();
+    init_phase_composition();
     init_stable_lock();
     init_learning_checkpoint_5();
     init_workflow_graph_load();
@@ -54826,24 +54933,24 @@ var CAPABILITY_READERS = {
   "host.structured_output.native_json": (entry) => entry.capabilities.structured_output.native_json
 };
 var UNKNOWN_HOST_VERSION = "unknown";
-function canonicalJson3(value) {
+function canonicalJson4(value) {
   if (value === null) return "null";
   const kind = typeof value;
   if (kind === "number") return Number.isFinite(value) ? JSON.stringify(value) : "null";
   if (kind === "boolean" || kind === "string") return JSON.stringify(value);
   if (kind === "undefined" || kind === "function" || kind === "symbol") return "null";
-  if (Array.isArray(value)) return `[${value.map((item) => canonicalJson3(item)).join(",")}]`;
+  if (Array.isArray(value)) return `[${value.map((item) => canonicalJson4(item)).join(",")}]`;
   const record = value;
   const parts = [];
   for (const key of Object.keys(record).sort()) {
     if (record[key] === void 0) continue;
-    parts.push(`${JSON.stringify(key)}:${canonicalJson3(record[key])}`);
+    parts.push(`${JSON.stringify(key)}:${canonicalJson4(record[key])}`);
   }
   return `{${parts.join(",")}}`;
 }
 function snapshotHash(hostId, hostVersion, facts) {
   const digest2 = (0, import_node_crypto5.createHash)("sha256").update(
-    canonicalJson3({
+    canonicalJson4({
       schema_version: HOST_CAPABILITY_SNAPSHOT_SCHEMA,
       host_id: hostId,
       host_version: hostVersion,
@@ -54901,7 +55008,7 @@ function createHostCapabilitySnapshotStore() {
       if (!hostId || !entry) return unsupportedResult(request);
       const hostVersion = request.hostVersion ?? UNKNOWN_HOST_VERSION;
       const observation = request.authentication ?? "not_observed";
-      const inputHash = canonicalJson3({ host_id: hostId, host_version: hostVersion, authentication: observation });
+      const inputHash = canonicalJson4({ host_id: hostId, host_version: hostVersion, authentication: observation });
       const key = keyFor(request.runId, hostId);
       const existing = minted.get(key);
       if (existing !== void 0) {

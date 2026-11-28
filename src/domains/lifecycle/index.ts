@@ -123,6 +123,10 @@ export * from "./write-task-run";
 // graphs are YAML data (src/surfaces/graphs/); the lifecycle domain owns
 // load / merge / validate, and the layout lint executes this export.
 export * from "./workflow-graph-overlay";
+// W01/W02: component compiler and post-expansion protected-path verifier (C8 v2).
+// W01-W03: the compiler and phase-composition names consumed outside the domain.
+export { COMPONENT_DEFINITION_SEGMENT, createComponentRegistry, loadComponentRegistry } from "./workflow-component-compiler";
+export { PHASE_BINDING_PREFIX, composePhase, loadPhaseCompositionInputs, phaseBinding } from "./phase-composition";
 // U-TIER (T08 rework-r2): the per-run stable lock. Exported so the dispatch
 // instance cap can make "count the run's slots" and "claim one" a single atomic
 // step rather than an observation followed by a hopeful write.

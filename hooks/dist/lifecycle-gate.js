@@ -16790,6 +16790,17 @@ var init_ingest_pause = __esm({
   }
 });
 
+// src/domains/security/privileged-actions.ts
+var RELEASE_LIKE_ROOTS, RELEASE_LIKE_TOKENS, PRIVILEGED_ROOTS, PRIVILEGED_TOKENS;
+var init_privileged_actions = __esm({
+  "src/domains/security/privileged-actions.ts"() {
+    RELEASE_LIKE_ROOTS = Object.freeze(["release", "publish", "deploy", "rollout"]);
+    RELEASE_LIKE_TOKENS = Object.freeze(["ship", "merge", "promote"]);
+    PRIVILEGED_ROOTS = Object.freeze(["permission", "credential", "secret", "privilege", "sudo"]);
+    PRIVILEGED_TOKENS = Object.freeze(["grant", "grants", "admin"]);
+  }
+});
+
 // src/domains/security/index.ts
 var init_security = __esm({
   "src/domains/security/index.ts"() {
@@ -16804,6 +16815,7 @@ var init_security = __esm({
     init_events();
     init_d5_permission_content();
     init_ingest_pause();
+    init_privileged_actions();
     init_config();
     init_secrets();
   }
@@ -42691,6 +42703,99 @@ var init_workflow_graph_overlay = __esm({
   }
 });
 
+// src/domains/lifecycle/workflow-protected-paths.ts
+var PROTECTED_PATHS_VERSION, GATE_ORDER, CLASS_REQUIRED_GATE_ROLES, RELEASE_CLASS_GATE_ROLES, QA_ASSURANCE_KINDS;
+var init_workflow_protected_paths = __esm({
+  "src/domains/lifecycle/workflow-protected-paths.ts"() {
+    init_security();
+    init_workflow_graph_overlay();
+    PROTECTED_PATHS_VERSION = "guild.protected_paths.v1";
+    GATE_ORDER = Object.freeze(["d5", "qa", "ops", "d8"]);
+    CLASS_REQUIRED_GATE_ROLES = Object.freeze({ product: ["d5", "qa", "d8"] });
+    RELEASE_CLASS_GATE_ROLES = Object.freeze({ ops: ["ops"] });
+    QA_ASSURANCE_KINDS = Object.freeze(["security", "adversarial_security", "ui", "ux"]);
+  }
+});
+
+// src/domains/lifecycle/workflow-component-compiler.ts
+function canonicalJson3(value) {
+  if (value === null || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error("non-finite number in canonical JSON");
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) return `[${value.map(canonicalJson3).join(",")}]`;
+  if (isPlain(value)) {
+    const keys = Object.keys(value).filter((k) => value[k] !== void 0).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson3(value[k])}`).join(",")}}`;
+  }
+  throw new Error(`value of type ${typeof value} is not canonical JSON`);
+}
+function sha256Of2(value) {
+  return `sha256:${crypto22.createHash("sha256").update(canonicalJson3(value), "utf8").digest("hex")}`;
+}
+function isPlain(v) {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
+}
+var crypto22, WORKFLOW_COMPILER_ID, WORKFLOW_COMPILER_VERSION, COMPILER_LIMITS, COMPONENT_EFFECTS, COMPONENT_GATE_ROLES, COMPONENT_CONDITION_KINDS, COMPONENT_STEP_KINDS, CLASS_REQUIRED_GATE_ROLES2, RELEASE_CLASS_GATE_ROLES2, COMPILER_HASH;
+var init_workflow_component_compiler = __esm({
+  "src/domains/lifecycle/workflow-component-compiler.ts"() {
+    crypto22 = __toESM(require("node:crypto"));
+    init_kernel();
+    init_state();
+    init_workflow_graph_overlay();
+    init_workflow_protected_paths();
+    WORKFLOW_COMPILER_ID = "guild.workflow_compiler";
+    WORKFLOW_COMPILER_VERSION = "1";
+    COMPILER_LIMITS = Object.freeze({
+      maxNodes: 1e3,
+      maxEdges: 5e3,
+      maxComponents: 100,
+      maxProtectedGates: 10,
+      maxCallDepth: 8,
+      maxStepNesting: 16,
+      maxSteps: 100,
+      maxRepeatRounds: 10,
+      maxTotalRounds: 100,
+      maxPorts: 50,
+      maxCapabilities: 50,
+      maxConditionTerms: 8,
+      maxPathStates: 1e4
+    });
+    COMPONENT_EFFECTS = Object.freeze(["read", "write", "review", "gate", "privileged_operation", "release"]);
+    COMPONENT_GATE_ROLES = Object.freeze(["d5", "qa", "ops", "d8"]);
+    COMPONENT_CONDITION_KINDS = Object.freeze(["outcome", "no_unresolved_questions", "obligations_accepted", "artifact_present", "all_of", "any_of"]);
+    COMPONENT_STEP_KINDS = Object.freeze(["task", "sequence", "repeat", "call"]);
+    CLASS_REQUIRED_GATE_ROLES2 = Object.freeze({ product: ["d5", "qa", "d8"] });
+    RELEASE_CLASS_GATE_ROLES2 = Object.freeze({ ops: ["ops"] });
+    COMPILER_HASH = sha256Of2({
+      id: WORKFLOW_COMPILER_ID,
+      version: WORKFLOW_COMPILER_VERSION,
+      limits: COMPILER_LIMITS,
+      step_kinds: COMPONENT_STEP_KINDS,
+      condition_kinds: COMPONENT_CONDITION_KINDS,
+      edge_outcomes: ["next", "repeat"],
+      protected_paths: PROTECTED_PATHS_VERSION
+    });
+  }
+});
+
+// src/domains/lifecycle/phase-composition.ts
+var QA_POLICY_KINDS, MAX_INPUT_FILE_BYTES;
+var init_phase_composition = __esm({
+  "src/domains/lifecycle/phase-composition.ts"() {
+    init_kernel();
+    init_security();
+    init_teams();
+    init_workflow_component_compiler();
+    QA_POLICY_KINDS = Object.freeze(["security", "adversarial_security", "ui", "ux", "quality", "project_specific"]);
+    MAX_INPUT_FILE_BYTES = 1024 * 1024;
+  }
+});
+
 // src/domains/lifecycle/learning-checkpoint-5.ts
 var CHECKPOINT_VERDICTS, VERDICT_ROUTE;
 var init_learning_checkpoint_5 = __esm({
@@ -52677,6 +52782,8 @@ var init_lifecycle = __esm({
     init_write_run_manifest();
     init_write_task_run();
     init_workflow_graph_overlay();
+    init_workflow_component_compiler();
+    init_phase_composition();
     init_stable_lock();
     init_learning_checkpoint_5();
     init_workflow_graph_load();
@@ -54641,8 +54748,51 @@ function isDriftCurrent(latestTs, env = process.env, nowMs = Date.now()) {
   const age = nowMs - parsed;
   return age >= 0 && age <= driftRecencyMs(env);
 }
+var AUTOMATED_PROMPT_MARKER = /^(?:<(?:task-notification|teammate-message|cross-session-message)(?![\w-])|\[SYSTEM NOTIFICATION - NOT USER INPUT\]|\[Cross-session idle notice\])/;
+var REMINDER_OPEN_PREFIX = "<system-reminder";
+var REMINDER_OPEN_RE = /<system-reminder(?=[\s>/])/g;
+var REMINDER_CLOSE = "</system-reminder>";
+function skipReminderBlock(text, start) {
+  let depth = 0;
+  let pos = start;
+  const nextOpen2 = (from) => {
+    REMINDER_OPEN_RE.lastIndex = from;
+    const m = REMINDER_OPEN_RE.exec(text);
+    return m === null ? -1 : m.index;
+  };
+  let open = nextOpen2(pos);
+  let close = text.indexOf(REMINDER_CLOSE, pos);
+  for (; ; ) {
+    if (open !== -1 && open < pos) open = nextOpen2(pos);
+    if (close !== -1 && close < pos) close = text.indexOf(REMINDER_CLOSE, pos);
+    if (close === -1) return -1;
+    if (open !== -1 && open < close) {
+      depth += 1;
+      pos = open + REMINDER_OPEN_PREFIX.length;
+    } else {
+      depth -= 1;
+      pos = close + REMINDER_CLOSE.length;
+      if (depth === 0) return pos;
+    }
+  }
+}
+function isAutomatedPrompt(promptText) {
+  if (typeof promptText !== "string") return false;
+  let pos = 0;
+  for (; ; ) {
+    while (pos < promptText.length && /\s/.test(promptText[pos])) pos += 1;
+    REMINDER_OPEN_RE.lastIndex = pos;
+    const lead = REMINDER_OPEN_RE.exec(promptText);
+    if (lead === null || lead.index !== pos) break;
+    const end = skipReminderBlock(promptText, pos);
+    if (end === -1) return false;
+    pos = end;
+  }
+  return AUTOMATED_PROMPT_MARKER.test(promptText.slice(pos));
+}
 async function evaluateLifecycleGate(guildRoot, runId, promptText, env = process.env) {
   const silent = { block: null, context: null };
+  if (isAutomatedPrompt(promptText)) return silent;
   const config = readLifecycleGateConfig(guildRoot);
   if (!config.enabled) return silent;
   const ctx = await resolveGateContext(guildRoot, runId, env);

@@ -751,8 +751,12 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // an existing true is kept). ANTI-VACUITY: check-surface-pins was RED.
   // Re-ratified 2026-10-25 (v3.2 text): create-skill and team-compose drop the explicit --write-registry
   // step (discovery reads the definition files directly). ANTI-VACUITY: check-surface-pins was RED.
+  // Re-ratified 2026-11-05 (W04): team-compose binds a composed-workflow proposal with
+  // `team-decide.js bind`; plan says a plan byte change breaks that binding. skill-src plan
+  // entry re-extracted (byte-identical round-trip). ANTI-VACUITY: check-surface-pins was RED.
   // Re-ratified 2026-11-27 (#289, plugin-root resolution): DELIBERATE mechanical rewrite of the (see commands above; skills tree: same change)
-  skills: "f6217d1cb01dd4c53b1d5c8905764972b4b762af",
+  // Re-ratified 2026-11-28 (merge of next into #322): W04 plan text + #289 rewrite combined.
+  skills: "a639e8ed2a193e164b118089676a88903d0d7e0d",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

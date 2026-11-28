@@ -302,6 +302,28 @@ function writeFakeHostBinary(binDir: string, name: string): void {
   fs.chmodSync(abs, 0o755);
 }
 
+/**
+ * Offline `npx` shim for the FIXTURE rail only (issue #259). The plugin root
+ * ships no tsx, so a bare `npx tsx` re-resolves tsx against the npm registry on
+ * every install.sh run. The shim runs the tsx named by $GUILD_NPX_SHIM_TSX
+ * (read from the environment, never interpolated into the script) for
+ * `npx tsx ...` and defers anything else to the real npx (shim dir must be
+ * first on PATH). The live rail deliberately keeps the real npx.
+ */
+export function writeNpxShim(binDir: string): void {
+  const abs = path.join(binDir, "npx");
+  fs.writeFileSync(
+    abs,
+    [
+      "#!/usr/bin/env bash",
+      'if [ "$1" = "tsx" ] && [ -n "$GUILD_NPX_SHIM_TSX" ] && [ -x "$GUILD_NPX_SHIM_TSX" ]; then shift; exec "$GUILD_NPX_SHIM_TSX" "$@"; fi',
+      'PATH="${PATH#*:}" exec npx "$@"',
+      "",
+    ].join("\n")
+  );
+  fs.chmodSync(abs, 0o755);
+}
+
 function readLogLines(logFile: string): string[] {
   if (!fs.existsSync(logFile)) return [];
   return fs.readFileSync(logFile, "utf8").split(/\r?\n/).filter(Boolean);
@@ -417,6 +439,7 @@ export function verifyInstallerFixtureExecutions(options: VerifyOptions = {}): I
     for (const binary of ["claude", "codex", "pi", "agy", "cursor-agent", "gh", "opencode", "acli"]) {
       writeFakeHostBinary(fakeBin, binary);
     }
+    writeNpxShim(fakeBin);
 
     for (const expectation of INSTALLER_HOST_EXPECTATIONS) {
       const logFile = path.join(tmp, `${expectation.host}.log`);
@@ -429,6 +452,7 @@ export function verifyInstallerFixtureExecutions(options: VerifyOptions = {}): I
           HOME: fakeHome,
           XDG_CONFIG_HOME: fakeConfig,
           GUILD_INSTALL_FAKE_HOST_LOG: logFile,
+          GUILD_NPX_SHIM_TSX: path.join(root, "scripts", "node_modules", ".bin", "tsx"),
           PATH: `${fakeBin}${path.delimiter}${options.pathEnv ?? process.env.PATH ?? "/usr/bin:/bin"}`,
           npm_config_cache: process.env["npm_config_cache"] ?? path.join(os.tmpdir(), "guild-npm-cache"),
         },
@@ -500,6 +524,8 @@ export function verifyInstallerLiveIsolatedExecutions(options: VerifyOptions = {
         encoding: "utf8",
         env: {
           ...process.env,
+          // The fixture rail's npx shim reads this; the live rail must use the real npx.
+          GUILD_NPX_SHIM_TSX: undefined,
           HOME: home,
           XDG_CONFIG_HOME: config,
           XDG_CACHE_HOME: cache,
