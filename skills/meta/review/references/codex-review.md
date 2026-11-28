@@ -419,7 +419,7 @@ Emit one `codex_review_round` event per round to
 `.guild/runs/<run-id>/logs/v1.4-events.jsonl` via the shared helper:
 
 ```bash
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/emit-loop-event.js \
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/emit-loop-event.js" \
   --event codex_review_round \
   --gate <G-spec|G-plan|G-diagnose|G-lane:lane-id> \
   --round <N> \

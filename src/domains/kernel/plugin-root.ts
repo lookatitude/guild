@@ -48,3 +48,28 @@ export function ownPluginRoot(fromDir: string): string {
   if (found === null) throw new Error(`Guild plugin root not found above ${fromDir} (no ${PLUGIN_ROOT_MARKER})`);
   return found;
 }
+
+/** True when `dir` is a Guild plugin root: it ships the runtime marker or the Claude manifest. */
+function isPluginRoot(dir: string): boolean {
+  return (
+    fs.existsSync(path.join(dir, PLUGIN_ROOT_MARKER)) ||
+    fs.existsSync(path.join(dir, ".claude-plugin", "plugin.json"))
+  );
+}
+
+/**
+ * Like `resolvePluginRoot`, but an env value is only accepted when it really is a
+ * plugin root (a host or a stale shell can export the wrong ancestor), and it never
+ * throws: an invalid env value falls through to the marker walk from `fromDir`
+ * (pass `__dirname`), and null means no plugin root is known.
+ */
+export function resolveValidatedPluginRoot(
+  fromDir: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  for (const key of ["GUILD_PLUGIN_ROOT", "CLAUDE_PLUGIN_ROOT"]) {
+    const value = env[key];
+    if (typeof value === "string" && value.length > 0 && isPluginRoot(value)) return path.resolve(value);
+  }
+  return findPluginRoot(fromDir);
+}

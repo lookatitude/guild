@@ -159,7 +159,7 @@ When a brownfield `KnowledgeGraph` index exists
 before finalizing lanes (codebase-understanding spec §"Where it sits" plug point P2):
 
 ```
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/diff-learn.js --cwd <repo-root> \
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/diff-learn.js" --cwd <repo-root> \
   --base <merge-base-with-integration-branch> [--head HEAD] [--run-id <id>]
 ```
 

@@ -12,7 +12,7 @@ One entry, one assembler. `$ARGUMENTS` is forwarded VERBATIM — the sub-verb to
 ## Run recording
 
 ```bash
-node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js" start --command=/guild:maintain --cwd "$(pwd)"
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/hooks/dist/run-trace.js" start --command=/guild:maintain --cwd "$(pwd)"
 ```
 
 ## Sub-verbs (routed by `guild:evolve §Sub-verbs`)

@@ -671,6 +671,16 @@ function ownPluginRoot(fromDir) {
   if (found === null) throw new Error(`Guild plugin root not found above ${fromDir} (no ${PLUGIN_ROOT_MARKER})`);
   return found;
 }
+function isPluginRoot(dir) {
+  return fs4.existsSync(path4.join(dir, PLUGIN_ROOT_MARKER)) || fs4.existsSync(path4.join(dir, ".claude-plugin", "plugin.json"));
+}
+function resolveValidatedPluginRoot(fromDir, env = process.env) {
+  for (const key of ["GUILD_PLUGIN_ROOT", "CLAUDE_PLUGIN_ROOT"]) {
+    const value = env[key];
+    if (typeof value === "string" && value.length > 0 && isPluginRoot(value)) return path4.resolve(value);
+  }
+  return findPluginRoot(fromDir);
+}
 var fs4, path4, PLUGIN_ROOT_MARKER;
 var init_plugin_root = __esm({
   "src/domains/kernel/plugin-root.ts"() {
@@ -4756,6 +4766,7 @@ __export(kernel_exports, {
   regExpWritesLastIndex: () => regExpWritesLastIndex,
   reservedIdentityFieldsIn: () => reservedIdentityFieldsIn,
   resolvePluginRoot: () => resolvePluginRoot,
+  resolveValidatedPluginRoot: () => resolveValidatedPluginRoot,
   sealMap: () => sealMap,
   sealSet: () => sealSet,
   sealedCollectionValues: () => sealedCollectionValues,

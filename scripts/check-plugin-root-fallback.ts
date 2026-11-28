@@ -8,7 +8,8 @@
  * invocation using this two-level fallback with no terminal `$HOME` default expands to a
  * nonexistent path (`/scripts/...`) whenever both env vars are unset. The fix (PR #61,
  * porting PR #35) replaced every occurrence with the triple fallback
- * `${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}`.
+ * `${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}`, which #289
+ * then superseded: see BAD_PATTERN.
  * This rail forbids the two-level pattern from being reintroduced anywhere a command/skill
  * doc could document a CLI invocation.
  *
@@ -57,7 +58,21 @@ export interface Violation {
 // The forbidden two-level fallback: CLAUDE_PLUGIN_ROOT with no terminal $HOME default.
 // The fixed form always continues past this point with `:-$HOME`, so this exact
 // literal substring only ever matches the unfixed pattern.
-const BAD_PATTERN = /\$\{GUILD_PLUGIN_ROOT:-\$\{CLAUDE_PLUGIN_ROOT\}\}/g;
+// Forbidden forms (#36, #289). The canonical line is
+//   "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/..."
+// Claude Code substitutes only the exact token `${CLAUDE_PLUGIN_ROOT}` in command/skill text and
+// does not export it to the Bash tool, so:
+//   - a default on the token (`${CLAUDE_PLUGIN_ROOT:-`) hides it from substitution;
+//   - the token in DOUBLE quotes (`r="${CLAUDE_PLUGIN_ROOT}"`) lets a root containing `$(...)`,
+//     backticks, `$VAR` or `"` execute or expand, so it must sit in SINGLE quotes;
+//   - an unquoted outer `$(...)` word-splits a root containing spaces, so the whole path
+//     must be double-quoted.
+// Known limit: a root containing a single quote cannot be represented inside `r='...'`; the
+// substituted text then breaks out of the quotes. Real install roots never contain one, and
+// this static check cannot see the runtime path.
+const BAD_PATTERN = /\$\{GUILD_PLUGIN_ROOT:-\$\{CLAUDE_PLUGIN_ROOT\}\}|\$\{CLAUDE_PLUGIN_ROOT:-|r=\\?"\$\{CLAUDE_PLUGIN_ROOT\}\\?"/;
+// Outer substitution not directly preceded by a double quote (`"` or JSON `\"`).
+const UNQUOTED_OUTER = /(^|[^"])\$\(r='\$\{CLAUDE_PLUGIN_ROOT\}'/;
 
 // Directories that are never source — runtime state, deps, build output.
 const EXCLUDE_SEGMENTS = new Set(["node_modules", ".git", "dist", "build"]);
@@ -116,8 +131,7 @@ function scanFile(absPath: string, relPath: string): Violation[] {
   const violations: Violation[] = [];
   const lines = content.split("\n");
   for (let i = 0; i < lines.length; i++) {
-    BAD_PATTERN.lastIndex = 0;
-    if (BAD_PATTERN.test(lines[i])) {
+    if (BAD_PATTERN.test(lines[i]) || UNQUOTED_OUTER.test(lines[i])) {
       violations.push({ file: relPath, line: i + 1, text: lines[i].trim() });
     }
   }
@@ -163,8 +177,8 @@ function main(): void {
 
   process.stderr.write(
     `[check-plugin-root-fallback] FAIL — ${violations.length} occurrence(s) of the forbidden two-level fallback ` +
-      `(no terminal $HOME default). Use the triple fallback instead:\n` +
-      `  \${GUILD_PLUGIN_ROOT:-\${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}\n\n`
+      `(no $HOME default, a default hiding the substitutable token, a double-quoted token, or an unquoted outer substitution). Use instead:\n` +
+      `  "$(r='\${CLAUDE_PLUGIN_ROOT}'; case $r in ('\${'*) r=\${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "\${GUILD_PLUGIN_ROOT:-\${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/<x>.js"\n\n`
   );
   for (const v of violations) {
     process.stderr.write(`  ${v.file}:${v.line}: ${v.text}\n`);

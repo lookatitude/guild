@@ -645,7 +645,16 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified 2026-10-25 (#275): config.md lists `migrate --mode=verify` and `--recheck`;
   // the command registry entry was re-extracted. ANTI-VACUITY: check-surface-pins was RED
   // against the prior pin.
-  commands: "c6e23a196895eadf0fdd8260f7a730782414607c",
+  // Re-ratified 2026-11-27 (#289, plugin-root resolution): DELIBERATE mechanical rewrite of the
+  // documented plugin-root shell expression in every command/skill doc to
+  // `$(r="${CLAUDE_PLUGIN_ROOT}"; echo "${GUILD_PLUGIN_ROOT:-${r:-$HOME/...}}")` so Claude Code's
+  // exact-token substitution of ${CLAUDE_PLUGIN_ROOT} reaches the line (a default on the token hid
+  // it); plus skills/meta/using-guild/SKILL.md, a byte copy of SKILL.src.md, so `Skill:
+  // guild:using-guild` resolves. command-src/skill-src re-extracted in the same commit.
+  // Hardened the same day: the token sits in single quotes (nothing in a root is evaluated), the
+  // non-substituting fallback reads ${CLAUDE_PLUGIN_ROOT-}, and the whole path is double-quoted.
+  // Prose mentions of the root (not executed) keep the bare ${CLAUDE_PLUGIN_ROOT} token.
+  commands: "5aa9dc061a8476b488089d27c4458069dfcf84e4",
   // Re-ratified 2026-09-14 (T01 pattern lock): using-guild absorbed the principles
   // body, the glossary one-liner and "bare /guild is T0" (KTD25); no other skill changed.
   // Re-ratified 2026-09-14 (T03 skills fold): 17 indexed assemblers + references/ chapters,
@@ -745,7 +754,9 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified 2026-11-05 (W04): team-compose binds a composed-workflow proposal with
   // `team-decide.js bind`; plan says a plan byte change breaks that binding. skill-src plan
   // entry re-extracted (byte-identical round-trip). ANTI-VACUITY: check-surface-pins was RED.
-  skills: "b7c61e0876f07f4c168c9276dcf06bd2c8c113b1",
+  // Re-ratified 2026-11-27 (#289, plugin-root resolution): DELIBERATE mechanical rewrite of the (see commands above; skills tree: same change)
+  // Re-ratified 2026-11-28 (merge of next into #322): W04 plan text + #289 rewrite combined; team-compose bind line moved to the canonical root form.
+  skills: "0d0c80b83005ce0669210a3b01b15c895b16d769",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

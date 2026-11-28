@@ -55,7 +55,7 @@ Implements the near-duplicate / injection-amplification defence (D-INGEST-GATE).
 The similarity decision is **computed by tooling, not by the model.** Before writing any file, **call** `scripts/lib/ingest-similarity.ts` with the candidate (title + content) and the **target category**, and consume its verdict verbatim:
 
 ```
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/ingest-similarity.js \
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/ingest-similarity.js" \
   --cwd <repo-root> --category <target-category> \
   --title "<candidate title>" --content-file <path-to-candidate-text>
 ```
@@ -106,7 +106,7 @@ by the model** (docs/v2/knowledge-memory.html §"Importance-at-ingest"). Call th
 compute the 1–5 grade yourself:
 
 ```
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/stamp-recall-importance.js \
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/stamp-recall-importance.js" \
   --cwd <repo-root>
 ```
 

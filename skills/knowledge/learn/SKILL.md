@@ -28,7 +28,7 @@ domain's `routeLearn` before dispatch; when invoked any other way, run it
 yourself:
 
 ```bash
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/learn-route.js --cwd <root> -- <args>
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/learn-route.js" --cwd <root> -- <args>
 ```
 
 Follow the printed `route` (`guild.learn_route.v1`); the prose below describes
@@ -102,7 +102,7 @@ proceeding; never silent-proceed on uncertainty. Mirror the bare `/guild:guild`
 After user confirmation, start the run before scanning:
 
 ```
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/run-lifecycle.js startRun
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/run-lifecycle.js" startRun
   --command "/guild:learn"
   --args ""
   --cwd <root>
@@ -125,7 +125,7 @@ Implements brief §178-201 ordered flow, SC-A:
    id—and before any scan or compatibility operation—publish that frozen fact:
 
    ```bash
-   node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/capability-profile.js baseline \
+   node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/capability-profile.js" baseline \
      --cwd <root> --run-id <run-id>
    ```
 
@@ -142,11 +142,11 @@ Implements brief §178-201 ordered flow, SC-A:
 2. **Resolve project root.** Worktree-redirect via `lib/paths.ts`.
 3. **Load existing wiki and indexes.** Read `.guild/settings.json`;
    read existing `.guild/indexes/codebase-map.json` if present.
-4. **Inventory every project-owned file.** Run `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/learn-scan.js --cwd <root>
+4. **Inventory every project-owned file.** Run `node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/learn-scan.js" --cwd <root>
    [--gen-ignore]`. Apply the SC-G always-skip policy (see §"Skipped-file
    policy" below).
 5. **Emit skipped-file manifest.** Pipe skip decisions via B3's
-   `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js skipped --run-id <id> --cwd <root> < entries.json`
+   `node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/hooks/dist/run-trace.js" skipped --run-id <id> --cwd <root> < entries.json`
    (entry shape: `{path, reason, rule, can_manually_include,
    summary_produced}` per SC-G / B3 handoff §4). Wire
    `provenance.coverage.{scanned_count, skipped_count, skipped_files_ref}`
@@ -186,7 +186,7 @@ Implements brief §178-201 ordered flow, SC-A:
     `guild.project_capability_profile.v1` for this run:
 
     ```bash
-    node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/capability-profile.js emit \
+    node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/capability-profile.js" emit \
       --cwd <root> --run-id <id> --project-id <id> \
       [--facts .guild/runs/<run-id>/learn/capability-facts.json] \
       --baseline .guild/runs/<run-id>/capability/run-start-baseline.json \
@@ -355,7 +355,7 @@ Workspace flow:
 2. **Detect immediate child repos and child `.guild/` roots.** Depth-1 stat
    only (`workspace/detect.ts`). Record in `.guild/workspace.json`
    (`guild.workspace.v1`).
-3. **Refresh `.guild/workspace.json`.**  `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/workspace-write-manifest.js --cwd <root>`.
+3. **Refresh `.guild/workspace.json`.**  `node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/workspace-write-manifest.js" --cwd <root>`.
 4. **Learn the workspace root as coordination context only.** Run the
    regular-project flow SCOPED to root-level artifacts per the
    **Workspace-root scope contract** above (umbrella-own surface: `docs/v2/**`,

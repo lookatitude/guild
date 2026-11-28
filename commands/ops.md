@@ -14,7 +14,7 @@ the pre-flight dry-run is mandatory.
 ## Run recording
 
 ```bash
-node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js" start --command=/guild:ops --phase=ops --cwd "$(pwd)"
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/hooks/dist/run-trace.js" start --command=/guild:ops --phase=ops --cwd "$(pwd)"
 # append --initiative=<id> ONLY when the user supplied one (NN#5); never auto-detect
 ```
 
@@ -31,7 +31,7 @@ Risky or destructive steps prompt **I always**. Runbooks, evidence and
 ## Team decision gate (blocking)
 
 ```bash
-node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/team-decide.js" gate --proposal <proposal> --cwd "$(pwd)"
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/team-decide.js" gate --proposal <proposal> --cwd "$(pwd)"
 ```
 
 Verbs: approve · restructure · add · remove · substitute · edit_dependencies.

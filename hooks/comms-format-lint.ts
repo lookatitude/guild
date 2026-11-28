@@ -2,7 +2,7 @@
 /**
  * hooks/comms-format-lint.ts
  *
- * Runner:    node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/comms-format-lint.js
+ * Runner:    node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/comms-format-lint.js (hooks.json)
  *            (compiled via esbuild; see package.json "build" script)
  *            For dev/test: npx tsx hooks/comms-format-lint.ts
  *
@@ -62,6 +62,8 @@
 
 import * as path from "path";
 import { lintCommsFormat, type CommsLintFinding } from "../scripts/comms/comms-format-lint.js";
+import { resolveValidatedPluginRoot } from "../src/domains/kernel";
+import { isUnderGuildManagedRoot } from "./lib/guild-managed.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -185,6 +187,13 @@ async function main(): Promise<void> {
   const absolutePath = path.isAbsolute(filePath)
     ? filePath
     : path.resolve(process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd(), filePath);
+
+  // Outside any Guild-managed root (scratch dirs, ~/.claude memory, unrelated repos)
+  // there is nothing to lint: stay silent. The plugin root comes from the host env only
+  // when it is a real plugin root; a wrong ancestor in CLAUDE_PLUGIN_ROOT is ignored.
+  if (!isUnderGuildManagedRoot(absolutePath, resolveValidatedPluginRoot(__dirname))) {
+    process.exit(0);
+  }
 
   // Call the lint core. enforce flag is passed to the core for future use but
   // the exit-code decision is made HERE (not in the core) for U5b — the hook

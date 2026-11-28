@@ -353,7 +353,7 @@ The broker MUST run the gate-pass verifier against the round's result and the
 current (post-scrub) artifact bytes, and consume its verdict:
 
 ```bash
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/verify-gate-pass.js \
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/verify-gate-pass.js" \
   --result .guild/runs/<run-id>/review/<gate>/result-<round>.json \
   --artifact <scrubbed-artifact-path> \
   --packet-id <packet-id issued for this round> \

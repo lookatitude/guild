@@ -14,7 +14,7 @@ anyway is an operator decision recorded in the quality report.
 ## Run recording
 
 ```bash
-node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js" start --command=/guild:qa --phase=qa --cwd "$(pwd)"
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/hooks/dist/run-trace.js" start --command=/guild:qa --phase=qa --cwd "$(pwd)"
 # append --initiative=<id> ONLY when the user supplied one (NN#5); never auto-detect
 ```
 
@@ -31,7 +31,7 @@ Release / blocker gate **I** — a BLOCK override stays human-gated even under
 ## Team decision gate (blocking)
 
 ```bash
-node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/team-decide.js" gate --proposal <proposal> --cwd "$(pwd)"
+node "$(r='${CLAUDE_PLUGIN_ROOT}'; case $r in ('${'*) r=${CLAUDE_PLUGIN_ROOT-};; esac; printf %s "${GUILD_PLUGIN_ROOT:-${r:-$HOME/.local/share/guild/dist/claude-code}}")/runtime/scripts/team-decide.js" gate --proposal <proposal> --cwd "$(pwd)"
 ```
 
 Verbs: approve · restructure · add · remove · substitute · edit_dependencies.
